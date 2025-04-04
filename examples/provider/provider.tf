@@ -13,7 +13,7 @@ provider "xshield" {
   user_id = "xxxxxxxxxx"
   fingerprint = "xxxxxxxxxx"
   private_key_path = "/path/to/colortokens_api_key_tenant.pem"
-  server_url = "https://my-company.colortokens.com/"
+  server_url = "https://region.colortokens.com/"
 
   # HTTP request config [Optional]
   request_timeout = 60     

@@ -17,13 +17,29 @@ terraform {
   required_providers {
     xshield = {
       source  = "colortokens/xshield"
-      version = "0.3.8"
+      version = "0.4.0"
     }
   }
 }
 
 provider "xshield" {
-  # Configuration options
+  # Xshield connection config [Required]
+  tenancy_id = "xxxxxxxxxx"
+  user_id = "xxxxxxxxxx"
+  fingerprint = "xxxxxxxxxx"
+  private_key_path = "/path/to/colortokens_api_key_tenant.pem"
+  server_url = "https://region.colortokens.com/"
+
+  # HTTP request config [Optional]
+  request_timeout = 60     
+  initial_interval = 500      
+  max_interval = 60000       
+  max_elapsed_time = 3600000   
+  exponent = 1.5
+
+  # Proxy config [Optional]
+  proxy_url       = "http://proxy-ip:port"
+  proxy_creds     = "username:password"
 }
 ```
 
@@ -39,4 +55,11 @@ provider "xshield" {
 
 ### Optional
 
+- `exponent` (Number) Exponent for backoff strategy (defaults to 1.5)
+- `initial_interval` (Number) Initial interval for backoff strategy in miliseconds (defaults to 500)
+- `max_elapsed_time` (Number) Maximum elapsed time for backoff strategy in seconds (defaults to 3600000)
+- `max_interval` (Number) Maximum interval for backoff strategy in seconds (defaults to 60)
+- `proxy_creds` (String, Sensitive) Proxy credentials (format: username:password)
+- `proxy_url` (String) HTTP proxy URL (format: http://proxy-ip:port)
+- `request_timeout` (Number) HTTP request timeout in seconds (defaults to 60)
 - `server_url` (String) Server URL (defaults to https://ng.colortokens.com)

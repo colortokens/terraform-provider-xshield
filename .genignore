@@ -4,4 +4,9 @@ internal/provider/asset_data_source.go
 internal/provider/asset_resource.go
 internal/provider/tagrule_resource.go
 internal/sdk/xshield.go
+examples/provider/provider.tf
+examples/resources/xshield_named_network/resource.tf
+examples/resources/xshield_tag_rule/resource.tf
+examples/resources/xshield_template/resource.tf
+
 
