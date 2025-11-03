@@ -1972,7 +1972,7 @@ func (s *Templates) AppendToTemplate(ctx context.Context, request operations.App
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/templates/{templateid}/append", request, nil)
+	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/v2/templates/{templateid}/append", request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
@@ -2200,7 +2200,7 @@ func (s *Templates) DeleteFromTemplate(ctx context.Context, request operations.D
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/templates/{templateid}/deduct", request, nil)
+	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/v2/templates/{templateid}/deduct", request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
@@ -2703,7 +2703,7 @@ func (s *Templates) CloneTemplate(ctx context.Context, request shared.CloneTempl
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := url.JoinPath(baseURL, "/api/templates/clone")
+	opURL, err := url.JoinPath(baseURL, "/api/v2/templates/clone")
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
