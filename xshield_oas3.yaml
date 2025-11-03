@@ -3894,7 +3894,7 @@ paths:
         - ADMIN
         - USER
       x-codegen-request-body-name: template
-  /api/templates/{templateid}:
+  /api/v2/templates/{templateid}:
     get:
       tags:
       - templates
