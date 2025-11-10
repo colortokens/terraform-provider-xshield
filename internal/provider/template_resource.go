@@ -5,6 +5,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+
 	speakeasy_boolplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/boolplanmodifier"
 	speakeasy_listplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/listplanmodifier"
 	speakeasy_objectplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/objectplanmodifier"
@@ -12,13 +16,13 @@ import (
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	speakeasy_objectvalidators "github.com/colortokens/terraform-provider-xshield/internal/validators/objectvalidators"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
+
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -82,34 +86,31 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				Computed: true,
 				Optional: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
+					// Removed RequiresReplaceIfConfigured to allow in-place updates
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
-				Description: `Requires replacement if changed.`,
+				Description: `Template category.`,
 			},
 			"template_description": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
-				Description: `Requires replacement if changed.`,
+				Description: `Template description.`,
 			},
 			"template_name": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
-				Description: `Requires replacement if changed.`,
+				Description: `Template name.`,
 			},
 			"template_paths": schema.ListNestedAttribute{
 				Computed: true,
 				Optional: true,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplaceIfConfigured(),
 					speakeasy_listplanmodifier.SuppressDiff(speakeasy_listplanmodifier.ExplicitSuppress),
 				},
 				NestedObject: schema.NestedAttributeObject{
@@ -117,7 +118,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 						speakeasy_objectvalidators.NotNull(),
 					},
 					PlanModifiers: []planmodifier.Object{
-						objectplanmodifier.RequiresReplaceIfConfigured(),
 						speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 					},
 					Attributes: map[string]schema.Attribute{
@@ -134,7 +134,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.Object{
-								objectplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 							},
 							Attributes: map[string]schema.Attribute{
@@ -142,7 +141,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 									Description: `Requires replacement if changed.`,
@@ -151,7 +149,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 									Description: `Requires replacement if changed.`,
@@ -163,7 +160,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.Object{
-								objectplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 							},
 							Attributes: map[string]schema.Attribute{
@@ -201,7 +197,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 							Description: `Requires replacement if changed.`,
@@ -219,7 +214,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 							Description: `Requires replacement if changed.`,
@@ -252,7 +246,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 							Description: `Requires replacement if changed.`,
@@ -270,7 +263,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 							Description: `Requires replacement if changed.`,
@@ -288,7 +280,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.Object{
-								objectplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 							},
 							Attributes: map[string]schema.Attribute{
@@ -296,7 +287,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 									Description: `Requires replacement if changed.`,
@@ -305,7 +295,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 									Description: `Requires replacement if changed.`,
@@ -317,7 +306,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.Object{
-								objectplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 							},
 							Attributes: map[string]schema.Attribute{
@@ -386,7 +374,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				Computed: true,
 				Optional: true,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplaceIfConfigured(),
 					speakeasy_listplanmodifier.SuppressDiff(speakeasy_listplanmodifier.ExplicitSuppress),
 				},
 				NestedObject: schema.NestedAttributeObject{
@@ -394,7 +381,6 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 						speakeasy_objectvalidators.NotNull(),
 					},
 					PlanModifiers: []planmodifier.Object{
-						objectplanmodifier.RequiresReplaceIfConfigured(),
 						speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
 					},
 					Attributes: map[string]schema.Attribute{
@@ -408,37 +394,33 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Port number.`,
 						},
 						"listen_port_name": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Port name.`,
 						},
 						"listen_port_protocol": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Port protocol.`,
 						},
 						"listen_port_reviewed": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `must be one of ["denied", "allow-intranet", "allow-any", "path-restricted"]; Requires replacement if changed.`,
+							Description: `must be one of ["denied", "allow-intranet", "allow-any", "path-restricted"]`,
 							Validators: []validator.String{
 								stringvalidator.OneOf(
 									"denied",
@@ -452,11 +434,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.List{
-								listplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_listplanmodifier.SuppressDiff(speakeasy_listplanmodifier.ExplicitSuppress),
 							},
 							ElementType: types.StringType,
-							Description: `Requires replacement if changed.`,
+							Description: `Process names that listen on this port.`,
 						},
 					},
 				},
@@ -595,30 +576,954 @@ func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, r
 		resp.Diagnostics.AddError("unexpected response from API. Got an unexpected response body", debugResponse(res.RawResponse))
 		return
 	}
+
+	// Save the current state's port and path order before refreshing
+	existingPorts := data.TemplatePorts
+	existingPaths := data.TemplatePaths
+
 	data.RefreshFromSharedTemplate(res.Template)
+
+	// Reorder ports to match the existing state order (preserve user's config order)
+	if len(existingPorts) > 0 && len(data.TemplatePorts) > 0 {
+		portsByKey := make(map[string]tfTypes.MetadataPort)
+		for _, port := range data.TemplatePorts {
+			key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+			portsByKey[key] = port
+		}
+
+		reorderedPorts := make([]tfTypes.MetadataPort, 0, len(data.TemplatePorts))
+		for _, existingPort := range existingPorts {
+			key := fmt.Sprintf("%s:%s", existingPort.ListenPort.ValueString(), existingPort.ListenPortProtocol.ValueString())
+			if apiPort, ok := portsByKey[key]; ok {
+				reorderedPorts = append(reorderedPorts, apiPort)
+				delete(portsByKey, key)
+			}
+		}
+		// Add any new ports from API that weren't in existing state
+		for _, port := range data.TemplatePorts {
+			key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+			if _, ok := portsByKey[key]; ok {
+				reorderedPorts = append(reorderedPorts, port)
+			}
+		}
+		data.TemplatePorts = reorderedPorts
+	}
+
+	// Reorder paths to match the existing state order (preserve user's config order)
+	if len(existingPaths) > 0 && len(data.TemplatePaths) > 0 {
+		pathsByKey := make(map[string]tfTypes.MetadataPath)
+		for _, path := range data.TemplatePaths {
+			key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+			pathsByKey[key] = path
+		}
+
+		reorderedPaths := make([]tfTypes.MetadataPath, 0, len(data.TemplatePaths))
+		for _, existingPath := range existingPaths {
+			key := fmt.Sprintf("%s:%s:%s", existingPath.Port.ValueString(), existingPath.Protocol.ValueString(), existingPath.Direction.ValueString())
+			if apiPath, ok := pathsByKey[key]; ok {
+				reorderedPaths = append(reorderedPaths, apiPath)
+				delete(pathsByKey, key)
+			}
+		}
+		// Add any new paths from API that weren't in existing state
+		for _, path := range data.TemplatePaths {
+			key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+			if _, ok := pathsByKey[key]; ok {
+				reorderedPaths = append(reorderedPaths, path)
+			}
+		}
+		data.TemplatePaths = reorderedPaths
+	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+
 	var data *TemplateResourceModel
 	var plan types.Object
+	var state types.Object
 
+	// Get the plan (desired state)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	merge(ctx, req, resp, &data)
+	// Get the current state
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Not Implemented; all attributes marked as RequiresReplace
+	// Convert to models
+	var planData TemplateResourceModel
+	var stateData TemplateResourceModel
+	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{})...)
+	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{})...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// Check if metadata has changed
+	metadataChanged := !planData.TemplateName.Equal(stateData.TemplateName) ||
+		!planData.TemplateDescription.Equal(stateData.TemplateDescription) ||
+		!planData.TemplateCategory.Equal(stateData.TemplateCategory)
+
+	// Check if ports or paths have been added or removed
+	portsAdded := len(planData.TemplatePorts) > len(stateData.TemplatePorts)
+	pathsAdded := len(planData.TemplatePaths) > len(stateData.TemplatePaths)
+	portsRemoved := len(planData.TemplatePorts) < len(stateData.TemplatePorts)
+	pathsRemoved := len(planData.TemplatePaths) < len(stateData.TemplatePaths)
+
+	// Define variables for paths to add and remove
+	var removedPathIDs []string
+	var pathsToRemove []tfTypes.MetadataPath
+	var pathsToAdd []tfTypes.MetadataPath
+	var pathIDChanges map[string]string
+
+	// Check if any path attributes have changed
+	pathsChanged := false
+
+	// Define variables for ports to remove and add
+	var removedPortIDs []string
+	var portsToRemove []tfTypes.MetadataPort
+	var portsToAdd []tfTypes.MetadataPort
+
+	// Check if any port attributes have changed
+	portsChanged := false
+
+	// First, create a map of state ports by listen_port and listen_port_protocol
+	statePortsByKey := make(map[string]tfTypes.MetadataPort)
+	for _, statePort := range stateData.TemplatePorts {
+		key := fmt.Sprintf("%s:%s", statePort.ListenPort.ValueString(), statePort.ListenPortProtocol.ValueString())
+		statePortsByKey[key] = statePort
+	}
+
+	// Then, create a map of plan ports by listen_port and listen_port_protocol
+	planPortsByKey := make(map[string]tfTypes.MetadataPort)
+	for _, planPort := range planData.TemplatePorts {
+		key := fmt.Sprintf("%s:%s", planPort.ListenPort.ValueString(), planPort.ListenPortProtocol.ValueString())
+		planPortsByKey[key] = planPort
+	}
+
+	// Check for ports that exist in both state and plan but have different attributes
+	for key, planPort := range planPortsByKey {
+		if statePort, ok := statePortsByKey[key]; ok {
+			// This port exists in both state and plan, check if attributes have changed
+			if !planPort.ListenPortReviewed.Equal(statePort.ListenPortReviewed) {
+				portsChanged = true
+				// Add the port to the list of ports to remove and add
+				portsToRemove = append(portsToRemove, statePort)
+				portsToAdd = append(portsToAdd, planPort)
+				removedPortIDs = append(removedPortIDs, statePort.ID.ValueString())
+			}
+		}
+	}
+
+	// Also check for ports that exist in state but not in plan (removed)
+	for key, statePort := range statePortsByKey {
+		if _, ok := planPortsByKey[key]; !ok {
+			// This port exists in state but not in plan, it's being removed
+			portsRemoved = true
+			portsToRemove = append(portsToRemove, statePort)
+			removedPortIDs = append(removedPortIDs, statePort.ID.ValueString())
+		}
+	}
+
+	// And check for ports that exist in plan but not in state (added)
+	for key, planPort := range planPortsByKey {
+		if _, ok := statePortsByKey[key]; !ok {
+			// This port exists in plan but not in state, it's being added
+			portsAdded = true
+			portsToAdd = append(portsToAdd, planPort)
+		}
+	}
+
+	// Now do the same for paths
+	// First, create a map of state paths by port, protocol, and direction
+	statePathsByKey := make(map[string]tfTypes.MetadataPath)
+	for _, statePath := range stateData.TemplatePaths {
+		key := fmt.Sprintf("%s:%s:%s", statePath.Port.ValueString(), statePath.Protocol.ValueString(), statePath.Direction.ValueString())
+		statePathsByKey[key] = statePath
+	}
+
+	// Then, create a map of plan paths by port, protocol, and direction
+	planPathsByKey := make(map[string]tfTypes.MetadataPath)
+	for _, planPath := range planData.TemplatePaths {
+		key := fmt.Sprintf("%s:%s:%s", planPath.Port.ValueString(), planPath.Protocol.ValueString(), planPath.Direction.ValueString())
+		planPathsByKey[key] = planPath
+	}
+
+	// Check for paths that exist in both state and plan but have different attributes
+	for key, planPath := range planPathsByKey {
+		if statePath, ok := statePathsByKey[key]; ok {
+			// This path exists in both state and plan, check if attributes have changed
+			// Check all fields for changes
+			pathChanged := false
+
+			// Check all fields for changes
+			if !statePath.DstIP.Equal(planPath.DstIP) {
+				pathChanged = true
+			}
+
+			if !statePath.SrcIP.Equal(planPath.SrcIP) {
+				pathChanged = true
+			}
+
+			if !statePath.Domain.Equal(planPath.Domain) {
+				pathChanged = true
+			}
+
+			if !statePath.PortName.Equal(planPath.PortName) {
+				pathChanged = true
+			}
+
+			// Check if source_named_network has changed
+			if (statePath.SourceNamedNetwork != nil && planPath.SourceNamedNetwork == nil) ||
+				(statePath.SourceNamedNetwork == nil && planPath.SourceNamedNetwork != nil) {
+				pathChanged = true
+			} else if statePath.SourceNamedNetwork != nil && planPath.SourceNamedNetwork != nil {
+				if !statePath.SourceNamedNetwork.NamedNetworkID.Equal(planPath.SourceNamedNetwork.NamedNetworkID) {
+					pathChanged = true
+				}
+			}
+
+			// If any field has changed, we need to delete and recreate
+			if pathChanged {
+				pathsChanged = true
+				pathsToRemove = append(pathsToRemove, statePath)
+				pathsToAdd = append(pathsToAdd, planPath)
+				removedPathIDs = append(removedPathIDs, statePath.ID.ValueString())
+			}
+		}
+	}
+
+	// Also check for paths that exist in state but not in plan (removed)
+	for key, statePath := range statePathsByKey {
+		if _, ok := planPathsByKey[key]; !ok {
+			// This path exists in state but not in plan, it's being removed
+			pathsRemoved = true
+			pathsToRemove = append(pathsToRemove, statePath)
+			removedPathIDs = append(removedPathIDs, statePath.ID.ValueString())
+		}
+	}
+
+	// And check for paths that exist in plan but not in state (added)
+	for key, planPath := range planPathsByKey {
+		if _, ok := statePathsByKey[key]; !ok {
+			// This path exists in plan but not in state, it's being added
+			pathsAdded = true
+			pathsToAdd = append(pathsToAdd, planPath)
+		}
+	}
+
+	// Start with the current state as our base
+	data = &stateData
+
+	// Handle metadata changes
+	if metadataChanged {
+		// Use the standard SDK request with only the fields we need
+		metadataRequest := operations.EditTemplateMetadataRequest{
+			Templateid: planData.ID.ValueString(),
+			TemplateSummary: shared.TemplateSummary{
+				TemplateName:        planData.TemplateName.ValueStringPointer(),
+				TemplateDescription: planData.TemplateDescription.ValueStringPointer(),
+				TemplateCategory:    planData.TemplateCategory.ValueStringPointer(),
+			},
+		}
+
+		// Call the SDK method to update template metadata
+		res, err := r.client.Templates.EditTemplateMetadata(ctx, metadataRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update template metadata", err.Error())
+			if res != nil && res.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+			}
+			return
+		}
+
+		// Check for non-success status code
+		if res != nil && res.StatusCode != 204 {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
+				debugResponse(res.RawResponse),
+			)
+			return
+		}
+
+		// Update the metadata fields in our data
+		data.TemplateName = planData.TemplateName
+		data.TemplateDescription = planData.TemplateDescription
+		data.TemplateCategory = planData.TemplateCategory
+	}
+
+	// Handle port and path changes (additions, removals, or attribute changes)
+	if portsAdded || portsRemoved || portsChanged || pathsAdded || pathsRemoved || pathsChanged {
+
+		// If we have ports or paths to remove, delete them from the template
+		if len(removedPortIDs) > 0 || len(removedPathIDs) > 0 {
+			// Create the delete request
+			deleteRequest := operations.DeleteFromTemplateRequest{
+				Templateid: planData.ID.ValueString(),
+				APITemplatePayloadHashes: shared.APITemplatePayloadHashes{
+					Comment: nil, // No comment needed
+					Ports:   removedPortIDs,
+					Paths:   removedPathIDs,
+				},
+			}
+
+			// Log the delete request
+			deleteInfo := fmt.Sprintf("Sending delete request: Template ID=%s", planData.ID.ValueString())
+			tflog.Info(ctx, deleteInfo)
+
+			pathsInfo := fmt.Sprintf("Paths to delete: %v", removedPathIDs)
+			tflog.Info(ctx, pathsInfo)
+
+			// Call the API to delete the ports and paths
+			_, err := r.client.Templates.DeleteFromTemplate(ctx, deleteRequest)
+
+			// Handle the specific error for 202 status code
+			if err != nil {
+				// Check if the error message contains "Status 202" or "Status 204"
+				// The API can return either 202 Accepted or 204 No Content
+				if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
+					// This is actually a success, so we'll continue
+				} else {
+					// For any other error, report it
+					resp.Diagnostics.AddError("Failed to delete from template", err.Error())
+					return
+				}
+			}
+
+			// Update our data with the removed ports and paths
+			// For ports, we need to preserve the IDs of existing ports
+			if portsRemoved {
+				tflog.Info(ctx, "Updating ports after removal")
+
+				// Instead of trying to map IDs from state to plan, we'll read the latest state from the API
+				// This ensures we have the correct IDs for all ports after deletion
+				readRequest := operations.GetTemplateRequest{
+					Templateid: planData.ID.ValueString(),
+				}
+
+				readRes, err := r.client.Templates.GetTemplate(ctx, readRequest)
+				if err != nil {
+					resp.Diagnostics.AddError("failure to invoke API", err.Error())
+					if readRes != nil && readRes.RawResponse != nil {
+						resp.Diagnostics.AddError("unexpected http request/response", debugResponse(readRes.RawResponse))
+					}
+					return
+				}
+
+				if readRes == nil || readRes.Template == nil {
+					resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", readRes))
+					return
+				}
+
+				// Create a temporary model to hold the refreshed data
+				var refreshedData TemplateResourceModel
+				refreshedData.RefreshFromSharedTemplate(readRes.Template)
+
+				// Log the API response
+				tflog.Info(ctx, "API response after deletion:")
+				if readRes.Template.TemplatePorts != nil {
+					for i, apiPort := range readRes.Template.TemplatePorts {
+						portInfo := fmt.Sprintf("API Port %d: ID=%s, ListenPort=%s, ListenPortProtocol=%s",
+							i,
+							*apiPort.ID,
+							*apiPort.ListenPort,
+							*apiPort.ListenPortProtocol)
+						tflog.Info(ctx, portInfo)
+					}
+				} else {
+					tflog.Info(ctx, "No ports in API response")
+				}
+
+				// We need to preserve the IDs from the plan while using the data from the API
+				// Create a map of ports by attributes from the API response
+				apiPortsByKey := make(map[string]tfTypes.MetadataPort)
+				for _, port := range refreshedData.TemplatePorts {
+					key := fmt.Sprintf("%s:%s",
+						port.ListenPort.ValueString(),
+						port.ListenPortProtocol.ValueString())
+					apiPortsByKey[key] = port
+				}
+
+				// Create a map of expected IDs by attributes from the plan
+				expectedIDsByKey := make(map[string]string)
+				for _, port := range planData.TemplatePorts {
+					if !port.ID.IsNull() && !port.ID.IsUnknown() {
+						key := fmt.Sprintf("%s:%s",
+							port.ListenPort.ValueString(),
+							port.ListenPortProtocol.ValueString())
+						expectedIDsByKey[key] = port.ID.ValueString()
+					}
+				}
+
+				// Create a new list of ports that uses the data from the API but preserves the IDs from the plan
+				newPorts := []tfTypes.MetadataPort{}
+
+				// For each port in the API response, use the ID from the plan if available
+				for _, apiPort := range refreshedData.TemplatePorts {
+					key := fmt.Sprintf("%s:%s",
+						apiPort.ListenPort.ValueString(),
+						apiPort.ListenPortProtocol.ValueString())
+
+					// Create a copy of the API port
+					portCopy := apiPort
+
+					// If the plan expects a specific ID for this port, use that ID
+					if expectedID, ok := expectedIDsByKey[key]; ok {
+						portCopy.ID = types.StringValue(expectedID)
+					}
+
+					newPorts = append(newPorts, portCopy)
+				}
+
+				planData.TemplatePorts = newPorts
+
+				// Log the ports and their IDs for debugging
+				tflog.Info(ctx, "Updated ports after deletion (from refreshedData):")
+				for i, port := range refreshedData.TemplatePorts {
+					portInfo := fmt.Sprintf("RefreshedData Port %d: ID=%s, ListenPort=%s, ListenPortProtocol=%s",
+						i,
+						port.ID.ValueString(),
+						port.ListenPort.ValueString(),
+						port.ListenPortProtocol.ValueString())
+					tflog.Info(ctx, portInfo)
+				}
+
+				// Log the final plan data
+				tflog.Info(ctx, "Final plan data after deletion:")
+				for i, port := range planData.TemplatePorts {
+					portInfo := fmt.Sprintf("Final Plan Port %d: ID=%s, ListenPort=%s, ListenPortProtocol=%s",
+						i,
+						port.ID.ValueString(),
+						port.ListenPort.ValueString(),
+						port.ListenPortProtocol.ValueString())
+					tflog.Info(ctx, portInfo)
+				}
+			}
+
+			// For paths, we need to preserve the IDs of existing paths
+			if pathsRemoved {
+				tflog.Info(ctx, "Updating paths after removal")
+
+				// Instead of trying to map IDs from state to plan, we'll read the latest state from the API
+				// This ensures we have the correct IDs for all paths after deletion
+				readRequest := operations.GetTemplateRequest{
+					Templateid: planData.ID.ValueString(),
+				}
+
+				readRes, err := r.client.Templates.GetTemplate(ctx, readRequest)
+				if err != nil {
+					resp.Diagnostics.AddError("failure to invoke API", err.Error())
+					if readRes != nil && readRes.RawResponse != nil {
+						resp.Diagnostics.AddError("unexpected http request/response", debugResponse(readRes.RawResponse))
+					}
+					return
+				}
+
+				if readRes == nil || readRes.Template == nil {
+					resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", readRes))
+					return
+				}
+
+				// Create a temporary model to hold the refreshed data
+				var refreshedData TemplateResourceModel
+				refreshedData.RefreshFromSharedTemplate(readRes.Template)
+
+				// Log the API response
+				tflog.Info(ctx, "API response after deletion:")
+				if readRes.Template.TemplatePaths != nil {
+					for i, apiPath := range readRes.Template.TemplatePaths {
+						pathInfo := fmt.Sprintf("API Path %d: ID=%s, Port=%s, Protocol=%s, Direction=%s",
+							i,
+							*apiPath.ID,
+							*apiPath.Port,
+							*apiPath.Protocol,
+							*apiPath.Direction)
+						tflog.Info(ctx, pathInfo)
+					}
+				} else {
+					tflog.Info(ctx, "No paths in API response")
+				}
+
+				// We need to preserve the IDs from the plan while using the data from the API
+				// Create a map of paths by attributes from the API response
+				apiPathsByKey := make(map[string]tfTypes.MetadataPath)
+				for _, path := range refreshedData.TemplatePaths {
+					key := fmt.Sprintf("%s:%s:%s",
+						path.Port.ValueString(),
+						path.Protocol.ValueString(),
+						path.Direction.ValueString())
+					apiPathsByKey[key] = path
+				}
+
+				// Create a map of expected IDs by attributes from the plan
+				expectedIDsByKey := make(map[string]string)
+				for _, path := range planData.TemplatePaths {
+					if !path.ID.IsNull() && !path.ID.IsUnknown() {
+						key := fmt.Sprintf("%s:%s:%s",
+							path.Port.ValueString(),
+							path.Protocol.ValueString(),
+							path.Direction.ValueString())
+						expectedIDsByKey[key] = path.ID.ValueString()
+					}
+				}
+
+				// Create a new list of paths that uses the data from the API but preserves the IDs from the plan
+				newPaths := []tfTypes.MetadataPath{}
+
+				// For each path in the API response, use the ID from the plan if available
+				for _, apiPath := range refreshedData.TemplatePaths {
+					key := fmt.Sprintf("%s:%s:%s",
+						apiPath.Port.ValueString(),
+						apiPath.Protocol.ValueString(),
+						apiPath.Direction.ValueString())
+
+					// Create a copy of the API path
+					pathCopy := apiPath
+
+					// If the plan expects a specific ID for this path, use that ID
+					if expectedID, ok := expectedIDsByKey[key]; ok {
+						pathCopy.ID = types.StringValue(expectedID)
+					}
+
+					newPaths = append(newPaths, pathCopy)
+				}
+
+				planData.TemplatePaths = newPaths
+
+				// Log the paths and their IDs for debugging
+				tflog.Info(ctx, "Updated paths after deletion (from refreshedData):")
+				for i, path := range refreshedData.TemplatePaths {
+					pathInfo := fmt.Sprintf("RefreshedData Path %d: ID=%s, Port=%s, Protocol=%s, Direction=%s",
+						i,
+						path.ID.ValueString(),
+						path.Port.ValueString(),
+						path.Protocol.ValueString(),
+						path.Direction.ValueString())
+					tflog.Info(ctx, pathInfo)
+				}
+
+				// Log the final plan data
+				tflog.Info(ctx, "Final plan data after deletion:")
+				for i, path := range planData.TemplatePaths {
+					pathInfo := fmt.Sprintf("Final Plan Path %d: ID=%s, Port=%s, Protocol=%s, Direction=%s",
+						i,
+						path.ID.ValueString(),
+						path.Port.ValueString(),
+						path.Protocol.ValueString(),
+						path.Direction.ValueString())
+					tflog.Info(ctx, pathInfo)
+				}
+			}
+
+			data.TemplatePorts = planData.TemplatePorts
+			data.TemplatePaths = planData.TemplatePaths
+
+			// Log what we're setting in data after deletion
+			for i, port := range data.TemplatePorts {
+				tflog.Info(ctx, fmt.Sprintf("data.TemplatePorts[%d]: ID=%s, Port=%s, Protocol=%s",
+					i, port.ID.ValueString(), port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString()))
+			}
+		}
+
+		// If we have ports or paths to add, append them to the template
+		if len(portsToAdd) > 0 || len(pathsToAdd) > 0 {
+			// Convert to shared types
+			// Use portsToAdd which includes both new ports and modified ports
+			sharedPorts := make([]shared.MetadataPort, 0, len(portsToAdd))
+			for _, port := range portsToAdd {
+				// Convert the string value to MetadataPortState
+				var portState *shared.MetadataPortState
+				if !port.ListenPortReviewed.IsNull() && !port.ListenPortReviewed.IsUnknown() {
+					state := shared.MetadataPortState(port.ListenPortReviewed.ValueString())
+					portState = &state
+				}
+
+				sharedPorts = append(sharedPorts, shared.MetadataPort{
+					ListenPort:         port.ListenPort.ValueStringPointer(),
+					ListenPortName:     port.ListenPortName.ValueStringPointer(),
+					ListenPortProtocol: port.ListenPortProtocol.ValueStringPointer(),
+					ListenPortReviewed: portState,
+					ListenProcessNames: nil, // This will be filled by the API
+				})
+			}
+
+			sharedPaths := make([]shared.MetadataPath, 0, len(pathsToAdd))
+			for _, path := range pathsToAdd {
+				// Create the base path
+				metadataPath := shared.MetadataPath{
+					Direction: path.Direction.ValueStringPointer(),
+					Port:      path.Port.ValueStringPointer(),
+					Protocol:  path.Protocol.ValueStringPointer(),
+					// Other fields will be filled by the API
+				}
+
+				// Add DstIP if present
+				if !path.DstIP.IsNull() && !path.DstIP.IsUnknown() {
+					dstIP := path.DstIP.ValueString()
+					metadataPath.DstIP = &dstIP
+				}
+
+				// Add source_named_network if present
+				if path.SourceNamedNetwork != nil {
+					if !path.SourceNamedNetwork.NamedNetworkID.IsNull() && !path.SourceNamedNetwork.NamedNetworkID.IsUnknown() {
+						// If we have the ID, include it
+						id := path.SourceNamedNetwork.NamedNetworkID.ValueString()
+						metadataPath.SourceNamedNetwork = &shared.MetadataNamedNetworkReference{
+							NamedNetworkID: &id,
+						}
+
+						// If we also have the name, include it
+						if !path.SourceNamedNetwork.NamedNetworkName.IsNull() && !path.SourceNamedNetwork.NamedNetworkName.IsUnknown() {
+							name := path.SourceNamedNetwork.NamedNetworkName.ValueString()
+							metadataPath.SourceNamedNetwork.NamedNetworkName = &name
+						}
+					}
+				}
+
+				// Add destination_named_network if present
+				if path.DestinationNamedNetwork != nil {
+					if !path.DestinationNamedNetwork.NamedNetworkID.IsNull() && !path.DestinationNamedNetwork.NamedNetworkID.IsUnknown() {
+						// If we have the ID, include it
+						id := path.DestinationNamedNetwork.NamedNetworkID.ValueString()
+						metadataPath.DestinationNamedNetwork = &shared.MetadataNamedNetworkReference{
+							NamedNetworkID: &id,
+						}
+
+						// If we also have the name, include it
+						if !path.DestinationNamedNetwork.NamedNetworkName.IsNull() && !path.DestinationNamedNetwork.NamedNetworkName.IsUnknown() {
+							name := path.DestinationNamedNetwork.NamedNetworkName.ValueString()
+							metadataPath.DestinationNamedNetwork.NamedNetworkName = &name
+						}
+					}
+				}
+
+				// Add the path to the list
+				sharedPaths = append(sharedPaths, metadataPath)
+			}
+
+			// Create the append request
+			appendRequest := operations.AppendToTemplateRequest{
+				Templateid: planData.ID.ValueString(),
+				TemplateBodyWithComment: shared.TemplateBodyWithComment{
+					Comment:       nil, // No comment needed
+					TemplatePorts: sharedPorts,
+					TemplatePaths: sharedPaths,
+				},
+			}
+
+			// Call the API to append the new ports and paths
+			tflog.Info(ctx, "Calling AppendToTemplate API")
+			appendRes, err := r.client.Templates.AppendToTemplate(ctx, appendRequest)
+			tflog.Info(ctx, fmt.Sprintf("AppendToTemplate API response: %v", appendRes))
+			if err != nil {
+				// Check if the error is due to a 202 status code, which is actually a success
+				if appendRes != nil && appendRes.StatusCode == 202 {
+					// This is actually a success, so we'll continue
+				} else {
+					resp.Diagnostics.AddError("Failed to append to template", err.Error())
+					if appendRes != nil && appendRes.RawResponse != nil {
+						resp.Diagnostics.AddError("unexpected http request/response", debugResponse(appendRes.RawResponse))
+					}
+					return
+				}
+			}
+
+			// Check for non-success status code (202 Accepted is the expected success code for this API)
+			// We also accept 200 OK and 204 No Content as success codes
+			if appendRes != nil && appendRes.StatusCode != 202 && appendRes.StatusCode != 200 && appendRes.StatusCode != 204 {
+				resp.Diagnostics.AddError(
+					fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", appendRes.StatusCode),
+					debugResponse(appendRes.RawResponse),
+				)
+				return
+			}
+
+			// After a successful append, read the updated template
+
+			readRequest := operations.GetTemplateRequest{
+				Templateid: planData.ID.ValueString(),
+			}
+
+			tflog.Info(ctx, "Reading template after append to get updated IDs")
+
+			readRes, err := r.client.Templates.GetTemplate(ctx, readRequest)
+			if err != nil {
+				resp.Diagnostics.AddError("failure to invoke API", err.Error())
+				if readRes != nil && readRes.RawResponse != nil {
+					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(readRes.RawResponse))
+				}
+				return
+			}
+
+			if readRes == nil || readRes.Template == nil {
+				resp.Diagnostics.AddError("unexpected response from API", "Template not found after update")
+				return
+			}
+
+			// Log the API response after adding paths
+			tflog.Info(ctx, "API response after adding paths:")
+			if readRes.Template.TemplatePaths != nil {
+				for i, apiPath := range readRes.Template.TemplatePaths {
+					pathInfo := fmt.Sprintf("API Path %d: ID=%s, Port=%s, Protocol=%s, Direction=%s",
+						i,
+						*apiPath.ID,
+						*apiPath.Port,
+						*apiPath.Protocol,
+						*apiPath.Direction)
+					tflog.Info(ctx, pathInfo)
+				}
+			} else {
+				tflog.Info(ctx, "No paths in API response after adding")
+			}
+
+			// Log the ports in the API response
+			tflog.Info(ctx, "API response ports:")
+			if readRes.Template.TemplatePorts != nil {
+				for i, apiPort := range readRes.Template.TemplatePorts {
+					portInfo := fmt.Sprintf("API Port %d: ID=%s, ListenPort=%s, ListenPortProtocol=%s, ListenPortReviewed=%s",
+						i,
+						*apiPort.ID,
+						*apiPort.ListenPort,
+						*apiPort.ListenPortProtocol,
+						*apiPort.ListenPortReviewed)
+					tflog.Info(ctx, portInfo)
+				}
+			} else {
+				tflog.Info(ctx, "No ports in API response")
+			}
+
+			// Create a temporary model to hold the refreshed data
+			var refreshedData TemplateResourceModel
+			refreshedData.RefreshFromSharedTemplate(readRes.Template)
+
+			// We need to preserve the exact order of IDs that Terraform expects
+			// First, let's create a map of paths by their attributes from the API response
+			apiPathsByKey := make(map[string]tfTypes.MetadataPath)
+
+			// Build map from the refreshed data
+			for _, path := range refreshedData.TemplatePaths {
+				if !path.ID.IsNull() && !path.ID.IsUnknown() {
+					// Create a composite key using port, protocol, and direction
+					key := fmt.Sprintf("%s:%s:%s",
+						path.Port.ValueString(),
+						path.Protocol.ValueString(),
+						path.Direction.ValueString())
+					apiPathsByKey[key] = path
+				}
+			}
+
+			// Save the original plan ports before we modify them (for new ports)
+			originalPlanPorts := make([]tfTypes.MetadataPort, len(planData.TemplatePorts))
+			for i, port := range planData.TemplatePorts {
+				originalPlanPorts[i] = port
+			}
+
+			// Create a map to track which ports are new (not in the plan with an ID)
+			newPortIndices := make(map[int]bool)
+			for i, port := range planData.TemplatePorts {
+				if port.ID.IsNull() || port.ID.IsUnknown() {
+					newPortIndices[i] = true
+				}
+			}
+
+			// Build final ports list preserving plan order
+
+			// Create a map of ports by key from the API response
+			apiPortsByListenKey := make(map[string]tfTypes.MetadataPort)
+			for _, port := range refreshedData.TemplatePorts {
+				key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+				apiPortsByListenKey[key] = port
+			}
+
+			// If we have ports in the API response, use them directly
+			tflog.Info(ctx, fmt.Sprintf("Number of ports in API response: %d", len(refreshedData.TemplatePorts)))
+
+			// Create a deep copy of the plan data for ports
+			finalPorts := make([]tfTypes.MetadataPort, 0)
+
+			// Use the ports from the API response, but preserve the original IDs from the plan
+			if len(refreshedData.TemplatePorts) > 0 {
+				tflog.Info(ctx, "Using ports from API response but preserving original IDs")
+
+				// Create a map to track port ID changes (old ID -> new ID)
+				portIDChanges := make(map[string]string)
+				// When we have exactly one port being removed and one being added, preserve the ID
+				// This handles changes to any key field (listen_port, listen_port_protocol)
+				if len(portsToRemove) == 1 && len(portsToAdd) == 1 {
+					portToRemove := portsToRemove[0]
+					portToAdd := portsToAdd[0]
+					oldID := portToRemove.ID.ValueString()
+					newKey := fmt.Sprintf("%s:%s", portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString())
+					tflog.Info(ctx, fmt.Sprintf("Detected port key field change: %s:%s -> %s:%s, preserving ID %s",
+						portToRemove.ListenPort.ValueString(), portToRemove.ListenPortProtocol.ValueString(),
+						portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString(),
+						oldID))
+					portIDChanges[newKey] = oldID
+				}
+
+				// Track path ID changes when key fields are modified
+				pathIDChanges = make(map[string]string)
+				if len(pathsToRemove) == 1 && len(pathsToAdd) == 1 {
+					pathToRemove := pathsToRemove[0]
+					pathToAdd := pathsToAdd[0]
+					oldID := pathToRemove.ID.ValueString()
+					newKey := fmt.Sprintf("%s:%s:%s", pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString())
+					tflog.Info(ctx, fmt.Sprintf("Detected path key field change: %s:%s:%s -> %s:%s:%s, preserving ID %s",
+						pathToRemove.Port.ValueString(), pathToRemove.Protocol.ValueString(), pathToRemove.Direction.ValueString(),
+						pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString(),
+						oldID))
+					pathIDChanges[newKey] = oldID
+				}
+
+				// Iterate over plan ports to preserve order, and look up matching API ports
+				for i, planPort := range planData.TemplatePorts {
+					// Look up the API port by key
+					key := fmt.Sprintf("%s:%s", planPort.ListenPort.ValueString(), planPort.ListenPortProtocol.ValueString())
+					apiPort, hasAPIPort := apiPortsByListenKey[key]
+
+					if !hasAPIPort {
+						// Port not found in API response, skip it
+						tflog.Info(ctx, fmt.Sprintf("Warning: Port %s not found in API response", key))
+						continue
+					}
+
+					var portToAdd tfTypes.MetadataPort
+
+					// Check if this port was originally new (using the newPortIndices map created earlier)
+					// This is important because planPort.ID might have been set in the first section
+					if newPortIndices[i] {
+						// NEW PORT: Start with ORIGINAL plan port (only user-specified fields)
+						// Then add the ID from API (computed field)
+						portToAdd = originalPlanPorts[i]
+						portToAdd.ID = apiPort.ID
+						tflog.Info(ctx, fmt.Sprintf("New port %s at index %d: using ORIGINAL plan fields + API ID %s",
+							key, i, apiPort.ID.ValueString()))
+					} else {
+						// EXISTING PORT: Start with API port (to get all current fields)
+						// Then preserve the original ID from plan
+						portToAdd = apiPort
+
+						// Check if this is a port that had its number/protocol changed (preserve original ID)
+						if oldID, ok := portIDChanges[key]; ok {
+							tflog.Info(ctx, fmt.Sprintf("Using preserved ID %s for port with changed key %s instead of API ID %s",
+								oldID, key, apiPort.ID.ValueString()))
+							portToAdd.ID = types.StringValue(oldID)
+						} else {
+							tflog.Info(ctx, fmt.Sprintf("Using original ID %s for port %s at index %d instead of API ID %s",
+								planPort.ID.ValueString(), key, i, apiPort.ID.ValueString()))
+							portToAdd.ID = planPort.ID
+						}
+					}
+
+					tflog.Info(ctx, fmt.Sprintf("Adding port: ID=%s, ListenPort=%s, ListenPortProtocol=%s",
+						portToAdd.ID.ValueString(), portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString()))
+					finalPorts = append(finalPorts, portToAdd)
+				}
+			} else {
+				tflog.Info(ctx, "No ports in API response, using plan data")
+				// If no ports in API response, use the plan data
+				finalPorts = make([]tfTypes.MetadataPort, len(planData.TemplatePorts))
+				for i, port := range planData.TemplatePorts {
+					// Start with the plan port
+					finalPorts[i] = port
+
+					// For all ports, check if we have an ID from the API
+					key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+					if apiPort, ok := apiPortsByListenKey[key]; ok {
+						// Update the ID with the one from the API
+						tflog.Info(ctx, fmt.Sprintf("Port %s: Updating ID from %s to %s from API",
+							key, port.ID.ValueString(), apiPort.ID.ValueString()))
+						finalPorts[i].ID = types.StringValue(apiPort.ID.ValueString())
+					}
+				}
+			}
+
+			// Assign final ports to data
+
+			// Create a deep copy of the plan data for paths
+			finalPaths := make([]tfTypes.MetadataPath, 0)
+
+			// Create a map of paths by key from the API response
+			apiPathsByPathKey := make(map[string]tfTypes.MetadataPath)
+			for _, path := range refreshedData.TemplatePaths {
+				key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+				apiPathsByPathKey[key] = path
+			}
+
+			// Use the paths from the API response, but preserve the plan order
+			if len(refreshedData.TemplatePaths) > 0 {
+				tflog.Info(ctx, fmt.Sprintf("Number of paths in API response: %d", len(refreshedData.TemplatePaths)))
+				tflog.Info(ctx, "Using paths from API response but preserving plan order and original IDs")
+
+				// Iterate over plan paths to preserve order, and look up matching API paths
+				for _, planPath := range planData.TemplatePaths {
+					// Look up the API path by key
+					key := fmt.Sprintf("%s:%s:%s", planPath.Port.ValueString(), planPath.Protocol.ValueString(), planPath.Direction.ValueString())
+					apiPath, hasAPIPath := apiPathsByPathKey[key]
+
+					if !hasAPIPath {
+						// Path not found in API response, skip it
+						tflog.Info(ctx, fmt.Sprintf("Warning: Path %s not found in API response", key))
+						continue
+					}
+
+					// Start with the API path to get all current fields
+					pathToAdd := apiPath
+
+					// Check if this is a path that had its key fields changed (preserve original ID)
+					if oldID, ok := pathIDChanges[key]; ok {
+						tflog.Info(ctx, fmt.Sprintf("Using preserved ID %s for path with changed key %s instead of API ID %s",
+							oldID, key, apiPath.ID.ValueString()))
+						pathToAdd.ID = types.StringValue(oldID)
+					} else if !planPath.ID.IsNull() && !planPath.ID.IsUnknown() {
+						// For existing paths, preserve the ID from plan
+						tflog.Info(ctx, fmt.Sprintf("Using original ID %s for path %s instead of API ID %s",
+							planPath.ID.ValueString(), key, apiPath.ID.ValueString()))
+						pathToAdd.ID = planPath.ID
+					}
+
+					tflog.Info(ctx, fmt.Sprintf("Adding path: ID=%s, Port=%s, Protocol=%s, Direction=%s",
+						pathToAdd.ID.ValueString(), pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString()))
+					finalPaths = append(finalPaths, pathToAdd)
+				}
+			} else {
+				tflog.Info(ctx, "No paths in API response, using plan data")
+				// If no paths in API response, use the plan data
+				finalPaths = make([]tfTypes.MetadataPath, len(planData.TemplatePaths))
+				for i, path := range planData.TemplatePaths {
+					// Start with the plan path
+					finalPaths[i] = path
+
+					// For all paths, check if we have an ID from the API
+					key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+					if apiPath, ok := apiPathsByPathKey[key]; ok {
+						// Update the ID with the one from the API
+						tflog.Info(ctx, fmt.Sprintf("Path %s: Updating ID from %s to %s from API",
+							key, path.ID.ValueString(), apiPath.ID.ValueString()))
+						finalPaths[i].ID = types.StringValue(apiPath.ID.ValueString())
+					}
+				}
+			}
+
+			// Assign final paths to data
+
+			data.TemplatePorts = finalPorts
+			data.TemplatePaths = finalPaths
+		}
+
+		// Call refreshPlan to handle null vs empty conversions for optional computed fields
+		// This matches the pattern used in generated code (see AssetResource.Update)
+		refreshPlan(ctx, plan, &data, resp.Diagnostics)
+
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	}
 }
 
 func (r *TemplateResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -665,5 +1570,5 @@ func (r *TemplateResource) Delete(ctx context.Context, req resource.DeleteReques
 }
 
 func (r *TemplateResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

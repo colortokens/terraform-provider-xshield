@@ -4121,6 +4121,9 @@ paths:
               $ref: '#/components/schemas/api.TemplatePayloadHashes'
         required: true
       responses:
+        "202":
+          description: Accepted
+          content: {}
         "204":
           description: No Content
           content: {}
@@ -6297,8 +6300,7 @@ components:
         #   format: date-time
         #   type: string
     TemplateSummary:
-      required:
-      - templateType
+      required: []
       type: object
       properties:
         accessPolicyTemplate:

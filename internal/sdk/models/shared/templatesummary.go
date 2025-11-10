@@ -14,7 +14,7 @@ type TemplateSummary struct {
 	TemplatePaths                                   *int64  `json:"templatePaths,omitempty"`
 	TemplatePorts                                   *int64  `json:"templatePorts,omitempty"`
 	TemplateTagBasedPolicyAssignments               *int64  `json:"templateTagBasedPolicyAssignments,omitempty"`
-	TemplateType                                    string  `json:"templateType"`
+	TemplateType                                    string  `json:"templateType,omitempty"`
 	TemplateUnassignmentsPendingFirewallSynchronize *int64  `json:"templateUnassignmentsPendingFirewallSynchronize,omitempty"`
 	TotalComments                                   *int64  `json:"totalComments,omitempty"`
 	UsergroupTemplateAssignments                    *int64  `json:"usergroupTemplateAssignments,omitempty"`
