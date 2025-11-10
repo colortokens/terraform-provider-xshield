@@ -125,10 +125,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"destination_named_network": schema.SingleNestedAttribute{
 							Computed: true,
@@ -167,28 +165,22 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 								"tag_based_policy_id": schema.StringAttribute{
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 								"tag_based_policy_name": schema.StringAttribute{
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 							},
 							Description: `Requires replacement if changed.`,
@@ -205,10 +197,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"dst_ip": schema.StringAttribute{
 							Computed: true,
@@ -222,10 +212,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"id": schema.StringAttribute{
 							Computed: true,
@@ -237,10 +225,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"port": schema.StringAttribute{
 							Computed: true,
@@ -254,10 +240,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"protocol": schema.StringAttribute{
 							Computed: true,
@@ -271,10 +255,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"source_named_network": schema.SingleNestedAttribute{
 							Computed: true,
@@ -313,28 +295,22 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 								"tag_based_policy_id": schema.StringAttribute{
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 								"tag_based_policy_name": schema.StringAttribute{
 									Computed: true,
 									Optional: true,
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplaceIfConfigured(),
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
 								},
 							},
 							Description: `Requires replacement if changed.`,
@@ -343,28 +319,22 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"src_process": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 						"uri": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.RequiresReplaceIfConfigured(),
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
 						},
 					},
 				},
@@ -712,7 +682,31 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	for key, planPort := range planPortsByKey {
 		if statePort, ok := statePortsByKey[key]; ok {
 			// This port exists in both state and plan, check if attributes have changed
+			portChanged := false
+
+			// Check all port fields for changes
 			if !planPort.ListenPortReviewed.Equal(statePort.ListenPortReviewed) {
+				portChanged = true
+			}
+
+			if !planPort.ListenPortName.Equal(statePort.ListenPortName) {
+				portChanged = true
+			}
+
+			// Check ListenProcessNames
+			if len(planPort.ListenProcessNames) != len(statePort.ListenProcessNames) {
+				portChanged = true
+			} else {
+				// Check each process name
+				for i := range planPort.ListenProcessNames {
+					if i < len(statePort.ListenProcessNames) && !planPort.ListenProcessNames[i].Equal(statePort.ListenProcessNames[i]) {
+						portChanged = true
+						break
+					}
+				}
+			}
+
+			if portChanged {
 				portsChanged = true
 				// Add the port to the list of ports to remove and add
 				portsToRemove = append(portsToRemove, statePort)
@@ -780,12 +774,66 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				pathChanged = true
 			}
 
+			if !statePath.DstProcess.Equal(planPath.DstProcess) {
+				pathChanged = true
+			}
+
+			if !statePath.SrcProcess.Equal(planPath.SrcProcess) {
+				pathChanged = true
+			}
+
+			if !statePath.Method.Equal(planPath.Method) {
+				pathChanged = true
+			}
+
+			if !statePath.URI.Equal(planPath.URI) {
+				pathChanged = true
+			}
+
+			if !statePath.DestinationAssetID.Equal(planPath.DestinationAssetID) {
+				pathChanged = true
+			}
+
+			if !statePath.SourceAssetID.Equal(planPath.SourceAssetID) {
+				pathChanged = true
+			}
+
 			// Check if source_named_network has changed
 			if (statePath.SourceNamedNetwork != nil && planPath.SourceNamedNetwork == nil) ||
 				(statePath.SourceNamedNetwork == nil && planPath.SourceNamedNetwork != nil) {
 				pathChanged = true
 			} else if statePath.SourceNamedNetwork != nil && planPath.SourceNamedNetwork != nil {
 				if !statePath.SourceNamedNetwork.NamedNetworkID.Equal(planPath.SourceNamedNetwork.NamedNetworkID) {
+					pathChanged = true
+				}
+			}
+
+			// Check if destination_named_network has changed
+			if (statePath.DestinationNamedNetwork != nil && planPath.DestinationNamedNetwork == nil) ||
+				(statePath.DestinationNamedNetwork == nil && planPath.DestinationNamedNetwork != nil) {
+				pathChanged = true
+			} else if statePath.DestinationNamedNetwork != nil && planPath.DestinationNamedNetwork != nil {
+				if !statePath.DestinationNamedNetwork.NamedNetworkID.Equal(planPath.DestinationNamedNetwork.NamedNetworkID) {
+					pathChanged = true
+				}
+			}
+
+			// Check if source_tag_based_policy has changed
+			if (statePath.SourceTagBasedPolicy != nil && planPath.SourceTagBasedPolicy == nil) ||
+				(statePath.SourceTagBasedPolicy == nil && planPath.SourceTagBasedPolicy != nil) {
+				pathChanged = true
+			} else if statePath.SourceTagBasedPolicy != nil && planPath.SourceTagBasedPolicy != nil {
+				if !statePath.SourceTagBasedPolicy.TagBasedPolicyID.Equal(planPath.SourceTagBasedPolicy.TagBasedPolicyID) {
+					pathChanged = true
+				}
+			}
+
+			// Check if destination_tag_based_policy has changed
+			if (statePath.DestinationTagBasedPolicy != nil && planPath.DestinationTagBasedPolicy == nil) ||
+				(statePath.DestinationTagBasedPolicy == nil && planPath.DestinationTagBasedPolicy != nil) {
+				pathChanged = true
+			} else if statePath.DestinationTagBasedPolicy != nil && planPath.DestinationTagBasedPolicy != nil {
+				if !statePath.DestinationTagBasedPolicy.TagBasedPolicyID.Equal(planPath.DestinationTagBasedPolicy.TagBasedPolicyID) {
 					pathChanged = true
 				}
 			}
