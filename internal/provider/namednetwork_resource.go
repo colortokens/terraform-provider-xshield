@@ -5,14 +5,17 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	speakeasy_objectvalidators "github.com/colortokens/terraform-provider-xshield/internal/validators/objectvalidators"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
@@ -250,43 +253,284 @@ func (r *NamedNetworkResource) Read(ctx context.Context, req resource.ReadReques
 }
 
 func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data *NamedNetworkResourceModel
-	var plan types.Object
 
+	var planData *NamedNetworkResourceModel
+	var stateData *NamedNetworkResourceModel
+	var plan types.Object
+	var state types.Object
+
+	// Get the plan data
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	merge(ctx, req, resp, &data)
+	// Get the state data
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var namedNetworkID string
-	namedNetworkID = data.ID.ValueString()
+	// Convert plan to model
+	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	namednetworkNamedNetwork := *data.ToSharedNamednetworkNamedNetwork()
-	request := operations.UpdateNamedNetworkMetadataRequest{
-		NamedNetworkID:           namedNetworkID,
-		NamednetworkNamedNetwork: namednetworkNamedNetwork,
+	// Convert state to model
+	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{
+		UnhandledNullAsEmpty:    true,
+		UnhandledUnknownAsEmpty: true,
+	})...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
-	res, err := r.client.Namednetworks.UpdateNamedNetworkMetadata(ctx, request)
-	if err != nil {
-		resp.Diagnostics.AddError("failure to invoke API", err.Error())
-		if res != nil && res.RawResponse != nil {
-			resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+
+	// Get the named network ID
+	namedNetworkID := stateData.ID.ValueString()
+
+	// Detect what has changed
+	// 1. Check for metadata changes (name, description, and program_as_intranet)
+	metadataChanged := !planData.NamedNetworkName.Equal(stateData.NamedNetworkName) ||
+		!planData.NamedNetworkDescription.Equal(stateData.NamedNetworkDescription) ||
+		!planData.ProgramAsIntranet.Equal(stateData.ProgramAsIntranet)
+
+	// 2. Check for IP range changes
+	// Create maps for state and plan IP ranges by range string
+	stateRangesByKey := make(map[string]tfTypes.NamednetworkRange)
+	for _, stateRange := range stateData.IPRanges {
+		key := stateRange.IPRange.ValueString()
+		stateRangesByKey[key] = stateRange
+	}
+
+	planRangesByKey := make(map[string]tfTypes.NamednetworkRange)
+	for _, planRange := range planData.IPRanges {
+		key := planRange.IPRange.ValueString()
+		planRangesByKey[key] = planRange
+	}
+
+	// Find ranges to add and remove
+	var rangesToAdd []tfTypes.NamednetworkRange
+	var rangesToRemove []tfTypes.NamednetworkRange
+
+	// Find ranges in plan but not in state (to add)
+	for key, planRange := range planRangesByKey {
+		if _, ok := stateRangesByKey[key]; !ok {
+			rangesToAdd = append(rangesToAdd, planRange)
+			tflog.Info(ctx, fmt.Sprintf("Adding IP range: %s", key))
 		}
-		return
 	}
-	if res == nil {
-		resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", res))
-		return
+
+	// Find ranges in state but not in plan (to remove)
+	for key, stateRange := range stateRangesByKey {
+		if _, ok := planRangesByKey[key]; !ok {
+			rangesToRemove = append(rangesToRemove, stateRange)
+			tflog.Info(ctx, fmt.Sprintf("Removing IP range: %s", key))
+		}
 	}
-	if res.StatusCode != 204 {
-		resp.Diagnostics.AddError(fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode), debugResponse(res.RawResponse))
-		return
+
+	// Check for ranges that exist in both state and plan but have different attributes
+	// This should never happen for IP ranges as the key is the range itself, but we include it for completeness
+	for key, planRange := range planRangesByKey {
+		if stateRange, ok := stateRangesByKey[key]; ok {
+			// This range exists in both state and plan, but they should be identical
+			// If they're not, something unexpected has happened
+			if !planRange.IPRange.Equal(stateRange.IPRange) {
+				tflog.Warn(ctx, fmt.Sprintf("IP range %s has changed attributes but should be identical", key))
+			}
+		}
 	}
+
+	// Start with current state as our base
+	data := stateData
+
+	// 1. Handle metadata changes
+	if metadataChanged {
+		// Create a metadata-only request with name, description, and program_as_intranet
+		metadataRequest := operations.UpdateNamedNetworkMetadataRequest{
+			NamedNetworkID: namedNetworkID,
+			NamednetworkNamedNetwork: shared.NamednetworkNamedNetwork{
+				NamedNetworkName:        planData.NamedNetworkName.ValueStringPointer(),
+				NamedNetworkDescription: planData.NamedNetworkDescription.ValueStringPointer(),
+				ProgramAsIntranet:       planData.ProgramAsIntranet.ValueBoolPointer(),
+			},
+		}
+
+		// Call the API to update metadata
+		res, err := r.client.Namednetworks.UpdateNamedNetworkMetadata(ctx, metadataRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update named network metadata", err.Error())
+			if res != nil && res.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+			}
+			return
+		}
+
+		// Check for non-success status code
+		if res != nil && res.StatusCode != 204 {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
+				debugResponse(res.RawResponse),
+			)
+			return
+		}
+
+		// Update the metadata fields in our data (name, description, and program_as_intranet)
+		data.NamedNetworkName = planData.NamedNetworkName
+		data.NamedNetworkDescription = planData.NamedNetworkDescription
+		data.ProgramAsIntranet = planData.ProgramAsIntranet
+	}
+
+	// 2. Handle IP range removals
+	if len(rangesToRemove) > 0 {
+		tflog.Info(ctx, fmt.Sprintf("Removing %d IP ranges", len(rangesToRemove)))
+		
+		// Convert to shared model
+		sharedRanges := make([]shared.NamednetworkRange, 0, len(rangesToRemove))
+		for _, rangeToRemove := range rangesToRemove {
+			rangeID := rangeToRemove.ID.ValueString()
+			tflog.Debug(ctx, fmt.Sprintf("Preparing to remove range: %s, ID: %s", *rangeToRemove.IPRange.ValueStringPointer(), rangeID))
+			sharedRanges = append(sharedRanges, shared.NamednetworkRange{
+				IPRange: rangeToRemove.IPRange.ValueStringPointer(),
+				ID: &rangeID,
+			})
+		}
+
+		// Create the remove request
+		removeRequest := operations.DeleteFromNamedNetworkRequest{
+			NamedNetworkID: namedNetworkID,
+			RequestBody: sharedRanges,
+		}
+		tflog.Debug(ctx, fmt.Sprintf("Sending DeleteFromNamedNetwork request for network ID: %s with %d ranges", namedNetworkID, len(sharedRanges)))
+
+		// Call the API to remove ranges
+		res, err := r.client.Namednetworks.DeleteFromNamedNetwork(ctx, removeRequest)
+
+		// Handle the specific error for 202/204 status codes
+		if err != nil {
+			tflog.Debug(ctx, fmt.Sprintf("Error from DeleteFromNamedNetwork: %s", err.Error()))
+			
+			// Check if the error message contains "Status 202" or "Status 204"
+			if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
+				// This is actually a success, so we'll continue
+				tflog.Debug(ctx, "Detected 202/204 status code in error, treating as success")
+			} else {
+				// For any other error, report it
+				resp.Diagnostics.AddError("Failed to remove IP ranges", err.Error())
+				if res != nil && res.RawResponse != nil {
+					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+				}
+				return
+			}
+		} else if res != nil {
+			// If no error, check the status code
+			tflog.Debug(ctx, fmt.Sprintf("DeleteFromNamedNetwork returned status code: %d", res.StatusCode))
+			if res.StatusCode != 202 && res.StatusCode != 204 && res.StatusCode != 200 {
+				resp.Diagnostics.AddError(
+					fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
+					debugResponse(res.RawResponse),
+				)
+				return
+			}
+		}
+	}
+
+	// 3. Handle IP range additions
+	if len(rangesToAdd) > 0 {
+		tflog.Info(ctx, fmt.Sprintf("Adding %d IP ranges", len(rangesToAdd)))
+		
+		// Convert to shared model
+		sharedRanges := make([]shared.NamednetworkRange, 0, len(rangesToAdd))
+		for _, rangeToAdd := range rangesToAdd {
+			tflog.Debug(ctx, fmt.Sprintf("Preparing to add range: %s", *rangeToAdd.IPRange.ValueStringPointer()))
+			sharedRanges = append(sharedRanges, shared.NamednetworkRange{
+				IPRange: rangeToAdd.IPRange.ValueStringPointer(),
+			})
+		}
+
+		// Create the add request
+		addRequest := operations.AddToNamedNetworkRequest{
+			NamedNetworkID: namedNetworkID,
+			RequestBody: sharedRanges,
+		}
+		tflog.Debug(ctx, fmt.Sprintf("Sending AddToNamedNetwork request for network ID: %s with %d ranges", namedNetworkID, len(sharedRanges)))
+
+		// Call the API to add ranges
+		res, err := r.client.Namednetworks.AddToNamedNetwork(ctx, addRequest)
+
+		// Handle the specific error for 202/204 status codes
+		if err != nil {
+			tflog.Debug(ctx, fmt.Sprintf("Error from AddToNamedNetwork: %s", err.Error()))
+			
+			// Check if the error message contains "Status 202" or "Status 204"
+			if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
+				// This is actually a success, so we'll continue
+				tflog.Debug(ctx, "Detected 202/204 status code in error, treating as success")
+			} else {
+				// For any other error, report it
+				resp.Diagnostics.AddError("Failed to add IP ranges", err.Error())
+				if res != nil && res.RawResponse != nil {
+					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+				}
+				return
+			}
+		} else if res != nil {
+			// If no error, check the status code
+			tflog.Debug(ctx, fmt.Sprintf("AddToNamedNetwork returned status code: %d", res.StatusCode))
+			if res.StatusCode != 202 && res.StatusCode != 204 && res.StatusCode != 200 {
+				resp.Diagnostics.AddError(
+					fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
+					debugResponse(res.RawResponse),
+				)
+				return
+			}
+		}
+	}
+
+	// 4. If we made any changes, refresh the state from the API
+	if metadataChanged || len(rangesToAdd) > 0 || len(rangesToRemove) > 0 {
+		tflog.Info(ctx, "Refreshing state from API")
+		// Read the latest state from the API
+		readRequest := operations.GetNamedNetworkRequest{
+			NamedNetworkID: namedNetworkID,
+		}
+
+		readRes, err := r.client.Namednetworks.GetNamedNetwork(ctx, readRequest)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Error reading updated named network: %s", err.Error()))
+			resp.Diagnostics.AddError("Failed to read updated named network", err.Error())
+			if readRes != nil && readRes.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(readRes.RawResponse))
+			}
+			return
+		}
+
+		// Check for non-success status code
+		if readRes != nil && readRes.StatusCode != 200 {
+			tflog.Error(ctx, fmt.Sprintf("Unexpected status code from GetNamedNetwork: %d", readRes.StatusCode))
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", readRes.StatusCode),
+				debugResponse(readRes.RawResponse),
+			)
+			return
+		}
+
+		// Update our data with the latest from the API
+		if readRes.NamednetworkNamedNetwork != nil {
+			tflog.Debug(ctx, "Refreshing state from API response")
+			data.RefreshFromSharedNamednetworkNamedNetwork(readRes.NamednetworkNamedNetwork)
+			
+			// Log the updated IP ranges at debug level
+			for _, ipRange := range data.IPRanges {
+				tflog.Debug(ctx, fmt.Sprintf("Updated IP range: %s, ID: %s", ipRange.IPRange.ValueString(), ipRange.ID.ValueString()))
+			}
+		}
+	}
+
+	// Refresh the plan to handle null vs empty conversions for optional computed fields
 	refreshPlan(ctx, plan, &data, resp.Diagnostics)
 
 	// Save updated data into Terraform state

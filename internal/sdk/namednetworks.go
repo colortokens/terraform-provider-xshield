@@ -1048,7 +1048,7 @@ func (s *Namednetworks) UpdateNamedNetworkMetadata(ctx context.Context, request 
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/namednetwork/{namedNetworkId}", request, nil)
+	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/namednetworks/{namedNetworkId}", request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
