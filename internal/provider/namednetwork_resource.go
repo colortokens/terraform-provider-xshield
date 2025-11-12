@@ -109,7 +109,6 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"program_as_intranet": schema.BoolAttribute{
 				Computed: true,
-				Optional: true,
 			},
 			"region": schema.StringAttribute{
 				Computed: true,
@@ -293,10 +292,9 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 	namedNetworkID := stateData.ID.ValueString()
 
 	// Detect what has changed
-	// 1. Check for metadata changes (name, description, and program_as_intranet)
+	// 1. Check for metadata changes (name and description)
 	metadataChanged := !planData.NamedNetworkName.Equal(stateData.NamedNetworkName) ||
-		!planData.NamedNetworkDescription.Equal(stateData.NamedNetworkDescription) ||
-		!planData.ProgramAsIntranet.Equal(stateData.ProgramAsIntranet)
+		!planData.NamedNetworkDescription.Equal(stateData.NamedNetworkDescription)
 
 	// 2. Check for IP range changes
 	// Create maps for state and plan IP ranges by range string
@@ -349,13 +347,12 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// 1. Handle metadata changes
 	if metadataChanged {
-		// Create a metadata-only request with name, description, and program_as_intranet
+		// Create a metadata-only request with name and description
 		metadataRequest := operations.UpdateNamedNetworkMetadataRequest{
 			NamedNetworkID: namedNetworkID,
 			NamednetworkNamedNetwork: shared.NamednetworkNamedNetwork{
 				NamedNetworkName:        planData.NamedNetworkName.ValueStringPointer(),
 				NamedNetworkDescription: planData.NamedNetworkDescription.ValueStringPointer(),
-				ProgramAsIntranet:       planData.ProgramAsIntranet.ValueBoolPointer(),
 			},
 		}
 
@@ -378,10 +375,9 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 			return
 		}
 
-		// Update the metadata fields in our data (name, description, and program_as_intranet)
+		// Update the metadata fields in our data (name and description)
 		data.NamedNetworkName = planData.NamedNetworkName
 		data.NamedNetworkDescription = planData.NamedNetworkDescription
-		data.ProgramAsIntranet = planData.ProgramAsIntranet
 	}
 
 	// 2. Handle IP range removals

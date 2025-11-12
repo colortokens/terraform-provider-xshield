@@ -2061,7 +2061,7 @@ paths:
         permissionScope:
         - ADMIN
       x-codegen-request-body-name: field
-  /api/namednetwork/{namedNetworkId}:
+  /api/namednetworks/{namedNetworkId}:
     put:
       tags:
       - namednetworks
