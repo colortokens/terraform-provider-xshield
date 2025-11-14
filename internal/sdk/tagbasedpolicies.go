@@ -6,14 +6,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/hooks"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/errors"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/retry"
-	"net/http"
-	"net/url"
 )
 
 type Tagbasedpolicies struct {
@@ -530,7 +531,7 @@ func (s *Tagbasedpolicies) UpdateTagBasedPolicyMetadata(ctx context.Context, req
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/v2/tagbasedpolicies/{tagbasedpolicyId}", request, nil)
+	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/tagbasedpolicies/{tagbasedpolicyId}", request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
@@ -679,6 +680,7 @@ func (s *Tagbasedpolicies) UpdateTagBasedPolicyMetadata(ctx context.Context, req
 
 	switch {
 	case httpRes.StatusCode == 204:
+	case httpRes.StatusCode == 200:
 	case httpRes.StatusCode == 400:
 		fallthrough
 	case httpRes.StatusCode == 401:
