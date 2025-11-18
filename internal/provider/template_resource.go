@@ -1565,13 +1565,13 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			data.TemplatePorts = finalPorts
 			data.TemplatePaths = finalPaths
 		}
-
-		// Call refreshPlan to handle null vs empty conversions for optional computed fields
-		// This matches the pattern used in generated code (see AssetResource.Update)
-		refreshPlan(ctx, plan, &data, resp.Diagnostics)
-
-		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	}
+
+	// Call refreshPlan to handle null vs empty conversions for optional computed fields
+	// This matches the pattern used in generated code (see AssetResource.Update)
+	refreshPlan(ctx, plan, &data, resp.Diagnostics)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *TemplateResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
