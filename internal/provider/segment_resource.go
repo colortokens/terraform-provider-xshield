@@ -5,8 +5,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
-	"time"
 
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
@@ -340,34 +338,6 @@ func (r *SegmentResource) Read(ctx context.Context, req resource.ReadRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// writeToDebugLog writes a message to a debug log file
-func writeToDebugLog(message string) {
-	// Try to create a file in /tmp which should be writable
-	logFile, err := os.OpenFile("/tmp/segment_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		// If we can't open the file, try to write to stderr as a fallback
-		fmt.Fprintf(os.Stderr, "Error opening log file: %v\n", err)
-		return
-	}
-	defer logFile.Close()
-
-	timestamp := time.Now().Format(time.RFC3339)
-	logEntry := fmt.Sprintf("[%s] %s\n", timestamp, message)
-
-	_, err = logFile.WriteString(logEntry)
-	if err != nil {
-		// If we can't write to the file, try to write to stderr as a fallback
-		fmt.Fprintf(os.Stderr, "Error writing to log file: %v\n", err)
-		return
-	}
-
-	// Ensure the log is flushed to disk
-	err = logFile.Sync()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error syncing log file: %v\n", err)
-	}
-}
-
 func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 
 	var planData *SegmentResourceModel
@@ -418,28 +388,23 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	// Check if user-settable metadata fields have changed
 	if !planData.Description.Equal(stateData.Description) {
-		writeToDebugLog("Description has changed")
 		metadataChanged = true
 	}
 
 	if !planData.TagBasedPolicyName.Equal(stateData.TagBasedPolicyName) {
-		writeToDebugLog("TagBasedPolicyName has changed")
 		metadataChanged = true
 	}
 
 	if !planData.Criteria.Equal(stateData.Criteria) {
-		writeToDebugLog("Criteria has changed")
 		metadataChanged = true
 	}
 
 	// Only check these if they're not computed fields
 	if !planData.Timeline.IsUnknown() && !stateData.Timeline.IsUnknown() && !planData.Timeline.Equal(stateData.Timeline) {
-		writeToDebugLog("Timeline has changed")
 		metadataChanged = true
 	}
 
 	if !planData.TargetBreachImpactScore.IsUnknown() && !stateData.TargetBreachImpactScore.IsUnknown() && !planData.TargetBreachImpactScore.Equal(stateData.TargetBreachImpactScore) {
-		writeToDebugLog("TargetBreachImpactScore has changed")
 		metadataChanged = true
 	}
 
@@ -473,7 +438,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	// 3. Check for namednetwork changes
-	writeToDebugLog("Detecting changes to namednetworks")
+	tflog.Info(ctx, "Detecting changes to namednetworks")
 
 	// Create variables for namednetworks to add and remove
 	namedNetworkIDsToAdd := []string{}
@@ -504,9 +469,8 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 	// Find namednetworks to add (in plan but not in state)
 	for _, nn := range planData.Namednetworks {
 		nnID := nn.NamedNetworkID.ValueString()
-		writeToDebugLog(fmt.Sprintf("Checking if namednetwork ID %s needs to be added", nnID))
 		if !stateNamedNetworkIDs[nnID] {
-			writeToDebugLog(fmt.Sprintf("Adding namednetwork ID %s to the list of IDs to add", nnID))
+			tflog.Info(ctx, fmt.Sprintf("Adding namednetwork ID %s to the list of IDs to add", nnID))
 			namedNetworkIDsToAdd = append(namedNetworkIDsToAdd, nnID)
 		}
 	}
@@ -514,16 +478,15 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 	// Find namednetworks to remove (in state but not in plan)
 	for _, nn := range stateData.Namednetworks {
 		nnID := nn.NamedNetworkID.ValueString()
-		writeToDebugLog(fmt.Sprintf("Checking if namednetwork ID %s needs to be removed", nnID))
 		if !planNamedNetworkIDs[nnID] {
-			writeToDebugLog(fmt.Sprintf("Adding namednetwork ID %s to the list of IDs to remove", nnID))
+			tflog.Info(ctx, fmt.Sprintf("Adding namednetwork ID %s to the list of IDs to remove", nnID))
 			namedNetworkIDsToRemove = append(namedNetworkIDsToRemove, nnID)
 		}
 	}
 
 	// 1. Handle metadata changes
 	if metadataChanged {
-		writeToDebugLog(fmt.Sprintf("Metadata changed: %v", metadataChanged))
+		tflog.Info(ctx, fmt.Sprintf("Segment metadata changed: %v", metadataChanged))
 		// Update the metadata fields in our data model
 		data.Criteria = planData.Criteria
 		data.Description = planData.Description
@@ -551,7 +514,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			TagbasedpolicyID: tagbasedpolicyID,
 			TagBasedPolicy:   tagBasedPolicy,
 		}
-		writeToDebugLog(fmt.Sprintf("UpdateTagBasedPolicyMetadata request: TagbasedpolicyID=%s, Description=%s, Name=%s", 
+		tflog.Info(ctx, fmt.Sprintf("UpdateTagBasedPolicyMetadata request: TagbasedpolicyID=%s, Description=%s, Name=%s",
 			request.TagbasedpolicyID, *request.TagBasedPolicy.Description, *request.TagBasedPolicy.TagBasedPolicyName))
 
 		// Call the API to update metadata
@@ -576,19 +539,18 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 
-		writeToDebugLog("Successfully updated tag-based policy metadata")
+		tflog.Info(ctx, "Successfully updated tag-based policy metadata")
 	}
 
 	if len(templateIDsToRemove) > 0 {
 		// 2. Handle template removals
-		writeToDebugLog(fmt.Sprintf("Template IDs to remove: %v", templateIDsToRemove))
 		// Create the template list
 		templateList := shared.TemplateList{
 			Templates: templateIDsToRemove,
 		}
 
 		// Log the request details
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: About to remove templates from segment. TagbasedpolicyID: %s, TemplateIDs: %v", tagbasedpolicyID, templateIDsToRemove))
+		tflog.Info(ctx, fmt.Sprintf("About to remove templates from segment. TagbasedpolicyID: %s, TemplateIDs: %v", tagbasedpolicyID, templateIDsToRemove))
 
 		// Create the request
 		removeTemplatesRequest := operations.TagBasedPolicyBulkTemplateUnApplyRequest{
@@ -597,37 +559,37 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 
 		// Call the API to remove templates
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Sending TagBasedPolicyBulkTemplateUnApply request for policy ID: %s with %d templates", tagbasedpolicyID, len(templateIDsToRemove)))
+		tflog.Info(ctx, fmt.Sprintf("Sending TagBasedPolicyBulkTemplateUnApply request for policy ID: %s with %d templates", tagbasedpolicyID, len(templateIDsToRemove)))
 		res, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkTemplateUnApply(ctx, removeTemplatesRequest)
 
 		// Log the response
 		if res != nil && res.RawResponse != nil {
-			tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Response from TagBasedPolicyBulkTemplateUnApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
+			tflog.Info(ctx, fmt.Sprintf("Response from TagBasedPolicyBulkTemplateUnApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
 		}
 
 		// Handle errors
 		if err != nil {
 			// Check if the error is due to a 202 status code, which is actually a success
 			if res != nil && res.StatusCode == 202 {
-				writeToDebugLog(fmt.Sprintf("Received 202 status code for template operation, which is a success despite the error: %s", err.Error()))
+				tflog.Info(ctx, fmt.Sprintf("Received 202 status code for template operation, which is a success despite the error: %s", err.Error()))
 				// This is actually a success, so we'll continue
 			} else {
-				tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Error from TagBasedPolicyBulkTemplateUnApply: %s", err.Error()))
+				tflog.Error(ctx, fmt.Sprintf("Error from TagBasedPolicyBulkTemplateUnApply: %s", err.Error()))
 				resp.Diagnostics.AddError("failure to invoke API", err.Error())
 				if res != nil && res.RawResponse != nil {
-					tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Response details: %s", debugResponse(res.RawResponse)))
+					tflog.Error(ctx, fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
 					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
 				}
 				return
 			}
 		}
 		if res == nil {
-			tflog.Error(ctx, "DETAILED_LOG: Received nil response from TagBasedPolicyBulkTemplateUnApply")
+			tflog.Error(ctx, "Received nil response from TagBasedPolicyBulkTemplateUnApply")
 			resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", res))
 			return
 		}
 		if res.StatusCode != 202 && res.StatusCode != 204 && res.StatusCode != 200 {
-			tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Unexpected status code: %d", res.StatusCode))
+			tflog.Error(ctx, fmt.Sprintf("Unexpected status code: %d", res.StatusCode))
 			resp.Diagnostics.AddError(
 				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
 				debugResponse(res.RawResponse),
@@ -635,19 +597,18 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 
-		tflog.Info(ctx, "DETAILED_LOG: Successfully removed templates from segment")
+		tflog.Info(ctx, "Successfully removed templates from segment")
 	}
 
 	// 3. Handle template additions
 	if len(templateIDsToAdd) > 0 {
-		writeToDebugLog(fmt.Sprintf("Template IDs to add: %v", templateIDsToAdd))
 		// Create the template list
 		templateList := shared.TemplateList{
 			Templates: templateIDsToAdd,
 		}
 
 		// Log the request details
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: About to add templates to segment. TagbasedpolicyID: %s, TemplateIDs: %v", tagbasedpolicyID, templateIDsToAdd))
+		tflog.Info(ctx, fmt.Sprintf("About to add templates to segment. TagbasedpolicyID: %s, TemplateIDs: %v", tagbasedpolicyID, templateIDsToAdd))
 
 		// Create the request
 		addTemplatesRequest := operations.TagBasedPolicyBulkTemplateApplyRequest{
@@ -656,37 +617,37 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 
 		// Call the API to add templates
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Sending TagBasedPolicyBulkTemplateApply request for policy ID: %s with %d templates", tagbasedpolicyID, len(templateIDsToAdd)))
+		tflog.Info(ctx, fmt.Sprintf("Sending TagBasedPolicyBulkTemplateApply request for policy ID: %s with %d templates", tagbasedpolicyID, len(templateIDsToAdd)))
 		res, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkTemplateApply(ctx, addTemplatesRequest)
 
 		// Log the response
 		if res != nil && res.RawResponse != nil {
-			tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Response from TagBasedPolicyBulkTemplateApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
+			tflog.Info(ctx, fmt.Sprintf("Response from TagBasedPolicyBulkTemplateApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
 		}
 
 		// Handle errors
 		if err != nil {
 			// Check if the error is due to a 202 status code, which is actually a success
 			if res != nil && res.StatusCode == 202 {
-				writeToDebugLog(fmt.Sprintf("Received 202 status code for template operation, which is a success despite the error: %s", err.Error()))
+				tflog.Info(ctx, fmt.Sprintf("Received 202 status code for template operation, which is a success despite the error: %s", err.Error()))
 				// This is actually a success, so we'll continue
 			} else {
-				tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Error from TagBasedPolicyBulkTemplateApply: %s", err.Error()))
+				tflog.Error(ctx, fmt.Sprintf("Error from TagBasedPolicyBulkTemplateApply: %s", err.Error()))
 				resp.Diagnostics.AddError("failure to invoke API", err.Error())
 				if res != nil && res.RawResponse != nil {
-					tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Response details: %s", debugResponse(res.RawResponse)))
+					tflog.Error(ctx, fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
 					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
 				}
 				return
 			}
 		}
 		if res == nil {
-			tflog.Error(ctx, "DETAILED_LOG: Received nil response from TagBasedPolicyBulkTemplateApply")
+			tflog.Error(ctx, "Received nil response from TagBasedPolicyBulkTemplateApply")
 			resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", res))
 			return
 		}
 		if res.StatusCode != 202 && res.StatusCode != 204 && res.StatusCode != 200 {
-			tflog.Error(ctx, fmt.Sprintf("DETAILED_LOG: Unexpected status code: %d", res.StatusCode))
+			tflog.Error(ctx, fmt.Sprintf("Unexpected status code: %d", res.StatusCode))
 			resp.Diagnostics.AddError(
 				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
 				debugResponse(res.RawResponse),
@@ -694,20 +655,19 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 
-		tflog.Info(ctx, "DETAILED_LOG: Successfully added templates to segment")
+		tflog.Info(ctx, "Successfully added templates to segment")
 	}
 
 	// 4. Handle namednetwork removals
 
 	if len(namedNetworkIDsToRemove) > 0 {
-		writeToDebugLog(fmt.Sprintf("NamedNetwork IDs to remove: %v", namedNetworkIDsToRemove))
 		// Create the namednetwork list
 		namedNetworkList := shared.NamedNetworkList{
 			Namednetworks: namedNetworkIDsToRemove,
 		}
 
 		// Log the request details
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: About to remove namednetworks from segment. TagbasedpolicyID: %s, NamedNetworkIDs: %v", tagbasedpolicyID, namedNetworkIDsToRemove))
+		tflog.Info(ctx, fmt.Sprintf("About to remove namednetworks from segment. TagbasedpolicyID: %s, NamedNetworkIDs: %v", tagbasedpolicyID, namedNetworkIDsToRemove))
 
 		// Create the request
 		removeNamedNetworksRequest := operations.TagBasedPolicyBulkNamedNetworkUnApplyRequest{
@@ -715,25 +675,25 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			RequestBody:      namedNetworkList,
 		}
 
-		tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Sending TagBasedPolicyBulkNamedNetworkUnApply request for policy ID: %s with %d namednetworks", tagbasedpolicyID, len(namedNetworkIDsToRemove)))
+		tflog.Info(ctx, fmt.Sprintf("Sending TagBasedPolicyBulkNamedNetworkUnApply request for policy ID: %s with %d namednetworks", tagbasedpolicyID, len(namedNetworkIDsToRemove)))
 		res, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkNamedNetworkUnApply(ctx, removeNamedNetworksRequest)
 
 		// Log the response
 		if res != nil && res.RawResponse != nil {
-			tflog.Info(ctx, fmt.Sprintf("DETAILED_LOG: Response from TagBasedPolicyBulkNamedNetworkUnApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
+			tflog.Info(ctx, fmt.Sprintf("Response from TagBasedPolicyBulkNamedNetworkUnApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL))
 		}
 
 		// Handle errors - match the pattern in template_resource.go
 		if err != nil {
 			// Check if the error is due to a 202 status code, which is actually a success
 			if res != nil && res.StatusCode == 202 {
-				writeToDebugLog(fmt.Sprintf("Received 202 status code for namednetwork removal, which is a success despite the error: %s", err.Error()))
+				tflog.Info(ctx, fmt.Sprintf("Received 202 status code for namednetwork removal, which is a success despite the error: %s", err.Error()))
 				// This is actually a success, so we'll continue
 			} else {
-				writeToDebugLog(fmt.Sprintf("Error from TagBasedPolicyBulkNamedNetworkUnApply: %s", err.Error()))
+				tflog.Error(ctx, fmt.Sprintf("Error from TagBasedPolicyBulkNamedNetworkUnApply: %s", err.Error()))
 				resp.Diagnostics.AddError("Failed to remove named networks from segment", err.Error())
 				if res != nil && res.RawResponse != nil {
-					writeToDebugLog(fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
+					tflog.Error(ctx, fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
 					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
 				}
 				return
@@ -743,7 +703,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		// Check for non-success status code (202 Accepted is the expected success code for this API)
 		// We also accept 200 OK and 204 No Content as success codes
 		if res != nil && res.StatusCode != 202 && res.StatusCode != 204 && res.StatusCode != 200 {
-			writeToDebugLog(fmt.Sprintf("Unexpected status code: %d", res.StatusCode))
+			tflog.Error(ctx, fmt.Sprintf("Unexpected status code from TagBasedPolicyBulkNamedNetworkUnApply: %d", res.StatusCode))
 			resp.Diagnostics.AddError(
 				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
 				debugResponse(res.RawResponse),
@@ -751,7 +711,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 
-		tflog.Info(ctx, "DETAILED_LOG: Successfully removed namednetworks from segment")
+		tflog.Info(ctx, "Successfully removed namednetworks from segment")
 	}
 
 	// 5. Handle namednetwork additions
@@ -763,10 +723,9 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 
 		// Log the request details
 		logMsg := fmt.Sprintf("About to add namednetworks to segment. TagbasedpolicyID: %s, NamedNetworkIDs: %v", tagbasedpolicyID, namedNetworkIDsToAdd)
-		tflog.Info(ctx, "DETAILED_LOG: "+logMsg)
+		tflog.Info(ctx, logMsg)
 
 		// Create the request
-		writeToDebugLog("Creating TagBasedPolicyBulkNamedNetworkApplyRequest")
 		addNamedNetworksRequest := operations.TagBasedPolicyBulkNamedNetworkApplyRequest{
 			TagbasedpolicyID: tagbasedpolicyID,
 			RequestBody:      namedNetworkList,
@@ -774,7 +733,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 
 		// Call the API to add namednetworks
 		logMsg = fmt.Sprintf("Sending TagBasedPolicyBulkNamedNetworkApply request for policy ID: %s with %d namednetworks", tagbasedpolicyID, len(namedNetworkIDsToAdd))
-		tflog.Info(ctx, "DETAILED_LOG: "+logMsg)
+		tflog.Info(ctx, logMsg)
 
 		// Call the API directly, just like in template_resource.go
 		res, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkNamedNetworkApply(ctx, addNamedNetworksRequest)
@@ -782,21 +741,20 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		// Log the response
 		if res != nil && res.RawResponse != nil {
 			logMsg = fmt.Sprintf("Response from TagBasedPolicyBulkNamedNetworkApply: Status: %d, URL: %s", res.StatusCode, res.RawResponse.Request.URL)
-			writeToDebugLog(logMsg)
-			tflog.Info(ctx, "DETAILED_LOG: "+logMsg)
+			tflog.Info(ctx, logMsg)
 		}
 
 		// Handle errors - match the pattern in template_resource.go
 		if err != nil {
 			// Check if the error is due to a 202 status code, which is actually a success
 			if res != nil && res.StatusCode == 202 {
-				writeToDebugLog(fmt.Sprintf("Received 202 status code, which is a success despite the error: %s", err.Error()))
+				tflog.Info(ctx, fmt.Sprintf("Received 202 status code for namednetwork apply, which is a success despite the error: %s", err.Error()))
 				// This is actually a success, so we'll continue
 			} else {
-				writeToDebugLog(fmt.Sprintf("Error from TagBasedPolicyBulkNamedNetworkApply: %s", err.Error()))
+				tflog.Error(ctx, fmt.Sprintf("Error from TagBasedPolicyBulkNamedNetworkApply: %s", err.Error()))
 				resp.Diagnostics.AddError("Failed to add named networks to segment", err.Error())
 				if res != nil && res.RawResponse != nil {
-					writeToDebugLog(fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
+					tflog.Error(ctx, fmt.Sprintf("Response details: %s", debugResponse(res.RawResponse)))
 					resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
 				}
 				return
@@ -805,7 +763,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		// Check for non-success status code (202 Accepted is the expected success code for this API)
 		// We also accept 200 OK and 204 No Content as success codes
 		if res != nil && res.StatusCode != 202 && res.StatusCode != 200 && res.StatusCode != 204 {
-			writeToDebugLog(fmt.Sprintf("Unexpected status code: %d", res.StatusCode))
+			tflog.Error(ctx, fmt.Sprintf("Unexpected status code from TagBasedPolicyBulkNamedNetworkApply: %d", res.StatusCode))
 			resp.Diagnostics.AddError(
 				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode),
 				debugResponse(res.RawResponse),
@@ -814,8 +772,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 
 		logMsg = "Successfully added namednetworks to segment"
-		writeToDebugLog(logMsg)
-		tflog.Info(ctx, "DETAILED_LOG: "+logMsg)
+		tflog.Info(ctx, logMsg)
 	}
 
 	// 7. If we made any changes, refresh the state from the API
@@ -829,7 +786,7 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		readRes, err := func() (*operations.GetTagBasedPolicyResponse, error) {
 			defer func() {
 				if r := recover(); r != nil {
-					writeToDebugLog(fmt.Sprintf("PANIC in GetTagBasedPolicy: %v", r))
+					tflog.Error(ctx, fmt.Sprintf("PANIC in GetTagBasedPolicy: %v", r))
 				}
 			}()
 			return r.client.Tagbasedpolicies.GetTagBasedPolicy(ctx, readRequest)
