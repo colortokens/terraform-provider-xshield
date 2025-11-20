@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -844,27 +845,414 @@ func (r *SegmentResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 	var tagbasedpolicyID string
 	tagbasedpolicyID = data.ID.ValueString()
+	tflog.Info(ctx, "Deleting segment", map[string]interface{}{
+		"segment_id":   tagbasedpolicyID,
+		"segment_name": data.TagBasedPolicyName.ValueString(),
+	})
 
-	request := operations.DeleteTagBasedPolicyRequest{
+	// First, get the current segment to check if it has named networks or templates
+	tflog.Info(ctx, "Getting segment details before deletion", map[string]interface{}{
+		"segment_id": tagbasedpolicyID,
+		"step":       "pre_delete_get",
+	})
+
+	getRequest := operations.GetTagBasedPolicyRequest{
 		TagbasedpolicyID: tagbasedpolicyID,
 	}
-	res, err := r.client.Tagbasedpolicies.DeleteTagBasedPolicy(ctx, request)
+	getRes, err := r.client.Tagbasedpolicies.GetTagBasedPolicy(ctx, getRequest)
 	if err != nil {
-		resp.Diagnostics.AddError("failure to invoke API", err.Error())
-		if res != nil && res.RawResponse != nil {
-			resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
+		tflog.Error(ctx, "Failed to get segment before deletion", map[string]interface{}{
+			"segment_id": tagbasedpolicyID,
+			"error":      err.Error(),
+			"step":       "pre_delete_get",
+		})
+		resp.Diagnostics.AddError("failure to get segment before deletion", err.Error())
+		if getRes != nil && getRes.RawResponse != nil {
+			resp.Diagnostics.AddError("unexpected http request/response", debugResponse(getRes.RawResponse))
 		}
 		return
 	}
-	if res == nil {
-		resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", res))
-		return
+
+	var namedNetworkCount, templateCount int
+	if getRes.TagBasedPolicyResponse != nil {
+		namedNetworkCount = len(getRes.TagBasedPolicyResponse.Namednetworks)
+		templateCount = len(getRes.TagBasedPolicyResponse.Templates)
 	}
-	if res.StatusCode != 200 {
-		resp.Diagnostics.AddError(fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode), debugResponse(res.RawResponse))
+
+	tflog.Info(ctx, "Successfully retrieved segment details", map[string]interface{}{
+		"segment_id":          tagbasedpolicyID,
+		"has_named_networks":  getRes.TagBasedPolicyResponse != nil && namedNetworkCount > 0,
+		"named_network_count": namedNetworkCount,
+		"has_templates":       getRes.TagBasedPolicyResponse != nil && templateCount > 0,
+		"template_count":      templateCount,
+		"step":                "pre_delete_get",
+	})
+
+	// If the segment has named networks, detach them
+	if getRes.TagBasedPolicyResponse != nil && len(getRes.TagBasedPolicyResponse.Namednetworks) > 0 {
+		tflog.Info(ctx, "Detaching named networks before segment deletion", map[string]interface{}{
+			"segment_id":          tagbasedpolicyID,
+			"named_network_count": len(getRes.TagBasedPolicyResponse.Namednetworks),
+		})
+
+		// Extract named network IDs
+		namedNetworkIDs := []string{}
+		namedNetworkNames := []string{}
+		for _, nn := range getRes.TagBasedPolicyResponse.Namednetworks {
+			if nn.NamedNetworkID != nil {
+				namedNetworkIDs = append(namedNetworkIDs, *nn.NamedNetworkID)
+				if nn.NamedNetworkName != nil {
+					namedNetworkNames = append(namedNetworkNames, *nn.NamedNetworkName)
+				} else {
+					namedNetworkNames = append(namedNetworkNames, "<unnamed>")
+				}
+			}
+		}
+
+		tflog.Info(ctx, "Named networks to detach", map[string]interface{}{
+			"segment_id":          tagbasedpolicyID,
+			"named_network_ids":   namedNetworkIDs,
+			"named_network_names": namedNetworkNames,
+			"count":               len(namedNetworkIDs),
+			"step":                "named_network_detach_prepare",
+		})
+
+		// Create the namednetwork list for bulk unapply
+		namedNetworkList := shared.NamedNetworkList{
+			Namednetworks: namedNetworkIDs,
+		}
+
+		// Create the request for bulk named network unapply
+		removeNamedNetworksRequest := operations.TagBasedPolicyBulkNamedNetworkUnApplyRequest{
+			TagbasedpolicyID: tagbasedpolicyID,
+			RequestBody:      namedNetworkList,
+		}
+
+		// Call the API to remove named networks
+		tflog.Info(ctx, "Sending request to detach named networks", map[string]interface{}{
+			"segment_id":          tagbasedpolicyID,
+			"named_network_count": len(namedNetworkIDs),
+			"api_method":          "TagBasedPolicyBulkNamedNetworkUnApply",
+			"step":                "named_network_detach_request",
+		})
+
+		nnRes, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkNamedNetworkUnApply(ctx, removeNamedNetworksRequest)
+
+		// Handle errors
+		if err != nil {
+			// Check if the error is due to a 202 status code, which is actually a success
+			if nnRes != nil && nnRes.StatusCode == 202 {
+				tflog.Info(ctx, "Named network detachment succeeded with 202 status", map[string]interface{}{
+					"segment_id":    tagbasedpolicyID,
+					"status_code":   202,
+					"error_message": err.Error(),
+					"step":          "named_network_detach_response",
+				})
+				// This is actually a success, so we'll continue
+			} else {
+				var statusCode int
+				if nnRes != nil {
+					statusCode = nnRes.StatusCode
+				} else {
+					statusCode = -1
+				}
+				tflog.Error(ctx, "Failed to detach named networks", map[string]interface{}{
+					"segment_id":  tagbasedpolicyID,
+					"error":       err.Error(),
+					"status_code": statusCode,
+					"step":        "named_network_detach_error",
+				})
+				resp.Diagnostics.AddError("failure to detach named networks", err.Error())
+				if nnRes != nil && nnRes.RawResponse != nil {
+					responseDetails := debugResponse(nnRes.RawResponse)
+					tflog.Error(ctx, "Response details from failed named network detachment", map[string]interface{}{
+						"segment_id":       tagbasedpolicyID,
+						"response_details": responseDetails,
+						"step":             "named_network_detach_error_details",
+					})
+					resp.Diagnostics.AddError("unexpected http request/response", responseDetails)
+				}
+				return
+			}
+		} else {
+			var statusCode int
+			if nnRes != nil {
+				statusCode = nnRes.StatusCode
+			} else {
+				statusCode = -1
+			}
+			tflog.Info(ctx, "Successfully detached named networks", map[string]interface{}{
+				"segment_id":  tagbasedpolicyID,
+				"status_code": statusCode,
+				"step":        "named_network_detach_success",
+			})
+		}
+	}
+
+	// If the segment has templates, detach them
+	if getRes.TagBasedPolicyResponse != nil && len(getRes.TagBasedPolicyResponse.Templates) > 0 {
+		tflog.Info(ctx, "Detaching templates before segment deletion", map[string]interface{}{
+			"segment_id":     tagbasedpolicyID,
+			"template_count": len(getRes.TagBasedPolicyResponse.Templates),
+		})
+
+		// Extract template IDs
+		templateIDs := []string{}
+		templateNames := []string{}
+		for _, template := range getRes.TagBasedPolicyResponse.Templates {
+			if template.TemplateID != nil {
+				templateIDs = append(templateIDs, *template.TemplateID)
+				if template.TemplateName != nil {
+					templateNames = append(templateNames, *template.TemplateName)
+				} else {
+					templateNames = append(templateNames, "<unnamed>")
+				}
+			}
+		}
+
+		tflog.Info(ctx, "Templates to detach", map[string]interface{}{
+			"segment_id":     tagbasedpolicyID,
+			"template_ids":   templateIDs,
+			"template_names": templateNames,
+			"count":          len(templateIDs),
+			"step":           "template_detach_prepare",
+		})
+
+		// Create the template list for bulk unapply
+		templateList := shared.TemplateList{
+			Templates: templateIDs,
+		}
+
+		// Create the request for bulk template unapply
+		removeTemplatesRequest := operations.TagBasedPolicyBulkTemplateUnApplyRequest{
+			TagbasedpolicyID: tagbasedpolicyID,
+			RequestBody:      templateList,
+		}
+
+		// Call the API to remove templates
+		tflog.Info(ctx, "Sending request to detach templates", map[string]interface{}{
+			"segment_id":     tagbasedpolicyID,
+			"template_count": len(templateIDs),
+			"api_method":     "TagBasedPolicyBulkTemplateUnApply",
+			"step":           "template_detach_request",
+		})
+
+		templateRes, err := r.client.Tagbasedpolicies.TagBasedPolicyBulkTemplateUnApply(ctx, removeTemplatesRequest)
+
+		// Handle errors
+		if err != nil {
+			// Check if the error is due to a 202 status code, which is actually a success
+			if templateRes != nil && templateRes.StatusCode == 202 {
+				tflog.Info(ctx, "Template detachment succeeded with 202 status", map[string]interface{}{
+					"segment_id":    tagbasedpolicyID,
+					"status_code":   202,
+					"error_message": err.Error(),
+					"step":          "template_detach_response",
+				})
+				// This is actually a success, so we'll continue
+			} else {
+				var statusCode int
+				if templateRes != nil {
+					statusCode = templateRes.StatusCode
+				} else {
+					statusCode = -1
+				}
+				tflog.Error(ctx, "Failed to detach templates", map[string]interface{}{
+					"segment_id":  tagbasedpolicyID,
+					"error":       err.Error(),
+					"status_code": statusCode,
+					"step":        "template_detach_error",
+				})
+				resp.Diagnostics.AddError("failure to detach templates", err.Error())
+				if templateRes != nil && templateRes.RawResponse != nil {
+					responseDetails := debugResponse(templateRes.RawResponse)
+					tflog.Error(ctx, "Response details from failed template detachment", map[string]interface{}{
+						"segment_id":       tagbasedpolicyID,
+						"response_details": responseDetails,
+						"step":             "template_detach_error_details",
+					})
+					resp.Diagnostics.AddError("unexpected http request/response", responseDetails)
+				}
+				return
+			}
+		} else {
+			var statusCode int
+			if templateRes != nil {
+				statusCode = templateRes.StatusCode
+			} else {
+				statusCode = -1
+			}
+			tflog.Info(ctx, "Successfully detached templates", map[string]interface{}{
+				"segment_id":  tagbasedpolicyID,
+				"status_code": statusCode,
+				"step":        "template_detach_success",
+			})
+		}
+	}
+
+	// Proceed with deletion
+	request := operations.DeleteTagBasedPolicyRequest{
+		TagbasedpolicyID: tagbasedpolicyID,
+	}
+	tflog.Info(ctx, "Sending DeleteTagBasedPolicy request", map[string]interface{}{
+		"segment_id": tagbasedpolicyID,
+		"api_method": "DeleteTagBasedPolicy",
+		"step":       "segment_delete_request",
+	})
+
+	res, err := r.client.Tagbasedpolicies.DeleteTagBasedPolicy(ctx, request)
+
+	if err != nil {
+		tflog.Error(ctx, "Error deleting segment", map[string]interface{}{
+			"segment_id": tagbasedpolicyID,
+			"error":      err.Error(),
+			"step":       "segment_delete_error",
+		})
+
+		// Check for 404 errors in different ways
+		if res != nil && res.StatusCode == 404 {
+			tflog.Info(ctx, "Segment already deleted (404 status code)", map[string]interface{}{
+				"segment_id": tagbasedpolicyID,
+				"step":       "segment_delete_404",
+			})
+			return
+		}
+
+		// Also check for 404 in the error message
+		if strings.Contains(err.Error(), "Status 404") {
+			tflog.Info(ctx, "Segment already deleted (404 in error message)", map[string]interface{}{
+				"segment_id": tagbasedpolicyID,
+				"error":      err.Error(),
+				"step":       "segment_delete_404_message",
+			})
+			return
+		}
+
+		// Check for 409 conflict in the error message
+		if strings.Contains(err.Error(), "Status 409") {
+			tflog.Info(ctx, "Segment deletion returned 409 conflict - background process still running, will retry with backoff", map[string]interface{}{
+				"segment_id": tagbasedpolicyID,
+				"error":      err.Error(),
+				"step":       "segment_delete_conflict",
+			})
+
+			// Retry with exponential backoff: 5s, 8s, 11s
+			maxRetries := 10
+			baseDelay := 5
+			increment := 3
+
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				// Calculate delay: 5 + (attempt-1)*3 seconds
+				currentDelay := baseDelay + (attempt-1)*increment
+
+				tflog.Info(ctx, "Waiting before retry attempt", map[string]interface{}{
+					"segment_id": tagbasedpolicyID,
+					"attempt":    attempt,
+					"delay_sec":  currentDelay,
+					"step":       "segment_delete_backoff",
+				})
+				time.Sleep(time.Duration(currentDelay) * time.Second)
+
+				// Try deletion
+				tflog.Info(ctx, "Retrying segment deletion", map[string]interface{}{
+					"segment_id":  tagbasedpolicyID,
+					"attempt":     attempt,
+					"max_retries": maxRetries,
+					"step":        "segment_delete_retry",
+				})
+				retryRes, retryErr := r.client.Tagbasedpolicies.DeleteTagBasedPolicy(ctx, request)
+
+				// Success
+				if retryErr == nil && (retryRes.StatusCode == 200 || retryRes.StatusCode == 202 || retryRes.StatusCode == 404) {
+					tflog.Info(ctx, "Segment deletion successful on retry", map[string]interface{}{
+						"segment_id":  tagbasedpolicyID,
+						"status_code": retryRes.StatusCode,
+						"attempt":     attempt,
+						"step":        "segment_delete_success",
+					})
+					return
+				}
+
+				// Handle 404 in error
+				if retryErr != nil && strings.Contains(retryErr.Error(), "Status 404") {
+					tflog.Info(ctx, "Segment already deleted on retry", map[string]interface{}{
+						"segment_id": tagbasedpolicyID,
+						"attempt":    attempt,
+						"step":       "segment_delete_404",
+					})
+					return
+				}
+
+				// If still 409 and this is the last attempt, treat as success
+				if retryErr != nil && strings.Contains(retryErr.Error(), "Status 409") && attempt == maxRetries {
+					tflog.Info(ctx, "Segment deletion still getting 409 after max retries - treating as success", map[string]interface{}{
+						"segment_id": tagbasedpolicyID,
+						"attempt":    attempt,
+						"step":       "segment_delete_max_retries",
+					})
+					return
+				}
+
+				// Log error but continue to next retry if not last attempt
+				if retryErr != nil {
+					tflog.Warn(ctx, "Retry attempt failed, will continue", map[string]interface{}{
+						"segment_id": tagbasedpolicyID,
+						"error":      retryErr.Error(),
+						"attempt":    attempt,
+						"step":       "segment_delete_retry_failed",
+					})
+				}
+			}
+
+			// If we get here, all retries failed
+			tflog.Error(ctx, "Failed to delete segment after all retries", map[string]interface{}{
+				"segment_id":  tagbasedpolicyID,
+				"max_retries": maxRetries,
+				"step":        "segment_delete_all_retries_failed",
+			})
+			resp.Diagnostics.AddError("failure to delete segment after retries", "Segment deletion failed after multiple retry attempts")
+			return
+		}
+
+		// If we get here, it's a real error
+		resp.Diagnostics.AddError("failure to invoke API", err.Error())
+		if res != nil && res.RawResponse != nil {
+			responseDetails := debugResponse(res.RawResponse)
+			tflog.Error(ctx, "Response details from failed segment deletion", map[string]interface{}{
+				"segment_id":       tagbasedpolicyID,
+				"response_details": responseDetails,
+				"status_code":      res.StatusCode,
+				"step":             "segment_delete_error_details",
+			})
+			resp.Diagnostics.AddError("unexpected http request/response", responseDetails)
+		}
 		return
 	}
 
+	// If we get here, there was no error, but we should still check for valid status codes
+	if res == nil {
+		tflog.Error(ctx, "Received nil response from DeleteTagBasedPolicy", map[string]interface{}{
+			"segment_id": tagbasedpolicyID,
+		})
+		resp.Diagnostics.AddError("unexpected nil response from API", "DeleteTagBasedPolicy returned nil response")
+		return
+	}
+
+	// Verify we have a success status code (200, 202, or 404)
+	if res.StatusCode != 200 && res.StatusCode != 202 && res.StatusCode != 404 {
+		tflog.Error(ctx, "Unexpected status code from segment deletion", map[string]interface{}{
+			"segment_id":  tagbasedpolicyID,
+			"status_code": res.StatusCode,
+		})
+		resp.Diagnostics.AddError(fmt.Sprintf("unexpected response code %v", res.StatusCode), debugResponse(res.RawResponse))
+		return
+	}
+
+	// Log success with status code
+	tflog.Info(ctx, "Segment deletion successful", map[string]interface{}{
+		"segment_id":  tagbasedpolicyID,
+		"status_code": res.StatusCode,
+	})
 }
 
 func (r *SegmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

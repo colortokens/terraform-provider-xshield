@@ -758,7 +758,8 @@ func (s *Tagbasedpolicies) DeleteTagBasedPolicy(ctx context.Context, request ope
 	} else {
 		baseURL = *o.ServerURL
 	}
-	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/v2/tagbasedpolicies/{tagbasedpolicyId}", request, nil)
+	// Use /api/tagbasedpolicies instead of /api/v2/tagbasedpolicies to match the actual API endpoint
+	opURL, err := utils.GenerateURL(ctx, baseURL, "/api/tagbasedpolicies/{tagbasedpolicyId}", request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error generating URL: %w", err)
 	}
@@ -899,7 +900,7 @@ func (s *Tagbasedpolicies) DeleteTagBasedPolicy(ctx context.Context, request ope
 	}
 
 	switch {
-	case httpRes.StatusCode == 200:
+	case httpRes.StatusCode == 200 || httpRes.StatusCode == 202: // 202 Accepted is a valid response for async operations
 		switch {
 		case utils.MatchContentType(httpRes.Header.Get("Content-Type"), `application/json`):
 			rawBody, err := utils.ConsumeRawBody(httpRes)
