@@ -5,8 +5,10 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -49,7 +51,9 @@ func (r *TagRuleDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "ID of the tag rule. Either id or rule_name must be provided.",
 			},
 			"matching_assets": schema.Int64Attribute{
 				Computed: true,
@@ -68,7 +72,9 @@ func (r *TagRuleDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed: true,
 			},
 			"rule_name": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "Name of the tag rule to look up. Either id or rule_name must be provided.",
 			},
 		},
 	}
@@ -112,13 +118,78 @@ func (r *TagRuleDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
-	var ruleID string
-	ruleID = data.ID.ValueString()
+	// Check if we have an ID or a name
+	var res *operations.GetTagRuleResponse
+	var err error
 
-	request := operations.GetTagRuleRequest{
-		RuleID: ruleID,
+	if !data.ID.IsNull() && data.ID.ValueString() != "" {
+		// If we have an ID, use GetTagRule
+		ruleID := data.ID.ValueString()
+		request := operations.GetTagRuleRequest{
+			RuleID: ruleID,
+		}
+		res, err = r.client.Tagrules.GetTagRule(ctx, request)
+	} else if !data.RuleName.IsNull() && data.RuleName.ValueString() != "" {
+		// If we have a name, use ListTagRules with a search criteria
+		ruleName := data.RuleName.ValueString()
+		searchCriteria := fmt.Sprintf("ruleName = '%s'", ruleName)
+		listReq := operations.ListTagRulesRequest{
+			SearchInput: shared.SearchInput{
+				Criteria: searchCriteria,
+			},
+		}
+
+		// Call the API
+		rules, err := r.client.Tagrules.ListTagRules(ctx, listReq)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error retrieving tag rules",
+				fmt.Sprintf("Could not list tag rules to find by name: %s", err),
+			)
+			return
+		}
+
+		// Process the response
+		if rules.TagRules != nil && len(rules.TagRules.Items) > 0 {
+			// Find the tag rule with the matching name
+			var foundID string
+			for _, rule := range rules.TagRules.Items {
+				if rule.RuleName != nil && *rule.RuleName == ruleName {
+					if rule.ID != nil {
+						foundID = *rule.ID
+						break
+					}
+				}
+			}
+
+			if foundID != "" {
+				// Now use GetTagRule to get the full details
+				request := operations.GetTagRuleRequest{
+					RuleID: foundID,
+				}
+				res, err = r.client.Tagrules.GetTagRule(ctx, request)
+			} else {
+				resp.Diagnostics.AddError(
+					"Tag rule not found",
+					fmt.Sprintf("No tag rule found with name: %s", ruleName),
+				)
+				return
+			}
+		} else {
+			resp.Diagnostics.AddError(
+				"Tag rule not found",
+				fmt.Sprintf("No tag rules found matching the criteria: %s", searchCriteria),
+			)
+			return
+		}
+	} else {
+		// If we don't have either ID or name, return an error
+		resp.Diagnostics.AddError(
+			"Missing required attribute",
+			"Either id or rule_name must be provided",
+		)
+		return
 	}
-	res, err := r.client.Tagrules.GetTagRule(ctx, request)
 	if err != nil {
 		resp.Diagnostics.AddError("failure to invoke API", err.Error())
 		if res != nil && res.RawResponse != nil {

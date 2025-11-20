@@ -5,9 +5,11 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -58,7 +60,9 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "ID of the template. Either id or template_name must be provided.",
 			},
 			"template_category": schema.StringAttribute{
 				Computed: true,
@@ -67,7 +71,9 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed: true,
 			},
 			"template_name": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "Name of the template to look up. Either id or template_name must be provided.",
 			},
 			"template_paths": schema.ListNestedAttribute{
 				Computed: true,
@@ -239,13 +245,78 @@ func (r *TemplateDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	var templateid string
-	templateid = data.ID.ValueString()
+	// Check if we have an ID or a name
+	var res *operations.GetTemplateResponse
+	var err error
 
-	request := operations.GetTemplateRequest{
-		Templateid: templateid,
+	if !data.ID.IsNull() && data.ID.ValueString() != "" {
+		// If we have an ID, use GetTemplate
+		templateid := data.ID.ValueString()
+		request := operations.GetTemplateRequest{
+			Templateid: templateid,
+		}
+		res, err = r.client.Templates.GetTemplate(ctx, request)
+	} else if !data.TemplateName.IsNull() && data.TemplateName.ValueString() != "" {
+		// If we have a name, use ListTemplates with a search criteria
+		templateName := data.TemplateName.ValueString()
+		searchCriteria := fmt.Sprintf("templateName = '%s'", templateName)
+		listReq := operations.ListTemplatesRequest{
+			SearchInput: shared.SearchInput{
+				Criteria: searchCriteria,
+			},
+		}
+
+		// Call the API
+		templates, err := r.client.Templates.ListTemplates(ctx, listReq)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error retrieving templates",
+				fmt.Sprintf("Could not list templates to find by name: %s", err),
+			)
+			return
+		}
+
+		// Process the response
+		if templates.Templates != nil && len(templates.Templates.Items) > 0 {
+			// Find the template with the matching name
+			var foundID string
+			for _, template := range templates.Templates.Items {
+				if template.TemplateName != nil && *template.TemplateName == templateName {
+					if template.TemplateID != nil {
+						foundID = *template.TemplateID
+						break
+					}
+				}
+			}
+
+			if foundID != "" {
+				// Now use GetTemplate to get the full details
+				request := operations.GetTemplateRequest{
+					Templateid: foundID,
+				}
+				res, err = r.client.Templates.GetTemplate(ctx, request)
+			} else {
+				resp.Diagnostics.AddError(
+					"Template not found",
+					fmt.Sprintf("No template found with name: %s", templateName),
+				)
+				return
+			}
+		} else {
+			resp.Diagnostics.AddError(
+				"Template not found",
+				fmt.Sprintf("No templates found matching the criteria: %s", searchCriteria),
+			)
+			return
+		}
+	} else {
+		// If we don't have either ID or name, return an error
+		resp.Diagnostics.AddError(
+			"Missing required attribute",
+			"Either id or template_name must be provided",
+		)
+		return
 	}
-	res, err := r.client.Templates.GetTemplate(ctx, request)
 	if err != nil {
 		resp.Diagnostics.AddError("failure to invoke API", err.Error())
 		if res != nil && res.RawResponse != nil {

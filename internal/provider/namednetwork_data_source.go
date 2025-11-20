@@ -5,9 +5,11 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -64,7 +66,9 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "ID of the named network. Either id or named_network_name must be provided.",
 			},
 			"ip_ranges": schema.ListNestedAttribute{
 				Computed: true,
@@ -89,7 +93,9 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed: true,
 			},
 			"named_network_name": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "Name of the named network to look up. Either id or named_network_name must be provided.",
 			},
 			"namednetwork_tag_based_policy_assignments": schema.Int64Attribute{
 				Computed: true,
@@ -157,13 +163,78 @@ func (r *NamedNetworkDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	var namedNetworkID string
-	namedNetworkID = data.ID.ValueString()
+	// Check if we have an ID or a name
+	var res *operations.GetNamedNetworkResponse
+	var err error
 
-	request := operations.GetNamedNetworkRequest{
-		NamedNetworkID: namedNetworkID,
+	if !data.ID.IsNull() && data.ID.ValueString() != "" {
+		// If we have an ID, use GetNamedNetwork
+		namedNetworkID := data.ID.ValueString()
+		request := operations.GetNamedNetworkRequest{
+			NamedNetworkID: namedNetworkID,
+		}
+		res, err = r.client.Namednetworks.GetNamedNetwork(ctx, request)
+	} else if !data.NamedNetworkName.IsNull() && data.NamedNetworkName.ValueString() != "" {
+		// If we have a name, use ListNamedNetworks with a search criteria
+		namedNetworkName := data.NamedNetworkName.ValueString()
+		searchCriteria := fmt.Sprintf("namedNetworkName = '%s'", namedNetworkName)
+		listReq := operations.ListNamedNetworksRequest{
+			SearchInput: shared.SearchInput{
+				Criteria: searchCriteria,
+			},
+		}
+
+		// Call the API
+		networks, err := r.client.Namednetworks.ListNamedNetworks(ctx, listReq)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error retrieving named networks",
+				fmt.Sprintf("Could not list named networks to find by name: %s", err),
+			)
+			return
+		}
+
+		// Process the response
+		if networks.NamedNetworks != nil && len(networks.NamedNetworks.Items) > 0 {
+			// Find the named network with the matching name
+			var foundID string
+			for _, network := range networks.NamedNetworks.Items {
+				if network.NamedNetworkName != nil && *network.NamedNetworkName == namedNetworkName {
+					if network.ID != nil {
+						foundID = *network.ID
+						break
+					}
+				}
+			}
+
+			if foundID != "" {
+				// Now use GetNamedNetwork to get the full details
+				request := operations.GetNamedNetworkRequest{
+					NamedNetworkID: foundID,
+				}
+				res, err = r.client.Namednetworks.GetNamedNetwork(ctx, request)
+			} else {
+				resp.Diagnostics.AddError(
+					"Named network not found",
+					fmt.Sprintf("No named network found with name: %s", namedNetworkName),
+				)
+				return
+			}
+		} else {
+			resp.Diagnostics.AddError(
+				"Named network not found",
+				fmt.Sprintf("No named networks found matching the criteria: %s", searchCriteria),
+			)
+			return
+		}
+	} else {
+		// If we don't have either ID or name, return an error
+		resp.Diagnostics.AddError(
+			"Missing required attribute",
+			"Either id or named_network_name must be provided",
+		)
+		return
 	}
-	res, err := r.client.Namednetworks.GetNamedNetwork(ctx, request)
 	if err != nil {
 		resp.Diagnostics.AddError("failure to invoke API", err.Error())
 		if res != nil && res.RawResponse != nil {
