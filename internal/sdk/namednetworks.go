@@ -6,14 +6,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/hooks"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/errors"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/retry"
-	"net/http"
-	"net/url"
 )
 
 type Namednetworks struct {
@@ -2516,7 +2517,8 @@ func (s *Namednetworks) ListNamedNetworks(ctx context.Context, request operation
 	if o.AcceptHeaderOverride != nil {
 		req.Header.Set("Accept", string(*o.AcceptHeaderOverride))
 	} else {
-		req.Header.Set("Accept", "application/json;q=1,  text/csv;q=0")
+		// Be very explicit about wanting JSON only
+		req.Header.Set("Accept", "application/json")
 	}
 
 	req.Header.Set("User-Agent", s.sdkConfiguration.UserAgent)

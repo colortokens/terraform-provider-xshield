@@ -2462,7 +2462,8 @@ func (s *Templates) ListTemplates(ctx context.Context, request operations.ListTe
 	if o.AcceptHeaderOverride != nil {
 		req.Header.Set("Accept", string(*o.AcceptHeaderOverride))
 	} else {
-		req.Header.Set("Accept", "application/json;q=1,  text/csv;q=0")
+		// Be very explicit about wanting JSON only
+		req.Header.Set("Accept", "application/json")
 	}
 
 	req.Header.Set("User-Agent", s.sdkConfiguration.UserAgent)

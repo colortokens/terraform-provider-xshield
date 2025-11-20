@@ -5,6 +5,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
@@ -19,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -865,5 +868,71 @@ func (r *SegmentResource) Delete(ctx context.Context, req resource.DeleteRequest
 }
 
 func (r *SegmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	// Check if the import ID is a UUID (existing behavior) or a name
+	if isSegmentUUID(req.ID) {
+		// Existing behavior - direct ID import
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+		return
+	}
+
+	// If not a UUID, assume it's a name and look up the segment
+	// Create a search criteria that filters by the segment name
+	searchCriteria := fmt.Sprintf("tagBasedPolicyName = '%s'", req.ID)
+	listReq := operations.ListTagBasedPoliciesRequest{
+		SearchInput: shared.SearchInput{
+			Criteria: searchCriteria,
+		},
+	}
+
+	// Add debug logging
+	tflog.Info(ctx, "Importing segment by name", map[string]interface{}{
+		"name":            req.ID,
+		"search_criteria": listReq.SearchInput.Criteria,
+	})
+
+	// Try to get the segments
+	policies, err := r.client.Tagbasedpolicies.ListTagBasedPolicies(ctx, listReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error retrieving segments",
+			fmt.Sprintf("Could not list segments to find by name: %s", err),
+		)
+		return
+	}
+
+	// Process the JSON response
+	if policies.TagBasedPolicies != nil && len(policies.TagBasedPolicies.Items) > 0 {
+		// Find the segment with the matching name
+		var foundID string
+		for _, policy := range policies.TagBasedPolicies.Items {
+			if policy.TagBasedPolicyName != nil && *policy.TagBasedPolicyName == req.ID {
+				if policy.TagBasedPolicyID != nil {
+					foundID = *policy.TagBasedPolicyID
+					break
+				}
+			}
+		}
+
+		if foundID != "" {
+			tflog.Info(ctx, "Found segment", map[string]interface{}{
+				"id":   foundID,
+				"name": req.ID,
+			})
+			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+			return
+		}
+	}
+
+	resp.Diagnostics.AddError(
+		"Segment not found",
+		fmt.Sprintf("No segment found with name: %s", req.ID),
+	)
+}
+
+// Helper to check if a string is a UUID
+func isSegmentUUID(s string) bool {
+	// Simple UUID format check (not comprehensive)
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
+	return matched
 }

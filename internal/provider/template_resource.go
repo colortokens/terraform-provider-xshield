@@ -5,9 +5,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
-
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	speakeasy_boolplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/boolplanmodifier"
 	speakeasy_listplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/listplanmodifier"
@@ -23,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -1809,6 +1809,72 @@ func (r *TemplateResource) Delete(ctx context.Context, req resource.DeleteReques
 
 }
 
+// Helper to check if a string is a UUID
+func isTemplateUUID(s string) bool {
+	// Simple UUID format check (not comprehensive)
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
+	return matched
+}
+
 func (r *TemplateResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	// Check if the import ID is a UUID (existing behavior) or a name
+	if isTemplateUUID(req.ID) {
+		// Existing behavior - direct ID import
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+		return
+	}
+
+	// If not a UUID, assume it's a name and look up the template
+	// Create a search criteria that filters by the template name
+	searchCriteria := fmt.Sprintf("templateName = '%s'", req.ID)
+	listReq := operations.ListTemplatesRequest{
+		SearchInput: shared.SearchInput{
+			Criteria: searchCriteria,
+		},
+	}
+
+	// Add debug logging
+	tflog.Info(ctx, "Importing template by name", map[string]interface{}{
+		"name":            req.ID,
+		"search_criteria": listReq.SearchInput.Criteria,
+	})
+
+	// Try to get the templates
+	templates, err := r.client.Templates.ListTemplates(ctx, listReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error retrieving templates",
+			fmt.Sprintf("Could not list templates to find by name: %s", err),
+		)
+		return
+	}
+
+	// Process the JSON response
+	if templates.Templates != nil && len(templates.Templates.Items) > 0 {
+		// Find the template with the matching name
+		var foundID string
+		for _, template := range templates.Templates.Items {
+			if template.TemplateName != nil && *template.TemplateName == req.ID {
+				if template.TemplateID != nil {
+					foundID = *template.TemplateID
+					break
+				}
+			}
+		}
+
+		if foundID != "" {
+			tflog.Info(ctx, "Found template", map[string]interface{}{
+				"id":   foundID,
+				"name": req.ID,
+			})
+			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+			return
+		}
+	}
+
+	resp.Diagnostics.AddError(
+		"Template not found",
+		fmt.Sprintf("No template found with name: %s", req.ID),
+	)
 }

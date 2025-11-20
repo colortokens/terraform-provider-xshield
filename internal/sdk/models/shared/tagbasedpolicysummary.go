@@ -3,8 +3,9 @@
 package shared
 
 import (
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
 	"time"
+
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
 )
 
 type TagBasedPolicySummary struct {
@@ -28,9 +29,52 @@ func (t TagBasedPolicySummary) MarshalJSON() ([]byte, error) {
 }
 
 func (t *TagBasedPolicySummary) UnmarshalJSON(data []byte) error {
-	if err := utils.UnmarshalJSON(data, &t, "", false, false); err != nil {
+	// Create a temporary struct with string for time fields
+	type TempStruct struct {
+		AutoSynchronizeEnabled               *bool   `json:"autoSynchronizeEnabled,omitempty"`
+		Criteria                             *string `json:"criteria,omitempty"`
+		Description                          *string `json:"description,omitempty"`
+		LowestInboundPolicyStatus            *string `json:"lowestInboundPolicyStatus,omitempty"`
+		LowestOutboundPolicyStatus           *string `json:"lowestOutboundPolicyStatus,omitempty"`
+		LowestProgressiveInboundPolicyStatus *string `json:"lowestProgressiveInboundPolicyStatus,omitempty"`
+		MatchingAssets                       *int64  `json:"matchingAssets,omitempty"`
+		NamednetworksAssigned                *int64  `json:"namednetworksAssigned,omitempty"`
+		PolicyAutomationConfigurable         *bool   `json:"policyAutomationConfigurable,omitempty"`
+		PolicyProgressiveLastRefreshed       *string `json:"policyProgressiveLastRefreshed,omitempty"`
+		TagBasedPolicyID                     *string `json:"tagBasedPolicyId,omitempty"`
+		TagBasedPolicyName                   *string `json:"tagBasedPolicyName,omitempty"`
+		TemplatesAssigned                    *int64  `json:"templatesAssigned,omitempty"`
+	}
+
+	// Unmarshal into the temporary struct
+	var temp TempStruct
+	if err := utils.UnmarshalJSON(data, &temp, "", false, false); err != nil {
 		return err
 	}
+
+	// Copy the simple fields
+	t.AutoSynchronizeEnabled = temp.AutoSynchronizeEnabled
+	t.Criteria = temp.Criteria
+	t.Description = temp.Description
+	t.LowestInboundPolicyStatus = temp.LowestInboundPolicyStatus
+	t.LowestOutboundPolicyStatus = temp.LowestOutboundPolicyStatus
+	t.LowestProgressiveInboundPolicyStatus = temp.LowestProgressiveInboundPolicyStatus
+	t.MatchingAssets = temp.MatchingAssets
+	t.NamednetworksAssigned = temp.NamednetworksAssigned
+	t.PolicyAutomationConfigurable = temp.PolicyAutomationConfigurable
+	t.TagBasedPolicyID = temp.TagBasedPolicyID
+	t.TagBasedPolicyName = temp.TagBasedPolicyName
+	t.TemplatesAssigned = temp.TemplatesAssigned
+
+	// Handle the time field specially
+	if temp.PolicyProgressiveLastRefreshed != nil && *temp.PolicyProgressiveLastRefreshed != "" {
+		parsedTime, err := time.Parse(time.RFC3339, *temp.PolicyProgressiveLastRefreshed)
+		if err != nil {
+			return err
+		}
+		t.PolicyProgressiveLastRefreshed = &parsedTime
+	}
+
 	return nil
 }
 

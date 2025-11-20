@@ -5,7 +5,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
@@ -15,9 +17,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -383,7 +385,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 	// 2. Handle IP range removals
 	if len(rangesToRemove) > 0 {
 		tflog.Info(ctx, fmt.Sprintf("Removing %d IP ranges", len(rangesToRemove)))
-		
+
 		// Convert to shared model
 		sharedRanges := make([]shared.NamednetworkRange, 0, len(rangesToRemove))
 		for _, rangeToRemove := range rangesToRemove {
@@ -391,14 +393,14 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 			tflog.Debug(ctx, fmt.Sprintf("Preparing to remove range: %s, ID: %s", *rangeToRemove.IPRange.ValueStringPointer(), rangeID))
 			sharedRanges = append(sharedRanges, shared.NamednetworkRange{
 				IPRange: rangeToRemove.IPRange.ValueStringPointer(),
-				ID: &rangeID,
+				ID:      &rangeID,
 			})
 		}
 
 		// Create the remove request
 		removeRequest := operations.DeleteFromNamedNetworkRequest{
 			NamedNetworkID: namedNetworkID,
-			RequestBody: sharedRanges,
+			RequestBody:    sharedRanges,
 		}
 		tflog.Debug(ctx, fmt.Sprintf("Sending DeleteFromNamedNetwork request for network ID: %s with %d ranges", namedNetworkID, len(sharedRanges)))
 
@@ -408,7 +410,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 		// Handle the specific error for 202/204 status codes
 		if err != nil {
 			tflog.Debug(ctx, fmt.Sprintf("Error from DeleteFromNamedNetwork: %s", err.Error()))
-			
+
 			// Check if the error message contains "Status 202" or "Status 204"
 			if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
 				// This is actually a success, so we'll continue
@@ -437,7 +439,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 	// 3. Handle IP range additions
 	if len(rangesToAdd) > 0 {
 		tflog.Info(ctx, fmt.Sprintf("Adding %d IP ranges", len(rangesToAdd)))
-		
+
 		// Convert to shared model
 		sharedRanges := make([]shared.NamednetworkRange, 0, len(rangesToAdd))
 		for _, rangeToAdd := range rangesToAdd {
@@ -450,7 +452,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 		// Create the add request
 		addRequest := operations.AddToNamedNetworkRequest{
 			NamedNetworkID: namedNetworkID,
-			RequestBody: sharedRanges,
+			RequestBody:    sharedRanges,
 		}
 		tflog.Debug(ctx, fmt.Sprintf("Sending AddToNamedNetwork request for network ID: %s with %d ranges", namedNetworkID, len(sharedRanges)))
 
@@ -460,7 +462,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 		// Handle the specific error for 202/204 status codes
 		if err != nil {
 			tflog.Debug(ctx, fmt.Sprintf("Error from AddToNamedNetwork: %s", err.Error()))
-			
+
 			// Check if the error message contains "Status 202" or "Status 204"
 			if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
 				// This is actually a success, so we'll continue
@@ -518,7 +520,7 @@ func (r *NamedNetworkResource) Update(ctx context.Context, req resource.UpdateRe
 		if readRes.NamednetworkNamedNetwork != nil {
 			tflog.Debug(ctx, "Refreshing state from API response")
 			data.RefreshFromSharedNamednetworkNamedNetwork(readRes.NamednetworkNamedNetwork)
-			
+
 			// Log the updated IP ranges at debug level
 			for _, ipRange := range data.IPRanges {
 				tflog.Debug(ctx, fmt.Sprintf("Updated IP range: %s, ID: %s", ipRange.IPRange.ValueString(), ipRange.ID.ValueString()))
@@ -577,5 +579,71 @@ func (r *NamedNetworkResource) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *NamedNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	// Check if the import ID is a UUID (existing behavior) or a name
+	if isUUID(req.ID) {
+		// Existing behavior - direct ID import
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+		return
+	}
+
+	// If not a UUID, assume it's a name and look up the named network
+	// Create a search criteria that filters by the named network name
+	searchCriteria := fmt.Sprintf("namedNetworkName = '%s'", req.ID)
+	listReq := operations.ListNamedNetworksRequest{
+		SearchInput: shared.SearchInput{
+			Criteria: searchCriteria,
+		},
+	}
+
+	// Add debug logging
+	tflog.Info(ctx, "Importing named network by name", map[string]interface{}{
+		"name":            req.ID,
+		"search_criteria": listReq.SearchInput.Criteria,
+	})
+
+	// Try to get the named networks
+	networks, err := r.client.Namednetworks.ListNamedNetworks(ctx, listReq)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error retrieving named networks",
+			fmt.Sprintf("Could not list named networks to find by name: %s", err),
+		)
+		return
+	}
+
+	// Process the JSON response
+	if networks.NamedNetworks != nil && len(networks.NamedNetworks.Items) > 0 {
+		// Find the named network with the matching name
+		var foundID string
+		for _, network := range networks.NamedNetworks.Items {
+			if network.NamedNetworkName != nil && *network.NamedNetworkName == req.ID {
+				if network.ID != nil {
+					foundID = *network.ID
+					break
+				}
+			}
+		}
+
+		if foundID != "" {
+			tflog.Info(ctx, "Found named network", map[string]interface{}{
+				"id":   foundID,
+				"name": req.ID,
+			})
+			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+			return
+		}
+	}
+
+	resp.Diagnostics.AddError(
+		"Named network not found",
+		fmt.Sprintf("No named network found with name: %s", req.ID),
+	)
+}
+
+// Helper to check if a string is a UUID
+func isUUID(s string) bool {
+	// Simple UUID format check (not comprehensive)
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
+	return matched
 }
