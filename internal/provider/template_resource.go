@@ -19,6 +19,7 @@ import (
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	speakeasy_objectvalidators "github.com/colortokens/terraform-provider-xshield/internal/validators/objectvalidators"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -33,6 +34,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &TemplateResource{}
 var _ resource.ResourceWithImportState = &TemplateResource{}
+var _ resource.ResourceWithValidateConfig = &TemplateResource{}
 
 func NewTemplateResource() resource.Resource {
 	return &TemplateResource{}
@@ -41,6 +43,20 @@ func NewTemplateResource() resource.Resource {
 // TemplateResource defines the resource implementation.
 type TemplateResource struct {
 	client *sdk.Xshield
+}
+
+// ValidateConfig runs during terraform plan/apply config validation and
+// ensures template_paths obey the direction-specific rules (inbound src-*,
+// outbound dst-* and optional domain).
+func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data TemplateResourceModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	validateTemplatePaths(ctx, &data, &resp.Diagnostics)
 }
 
 // TemplateResourceModel describes the resource data model.
@@ -470,6 +486,13 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	// Validate template paths before creating the template to ensure a valid
+	// combination of source/destination fields for inbound and outbound paths.
+	validateTemplatePaths(ctx, data, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	request := *data.ToSharedTemplate()
 	res, err := r.client.Templates.CreateTemplate(ctx, request)
 	if err != nil {
@@ -496,6 +519,175 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// isStringSet returns true if a Terraform string value is non-null,
+// non-unknown, and non-empty.
+func isStringSet(v types.String) bool {
+	if v.IsNull() || v.IsUnknown() {
+		return false
+	}
+	return v.ValueString() != ""
+}
+
+// validateTemplatePaths enforces direction-specific constraints on each
+// element of template_paths:
+//
+//   - For outbound paths (direction = "outbound"), exactly one of the
+//     following must be set: dst_ip, destination_asset_id,
+//     destination_named_network, destination_tag_based_policy, domain.
+//   - For inbound paths (direction = "inbound"), exactly one of the
+//     following must be set: src_ip, source_asset_id, source_named_network,
+//     source_tag_based_policy. Domain must not be set for inbound paths.
+func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, diags *diag.Diagnostics) {
+	for i, p := range data.TemplatePaths {
+		pathRoot := path.Root("template_paths").AtListIndex(i)
+		direction := p.Direction.ValueString()
+
+		// Skip validation if direction is unknown or empty
+		if direction == "" {
+			continue
+		}
+
+		// Helper to add an attribute error for this path
+		addError := func(summary, detail string) {
+			diags.AddAttributeError(pathRoot, summary, detail)
+		}
+
+		switch direction {
+		case "outbound":
+			// Outbound: exactly one of dst_ip, destination_asset_id,
+			// destination_named_network, destination_tag_based_policy, domain
+			count := 0
+			setFields := []string{}
+			badSourceFields := []string{}
+
+			if isStringSet(p.DstIP) {
+				count++
+				setFields = append(setFields, "dst_ip")
+			}
+			if isStringSet(p.DestinationAssetID) {
+				count++
+				setFields = append(setFields, "destination_asset_id")
+			}
+			if p.DestinationNamedNetwork != nil {
+				count++
+				setFields = append(setFields, "destination_named_network")
+			}
+			if p.DestinationTagBasedPolicy != nil {
+				count++
+				setFields = append(setFields, "destination_tag_based_policy")
+			}
+			if isStringSet(p.Domain) {
+				count++
+				setFields = append(setFields, "domain")
+			}
+
+			// Track source-side fields that are not allowed for outbound paths
+			if isStringSet(p.SrcIP) {
+				badSourceFields = append(badSourceFields, "src_ip")
+			}
+			if isStringSet(p.SourceAssetID) {
+				badSourceFields = append(badSourceFields, "source_asset_id")
+			}
+			if p.SourceNamedNetwork != nil {
+				badSourceFields = append(badSourceFields, "source_named_network")
+			}
+			if p.SourceTagBasedPolicy != nil {
+				badSourceFields = append(badSourceFields, "source_tag_based_policy")
+			}
+
+			// Report selector-field rule violations
+			if count == 0 || count > 1 {
+				detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
+				if count > 1 {
+					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
+				}
+				addError(
+					"Invalid outbound template path configuration - selector fields",
+					detail,
+				)
+			}
+
+			// Report direction misuse (source-side fields on outbound)
+			if len(badSourceFields) > 0 {
+				addError(
+					"Invalid outbound template path configuration - direction",
+					fmt.Sprintf("For outbound template_paths elements, source-side fields must not be set. The following source-side fields are set: %v.", badSourceFields),
+				)
+			}
+
+		case "inbound":
+			// Inbound: exactly one of src_ip, source_asset_id, source_named_network,
+			// source_tag_based_policy. Domain must not be set.
+			count := 0
+			setFields := []string{}
+			badDestFields := []string{}
+
+			if isStringSet(p.SrcIP) {
+				count++
+				setFields = append(setFields, "src_ip")
+			}
+			if isStringSet(p.SourceAssetID) {
+				count++
+				setFields = append(setFields, "source_asset_id")
+			}
+			if p.SourceNamedNetwork != nil {
+				count++
+				setFields = append(setFields, "source_named_network")
+			}
+			if p.SourceTagBasedPolicy != nil {
+				count++
+				setFields = append(setFields, "source_tag_based_policy")
+			}
+
+			if count == 0 {
+				// fall through; we'll build the combined message below
+			}
+			if count > 1 {
+				// fall through; we'll build the combined message below
+			}
+
+			// Domain is only allowed for outbound paths
+			if isStringSet(p.Domain) {
+				badDestFields = append(badDestFields, "domain")
+			}
+
+			// Track destination-side fields that are not allowed for inbound paths
+			if isStringSet(p.DstIP) {
+				badDestFields = append(badDestFields, "dst_ip")
+			}
+			if isStringSet(p.DestinationAssetID) {
+				badDestFields = append(badDestFields, "destination_asset_id")
+			}
+			if p.DestinationNamedNetwork != nil {
+				badDestFields = append(badDestFields, "destination_named_network")
+			}
+			if p.DestinationTagBasedPolicy != nil {
+				badDestFields = append(badDestFields, "destination_tag_based_policy")
+			}
+
+			// Report selector-field rule violations
+			if count == 0 || count > 1 {
+				detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
+				if count > 1 {
+					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
+				}
+				addError(
+					"Invalid inbound template path configuration - selector fields",
+					detail,
+				)
+			}
+
+			// Report direction/domain misuse (destination-side fields or domain on inbound)
+			if len(badDestFields) > 0 {
+				addError(
+					"Invalid inbound template path configuration - direction",
+					fmt.Sprintf("For inbound template_paths elements, destination-side fields must not be set. The following forbidden fields are set: %v.", badDestFields),
+				)
+			}
+		}
+	}
 }
 
 func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
