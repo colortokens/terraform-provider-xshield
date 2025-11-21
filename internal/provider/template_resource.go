@@ -1404,6 +1404,12 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 					// Other fields will be filled by the API
 				}
 
+				// Add SrcIP if present
+				if !path.SrcIP.IsNull() && !path.SrcIP.IsUnknown() {
+					srcIP := path.SrcIP.ValueString()
+					metadataPath.SrcIP = &srcIP
+				}
+
 				// Add DstIP if present
 				if !path.DstIP.IsNull() && !path.DstIP.IsUnknown() {
 					dstIP := path.DstIP.ValueString()
@@ -1440,6 +1446,52 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 						if !path.DestinationNamedNetwork.NamedNetworkName.IsNull() && !path.DestinationNamedNetwork.NamedNetworkName.IsUnknown() {
 							name := path.DestinationNamedNetwork.NamedNetworkName.ValueString()
 							metadataPath.DestinationNamedNetwork.NamedNetworkName = &name
+						}
+					}
+				}
+
+				// Add source_tag_based_policy if present
+				if path.SourceTagBasedPolicy != nil {
+					if !path.SourceTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
+						// If we have the ID, include it
+						id := path.SourceTagBasedPolicy.TagBasedPolicyID.ValueString()
+						metadataPath.SourceTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
+							TagBasedPolicyID: &id,
+						}
+
+						// If we also have the criteria, include it
+						if !path.SourceTagBasedPolicy.Criteria.IsNull() && !path.SourceTagBasedPolicy.Criteria.IsUnknown() {
+							criteria := path.SourceTagBasedPolicy.Criteria.ValueString()
+							metadataPath.SourceTagBasedPolicy.Criteria = &criteria
+						}
+
+						// If we also have the name, include it
+						if !path.SourceTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
+							name := path.SourceTagBasedPolicy.TagBasedPolicyName.ValueString()
+							metadataPath.SourceTagBasedPolicy.TagBasedPolicyName = &name
+						}
+					}
+				}
+
+				// Add destination_tag_based_policy if present
+				if path.DestinationTagBasedPolicy != nil {
+					if !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
+						// If we have the ID, include it
+						id := path.DestinationTagBasedPolicy.TagBasedPolicyID.ValueString()
+						metadataPath.DestinationTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
+							TagBasedPolicyID: &id,
+						}
+
+						// If we also have the criteria, include it
+						if !path.DestinationTagBasedPolicy.Criteria.IsNull() && !path.DestinationTagBasedPolicy.Criteria.IsUnknown() {
+							criteria := path.DestinationTagBasedPolicy.Criteria.ValueString()
+							metadataPath.DestinationTagBasedPolicy.Criteria = &criteria
+						}
+
+						// If we also have the name, include it
+						if !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
+							name := path.DestinationTagBasedPolicy.TagBasedPolicyName.ValueString()
+							metadataPath.DestinationTagBasedPolicy.TagBasedPolicyName = &name
 						}
 					}
 				}
