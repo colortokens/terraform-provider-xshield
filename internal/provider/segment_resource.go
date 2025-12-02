@@ -537,8 +537,8 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 			return
 		}
 
-		// The expected response code is 204 (No Content) or 200 (OK)
-		if res.StatusCode != 204 && res.StatusCode != 200 {
+		// The expected response codes are 204 (No Content), 200 (OK), or 202 (Accepted)
+		if res.StatusCode != 204 && res.StatusCode != 200 && res.StatusCode != 202 {
 			resp.Diagnostics.AddError(fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode), debugResponse(res.RawResponse))
 			return
 		}

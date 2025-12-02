@@ -681,6 +681,7 @@ func (s *Tagbasedpolicies) UpdateTagBasedPolicyMetadata(ctx context.Context, req
 	switch {
 	case httpRes.StatusCode == 204:
 	case httpRes.StatusCode == 200:
+	case httpRes.StatusCode == 202:
 	case httpRes.StatusCode == 400:
 		fallthrough
 	case httpRes.StatusCode == 401:
