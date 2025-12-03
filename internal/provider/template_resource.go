@@ -62,8 +62,12 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 // TemplateResourceModel describes the resource data model.
 type TemplateResourceModel struct {
 	AccessPolicyTemplate types.Bool             `tfsdk:"access_policy_template"`
+	CreatedAt            types.String           `tfsdk:"created_at"`
+	DeletedAt            types.String           `tfsdk:"deleted_at"`
+	IsDeleted            types.Bool             `tfsdk:"is_deleted"`
 	ColortokensManaged   types.Bool             `tfsdk:"colortokens_managed"`
 	ID                   types.String           `tfsdk:"id"`
+	TemplateBreachLevels []types.String         `tfsdk:"template_breach_levels"`
 	TemplateCategory     types.String           `tfsdk:"template_category"`
 	TemplateDescription  types.String           `tfsdk:"template_description"`
 	TemplateName         types.String           `tfsdk:"template_name"`
@@ -92,11 +96,41 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 					speakeasy_boolplanmodifier.SuppressDiff(speakeasy_boolplanmodifier.ExplicitSuppress),
 				},
 			},
+			"created_at": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
+				},
+				Description: `Template creation timestamp.`,
+			},
+			"deleted_at": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
+				},
+				Description: `Template deletion timestamp.`,
+			},
+			"is_deleted": schema.BoolAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.Bool{
+					speakeasy_boolplanmodifier.SuppressDiff(speakeasy_boolplanmodifier.ExplicitSuppress),
+				},
+				Description: `Whether the template is deleted.`,
+			},
 			"id": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
+			},
+			"template_breach_levels": schema.ListAttribute{
+				Computed:    true,
+				Optional:    true,
+				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					speakeasy_listplanmodifier.SuppressDiff(speakeasy_listplanmodifier.ExplicitSuppress),
+				},
+				Description: `Template breach levels.`,
 			},
 			"template_category": schema.StringAttribute{
 				Computed: true,
@@ -113,15 +147,22 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				PlanModifiers: []planmodifier.String{
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
-				Description: `Template description.`,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(1000),
+				},
+				Description: `Template description. Maximum length is 1000 characters.`,
 			},
 			"template_name": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Computed: false,
+				Optional: false,
+				Required: true,
 				PlanModifiers: []planmodifier.String{
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
-				Description: `Template name.`,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(256),
+				},
+				Description: `Template name. Maximum length is 256 characters.`,
 			},
 			"template_paths": schema.ListNestedAttribute{
 				Computed: true,
@@ -266,6 +307,27 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 							Description: `Requires replacement if changed.`,
+						},
+						"rule_hit_metrics": schema.SingleNestedAttribute{
+							Computed: true,
+							PlanModifiers: []planmodifier.Object{
+								speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
+							},
+							Attributes: map[string]schema.Attribute{
+								"last_evaluated": schema.StringAttribute{
+									Computed: true,
+									PlanModifiers: []planmodifier.String{
+										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
+									},
+								},
+								"total_hits": schema.StringAttribute{
+									Computed: true,
+									PlanModifiers: []planmodifier.String{
+										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
+									},
+								},
+							},
+							Description: `Template rule hit metrics.`,
 						},
 						"source_asset_id": schema.StringAttribute{
 							Computed: true,
@@ -430,8 +492,9 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				Description: `Requires replacement if changed.`,
 			},
 			"template_type": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Computed: false,
+				Optional: false,
+				Required: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplaceIfConfigured(),
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),

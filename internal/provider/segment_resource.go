@@ -172,6 +172,10 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 						"template_name": schema.StringAttribute{
 							Computed: true,
 							Optional: true,
+							Validators: []validator.String{
+								stringvalidator.LengthAtMost(256),
+							},
+							Description: `Template name. Maximum length is 256 characters.`,
 						},
 					},
 				},

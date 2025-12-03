@@ -3,6 +3,8 @@
 package provider
 
 import (
+	"time"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -20,6 +22,34 @@ func (r *TemplateResourceModel) ToSharedTemplate() *shared.Template {
 		*colortokensManaged = r.ColortokensManaged.ValueBool()
 	} else {
 		colortokensManaged = nil
+	}
+
+	// Handle IsDeleted
+	isDeleted := new(bool)
+	if !r.IsDeleted.IsUnknown() && !r.IsDeleted.IsNull() {
+		*isDeleted = r.IsDeleted.ValueBool()
+	} else {
+		isDeleted = nil
+	}
+
+	// Handle CreatedAt
+	var createdAt *shared.SafeTime
+	if !r.CreatedAt.IsUnknown() && !r.CreatedAt.IsNull() {
+		parsedTime, err := time.Parse(time.RFC3339, r.CreatedAt.ValueString())
+		if err == nil {
+			safeTime := shared.SafeTime{Time: parsedTime}
+			createdAt = &safeTime
+		}
+	}
+
+	// Handle DeletedAt
+	var deletedAt *shared.SafeTime
+	if !r.DeletedAt.IsUnknown() && !r.DeletedAt.IsNull() {
+		parsedTime, err := time.Parse(time.RFC3339, r.DeletedAt.ValueString())
+		if err == nil {
+			safeTime := shared.SafeTime{Time: parsedTime}
+			deletedAt = &safeTime
+		}
 	}
 	templateCategory := new(string)
 	if !r.TemplateCategory.IsUnknown() && !r.TemplateCategory.IsNull() {
@@ -239,6 +269,7 @@ func (r *TemplateResourceModel) ToSharedTemplate() *shared.Template {
 			SourceTagBasedPolicy:      sourceTagBasedPolicy,
 			SrcIP:                     srcIP,
 			SrcProcess:                srcProcess,
+			RuleHitMetrics:            nil, // Rule hit metrics are read-only
 			URI:                       uri,
 		})
 	}
@@ -293,9 +324,22 @@ func (r *TemplateResourceModel) ToSharedTemplate() *shared.Template {
 	} else {
 		templateType = nil
 	}
+
+	// Handle templateBreachLevels
+	var templateBreachLevels []string
+	for _, level := range r.TemplateBreachLevels {
+		if !level.IsUnknown() && !level.IsNull() {
+			templateBreachLevels = append(templateBreachLevels, level.ValueString())
+		}
+	}
+
 	out := shared.Template{
 		AccessPolicyTemplate: accessPolicyTemplate,
+		CreatedAt:            createdAt,
+		DeletedAt:            deletedAt,
+		IsDeleted:            isDeleted,
 		ColortokensManaged:   colortokensManaged,
+		TemplateBreachLevels: templateBreachLevels,
 		TemplateCategory:     templateCategory,
 		TemplateDescription:  templateDescription,
 		ID:                   id,
@@ -315,6 +359,27 @@ func (r *TemplateResourceModel) RefreshFromSharedTemplate(resp *shared.Template)
 		r.TemplateCategory = types.StringPointerValue(resp.TemplateCategory)
 		r.TemplateDescription = types.StringPointerValue(resp.TemplateDescription)
 		r.TemplateName = types.StringPointerValue(resp.TemplateName)
+		r.IsDeleted = types.BoolPointerValue(resp.IsDeleted)
+
+		// Handle CreatedAt
+		if resp.CreatedAt != nil && !resp.CreatedAt.IsZero() {
+			r.CreatedAt = types.StringValue(resp.CreatedAt.Time.Format(time.RFC3339))
+		} else {
+			r.CreatedAt = types.StringNull()
+		}
+
+		// Handle DeletedAt
+		if resp.DeletedAt != nil && !resp.DeletedAt.IsZero() {
+			r.DeletedAt = types.StringValue(resp.DeletedAt.Time.Format(time.RFC3339))
+		} else {
+			r.DeletedAt = types.StringNull()
+		}
+
+		// Handle templateBreachLevels
+		r.TemplateBreachLevels = make([]types.String, 0, len(resp.TemplateBreachLevels))
+		for _, level := range resp.TemplateBreachLevels {
+			r.TemplateBreachLevels = append(r.TemplateBreachLevels, types.StringValue(level))
+		}
 		r.TemplatePaths = []tfTypes.MetadataPath{}
 		if len(r.TemplatePaths) > len(resp.TemplatePaths) {
 			r.TemplatePaths = r.TemplatePaths[:len(resp.TemplatePaths)]
@@ -365,6 +430,15 @@ func (r *TemplateResourceModel) RefreshFromSharedTemplate(resp *shared.Template)
 			templatePaths1.SrcIP = types.StringPointerValue(templatePathsItem.SrcIP)
 			templatePaths1.SrcProcess = types.StringPointerValue(templatePathsItem.SrcProcess)
 			templatePaths1.URI = types.StringPointerValue(templatePathsItem.URI)
+
+			// Handle RuleHitMetrics
+			if templatePathsItem.RuleHitMetrics == nil {
+				templatePaths1.RuleHitMetrics = nil
+			} else {
+				templatePaths1.RuleHitMetrics = &tfTypes.TemplateRuleHitMetrics{}
+				templatePaths1.RuleHitMetrics.LastEvaluated = types.StringPointerValue(templatePathsItem.RuleHitMetrics.LastEvaluated)
+				templatePaths1.RuleHitMetrics.TotalHits = types.StringPointerValue(templatePathsItem.RuleHitMetrics.TotalHits)
+			}
 			if templatePathsCount+1 > len(r.TemplatePaths) {
 				r.TemplatePaths = append(r.TemplatePaths, templatePaths1)
 			} else {
@@ -385,6 +459,7 @@ func (r *TemplateResourceModel) RefreshFromSharedTemplate(resp *shared.Template)
 				r.TemplatePaths[templatePathsCount].SourceTagBasedPolicy = templatePaths1.SourceTagBasedPolicy
 				r.TemplatePaths[templatePathsCount].SrcIP = templatePaths1.SrcIP
 				r.TemplatePaths[templatePathsCount].SrcProcess = templatePaths1.SrcProcess
+				r.TemplatePaths[templatePathsCount].RuleHitMetrics = templatePaths1.RuleHitMetrics
 				r.TemplatePaths[templatePathsCount].URI = templatePaths1.URI
 			}
 		}

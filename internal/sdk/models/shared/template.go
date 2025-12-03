@@ -5,6 +5,7 @@ package shared
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type TemplateType string
@@ -33,9 +34,49 @@ func (e *TemplateType) UnmarshalJSON(data []byte) error {
 	}
 }
 
+// SafeTime is a wrapper around time.Time that handles empty string values in JSON
+type SafeTime struct {
+	time.Time
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface for SafeTime
+func (st *SafeTime) UnmarshalJSON(data []byte) error {
+	s := string(data)
+
+	// Handle empty strings and null values
+	if s == "\"\"" || s == "null" || s == "" {
+		// Return without error, leaving the time as zero value
+		return nil
+	}
+
+	// Try to unmarshal as a string
+	var timeStr string
+	if err := json.Unmarshal(data, &timeStr); err != nil {
+		return err
+	}
+
+	// Handle empty string
+	if timeStr == "" {
+		return nil
+	}
+
+	// Parse the time string
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return err
+	}
+
+	st.Time = t
+	return nil
+}
+
 type Template struct {
 	AccessPolicyTemplate *bool          `json:"accessPolicyTemplate,omitempty"`
+	CreatedAt            *SafeTime      `json:"createdAt,omitempty"`
+	DeletedAt            *SafeTime      `json:"deletedAt,omitempty"`
+	IsDeleted            *bool          `json:"isDeleted,omitempty"`
 	ColortokensManaged   *bool          `json:"oobTemplate,omitempty"`
+	TemplateBreachLevels []string       `json:"templateBreachLevels,omitempty"`
 	TemplateCategory     *string        `json:"templateCategory,omitempty"`
 	TemplateDescription  *string        `json:"templateDescription,omitempty"`
 	ID                   *string        `json:"templateId,omitempty"`
@@ -57,6 +98,36 @@ func (o *Template) GetColortokensManaged() *bool {
 		return nil
 	}
 	return o.ColortokensManaged
+}
+
+func (o *Template) GetCreatedAt() *time.Time {
+	if o == nil || o.CreatedAt == nil {
+		return nil
+	}
+	t := o.CreatedAt.Time
+	return &t
+}
+
+func (o *Template) GetDeletedAt() *time.Time {
+	if o == nil || o.DeletedAt == nil {
+		return nil
+	}
+	t := o.DeletedAt.Time
+	return &t
+}
+
+func (o *Template) GetIsDeleted() *bool {
+	if o == nil {
+		return nil
+	}
+	return o.IsDeleted
+}
+
+func (o *Template) GetTemplateBreachLevels() []string {
+	if o == nil {
+		return nil
+	}
+	return o.TemplateBreachLevels
 }
 
 func (o *Template) GetTemplateCategory() *string {

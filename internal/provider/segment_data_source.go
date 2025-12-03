@@ -10,8 +10,10 @@ import (
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
@@ -142,6 +144,10 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 						},
 						"template_name": schema.StringAttribute{
 							Computed: true,
+							Validators: []validator.String{
+								stringvalidator.LengthAtMost(256),
+							},
+							Description: `Template name. Maximum length is 256 characters.`,
 						},
 					},
 				},

@@ -17,6 +17,7 @@ type MetadataPath struct {
 	Port                      types.String                     `tfsdk:"port"`
 	PortName                  types.String                     `tfsdk:"port_name"`
 	Protocol                  types.String                     `tfsdk:"protocol"`
+	RuleHitMetrics            *TemplateRuleHitMetrics          `tfsdk:"rule_hit_metrics"`
 	SourceAssetID             types.String                     `tfsdk:"source_asset_id"`
 	SourceNamedNetwork        *MetadataNamedNetworkReference   `tfsdk:"source_named_network"`
 	SourceTagBasedPolicy      *MetadataTagBasedPolicyReference `tfsdk:"source_tag_based_policy"`

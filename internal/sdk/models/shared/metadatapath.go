@@ -15,6 +15,7 @@ type MetadataPath struct {
 	Port                      *string                          `json:"port,omitempty"`
 	PortName                  *string                          `json:"portName,omitempty"`
 	Protocol                  *string                          `json:"protocol,omitempty"`
+	RuleHitMetrics            *TemplateRuleHitMetrics          `json:"ruleHitMetrics,omitempty"`
 	SourceAssetID             *string                          `json:"sourceAssetID,omitempty"`
 	SourceNamedNetwork        *MetadataNamedNetworkReference   `json:"sourceNamedNetwork,omitempty"`
 	SourceTagBasedPolicy      *MetadataTagBasedPolicyReference `json:"sourceTagBasedPolicy,omitempty"`
@@ -105,6 +106,13 @@ func (o *MetadataPath) GetProtocol() *string {
 		return nil
 	}
 	return o.Protocol
+}
+
+func (o *MetadataPath) GetRuleHitMetrics() *TemplateRuleHitMetrics {
+	if o == nil {
+		return nil
+	}
+	return o.RuleHitMetrics
 }
 
 func (o *MetadataPath) GetSourceAssetID() *string {

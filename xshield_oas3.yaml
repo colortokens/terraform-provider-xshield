@@ -4804,6 +4804,13 @@ components:
           type: string
         namedNetworkName:
           type: string
+    metadata.TemplateRuleHitMetrics:
+      type: object
+      properties:
+        lastEvaluated:
+          type: string
+        totalHits:
+          $ref: '#/components/schemas/null.String'
     metadata.Path:
       type: object
       properties:
@@ -5464,12 +5471,16 @@ components:
           type: string
     CloneTemplateDetails:
       type: object
+      required:
+      - templateName
       properties:
         srcTemplateID:
           type: string
         templateDescription:
+          maxLength: 1000
           type: string
         templateName:
+          maxLength: 256
           type: string
     # CreateTemplateDetails:
     #   type: object
@@ -5637,6 +5648,7 @@ components:
         values:
           type: object
           additionalProperties:
+            format: int64
             type: integer
     Field:
       type: object
@@ -6438,21 +6450,35 @@ components:
       x-speakeasy-entity: Template
       properties:
         accessPolicyTemplate:
-          x-speakeasy-param-readonly: true        
+          x-speakeasy-param-readonly: true
+          type: boolean
+        createdAt:
+          format: date-time
+          type: string
+        deletedAt:
+          format: date-time
+          type: string
+        isDeleted:
           type: boolean
         oobTemplate:
           x-speakeasy-name-override: colortokensManaged
           x-speakeasy-param-readonly: true          
           type: boolean
+        templateBreachLevels:
+          items:
+            type: string
+          type: array
         templateCategory:
           type: string
         templateDescription:
+          maxLength: 1000
           type: string
         templateId:
           x-speakeasy-name-override: id
           x-speakeasy-param-readonly: true          
           type: string
         templateName:
+          maxLength: 256
           type: string
         templatePaths:
           type: array
@@ -6464,9 +6490,8 @@ components:
             $ref: '#/components/schemas/metadata.Port'
         templateType:
           type: string
-          enum:
-          - application-template
-          - block-template
+      required:
+      - templateName
     TemplateBodyWithComment:
       type: object
       properties:
@@ -6491,8 +6516,14 @@ components:
       type: object
       properties:
         channelHash:
-          x-speakeasy-name-override: id        
-          x-speakeasy-param-readonly: true        
+          x-speakeasy-name-override: id
+          x-speakeasy-param-readonly: true
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        deletedAt:
+          format: date-time
           type: string
         destinationAsset:
           $ref: '#/components/schemas/AssetSummary'
@@ -6510,7 +6541,11 @@ components:
           type: array
           items:
             type: string
+        isDeleted:
+          type: boolean
         method:
+          type: string
+        pathPortCategory:
           type: string
         port:
           type: string
@@ -6518,6 +6553,8 @@ components:
           type: string
         protocol:
           type: string
+        ruleHitMetrics:
+          $ref: '#/components/schemas/metadata.TemplateRuleHitMetrics'
         sourceAsset:
           $ref: '#/components/schemas/AssetSummary'
         sourceNamedNetwork:
@@ -6532,11 +6569,14 @@ components:
           type: string
     TemplateReference:
       type: object
+      required:
+      - templateName
       properties:
         templateId:
           type: string
         templateName:
           type: string
+          maxLength: 256
     TagBasedPolicyMilestone:
       type: object
       properties:
@@ -6556,7 +6596,9 @@ components:
         #   format: date-time
         #   type: string
     TemplateSummary:
-      required: []
+      required:
+      - templateName
+      - templateType
       type: object
       properties:
         accessPolicyTemplate:
@@ -6567,13 +6609,19 @@ components:
           type: boolean
         templateAssignments:
           type: integer
+        templateBreachLevels:
+          items:
+            type: string
+          type: array
         templateCategory:
           type: string
         templateDescription:
+          maxLength: 1000
           type: string
         templateId:
           type: string
         templateName:
+          maxLength: 256
           type: string
         templatePaths:
           type: integer
