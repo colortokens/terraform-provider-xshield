@@ -33,6 +33,7 @@ type NamedNetworkDataSource struct {
 type NamedNetworkDataSourceModel struct {
 	AssignedByTagBasedPolicy              types.Bool                  `tfsdk:"assigned_by_tag_based_policy"`
 	ColortokensManaged                    types.Bool                  `tfsdk:"colortokens_managed"`
+	Domain                                types.String                `tfsdk:"domain"`
 	ID                                    types.String                `tfsdk:"id"`
 	IPRanges                              []tfTypes.NamednetworkRange `tfsdk:"ip_ranges"`
 	NamedNetworkAssignments               types.Int64                 `tfsdk:"named_network_assignments"`
@@ -63,6 +64,9 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed: true,
 			},
 			"colortokens_managed": schema.BoolAttribute{
+				Computed: true,
+			},
+			"domain": schema.StringAttribute{
 				Computed: true,
 			},
 			"id": schema.StringAttribute{

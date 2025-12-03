@@ -13,6 +13,7 @@ import (
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	speakeasy_objectvalidators "github.com/colortokens/terraform-provider-xshield/internal/validators/objectvalidators"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -39,6 +40,7 @@ type NamedNetworkResource struct {
 type NamedNetworkResourceModel struct {
 	AssignedByTagBasedPolicy              types.Bool                  `tfsdk:"assigned_by_tag_based_policy"`
 	ColortokensManaged                    types.Bool                  `tfsdk:"colortokens_managed"`
+	Domain                                types.String                `tfsdk:"domain"`
 	ID                                    types.String                `tfsdk:"id"`
 	IPRanges                              []tfTypes.NamednetworkRange `tfsdk:"ip_ranges"`
 	NamedNetworkAssignments               types.Int64                 `tfsdk:"named_network_assignments"`
@@ -67,6 +69,10 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"colortokens_managed": schema.BoolAttribute{
 				Computed: true,
+			},
+			"domain": schema.StringAttribute{
+				Computed: true,
+				Optional: true,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -98,10 +104,19 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 			"named_network_description": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(1000),
+				},
+				Description: `Named network description. Maximum length is 1000 characters.`,
 			},
 			"named_network_name": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Computed: false,
+				Optional: false,
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(256),
+				},
+				Description: `Named network name. Maximum length is 256 characters. Required.`,
 			},
 			"namednetwork_tag_based_policy_assignments": schema.Int64Attribute{
 				Computed: true,

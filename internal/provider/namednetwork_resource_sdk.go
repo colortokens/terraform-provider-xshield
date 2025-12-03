@@ -53,11 +53,20 @@ func (r *NamedNetworkResourceModel) ToSharedNamednetworkNamedNetwork() *shared.N
 	} else {
 		colortokensManaged = nil
 	}
-	namedNetworkAssignments := new(int64)
-	if !r.NamedNetworkAssignments.IsUnknown() && !r.NamedNetworkAssignments.IsNull() {
-		*namedNetworkAssignments = r.NamedNetworkAssignments.ValueInt64()
+	domain := new(string)
+	if !r.Domain.IsUnknown() && !r.Domain.IsNull() {
+		*domain = r.Domain.ValueString()
 	} else {
-		namedNetworkAssignments = nil
+		domain = nil
+	}
+
+	// Create NullInt for NamedNetworkAssignments
+	var namedNetworkAssignments *shared.NullInt
+	if !r.NamedNetworkAssignments.IsUnknown() && !r.NamedNetworkAssignments.IsNull() {
+		namedNetworkAssignments = &shared.NullInt{
+			Int64: r.NamedNetworkAssignments.ValueInt64(),
+			Valid: true,
+		}
 	}
 	namedNetworkDescription := new(string)
 	if !r.NamedNetworkDescription.IsUnknown() && !r.NamedNetworkDescription.IsNull() {
@@ -113,15 +122,18 @@ func (r *NamedNetworkResourceModel) ToSharedNamednetworkNamedNetwork() *shared.N
 	} else {
 		totalCount = nil
 	}
-	usergroupNamedNetworkAssignments := new(int64)
+	// Create NullInt for UsergroupNamedNetworkAssignments
+	var usergroupNamedNetworkAssignments *shared.NullInt
 	if !r.UsergroupNamedNetworkAssignments.IsUnknown() && !r.UsergroupNamedNetworkAssignments.IsNull() {
-		*usergroupNamedNetworkAssignments = r.UsergroupNamedNetworkAssignments.ValueInt64()
-	} else {
-		usergroupNamedNetworkAssignments = nil
+		usergroupNamedNetworkAssignments = &shared.NullInt{
+			Int64: r.UsergroupNamedNetworkAssignments.ValueInt64(),
+			Valid: true,
+		}
 	}
 	out := shared.NamednetworkNamedNetwork{
 		ID:                                    id,
 		AssignedByTagBasedPolicy:              assignedByTagBasedPolicy,
+		Domain:                                domain,
 		IPRanges:                              ipRanges,
 		ColortokensManaged:                    colortokensManaged,
 		NamedNetworkAssignments:               namedNetworkAssignments,
@@ -161,7 +173,16 @@ func (r *NamedNetworkResourceModel) RefreshFromSharedNamednetworkNamedNetwork(re
 				r.IPRanges[ipRangesCount].IPRange = ipRanges1.IPRange
 			}
 		}
-		r.NamedNetworkAssignments = types.Int64PointerValue(resp.NamedNetworkAssignments)
+		r.Domain = types.StringPointerValue(resp.Domain)
+
+		// Handle NullInt for NamedNetworkAssignments
+		if resp.NamedNetworkAssignments != nil && resp.NamedNetworkAssignments.Valid {
+			val := resp.NamedNetworkAssignments.Int64
+			r.NamedNetworkAssignments = types.Int64Value(val)
+		} else {
+			r.NamedNetworkAssignments = types.Int64Null()
+		}
+
 		r.NamedNetworkDescription = types.StringPointerValue(resp.NamedNetworkDescription)
 		r.NamedNetworkName = types.StringPointerValue(resp.NamedNetworkName)
 		r.NamednetworkTagBasedPolicyAssignments = types.Int64PointerValue(resp.NamednetworkTagBasedPolicyAssignments)
@@ -171,6 +192,13 @@ func (r *NamedNetworkResourceModel) RefreshFromSharedNamednetworkNamedNetwork(re
 		r.Service = types.StringPointerValue(resp.Service)
 		r.TotalComments = types.Int64PointerValue(resp.TotalComments)
 		r.TotalCount = types.Int64PointerValue(resp.TotalCount)
-		r.UsergroupNamedNetworkAssignments = types.Int64PointerValue(resp.UsergroupNamedNetworkAssignments)
+
+		// Handle NullInt for UsergroupNamedNetworkAssignments
+		if resp.UsergroupNamedNetworkAssignments != nil && resp.UsergroupNamedNetworkAssignments.Valid {
+			val := resp.UsergroupNamedNetworkAssignments.Int64
+			r.UsergroupNamedNetworkAssignments = types.Int64Value(val)
+		} else {
+			r.UsergroupNamedNetworkAssignments = types.Int64Null()
+		}
 	}
 }

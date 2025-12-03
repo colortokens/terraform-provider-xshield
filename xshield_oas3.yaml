@@ -4804,6 +4804,23 @@ components:
           type: string
         namedNetworkName:
           type: string
+    null.String:
+      properties:
+        string:
+          type: string
+        valid:
+          description: Valid is true if String is not NULL
+          type: boolean
+      type: object
+    null.Int:
+      properties:
+        int64:
+          format: int64
+          type: integer
+        valid:
+          description: Valid is true if Int64 is not NULL
+          type: boolean
+      type: object
     metadata.TemplateRuleHitMetrics:
       type: object
       properties:
@@ -6767,11 +6784,15 @@ components:
       type: object
       properties:
         namedNetworkDescription:
+          maxLength: 1000
           type: string
         namedNetworkName:
+          maxLength: 256
           type: string
         srcNamedNetworkID:
           type: string
+      required:
+      - namedNetworkName
     namednetwork.NamedNetwork:
       type: object
       x-speakeasy-entity: NamedNetwork
@@ -6783,8 +6804,8 @@ components:
         assignedByTagBasedPolicy:
           x-speakeasy-param-readonly: true
           type: boolean
-        # domain:
-        #   type: string
+        domain:
+          type: string
         ipRanges:
           # x-speakeasy-terraform-ignore: true
           type: array
@@ -6796,10 +6817,12 @@ components:
           type: boolean
         namedNetworkAssignments:
           x-speakeasy-param-readonly: true
-          type: integer
+          $ref: '#/components/schemas/null.Int'
         namedNetworkDescription:
+          maxLength: 1000
           type: string
         namedNetworkName:
+          maxLength: 256
           type: string
         namednetworkTagBasedPolicyAssignments:
           x-speakeasy-param-readonly: true
@@ -6825,7 +6848,9 @@ components:
           type: integer
         usergroupNamedNetworkAssignments:
           x-speakeasy-param-readonly: true
-          type: integer
+          $ref: '#/components/schemas/null.Int'
+      required:
+      - namedNetworkName
     namednetwork.Range:
       type: object
       x-speakeasy-entity: NamedNetworkRange
@@ -6834,8 +6859,8 @@ components:
           x-speakeasy-name-override: id
           x-speakeasy-param-readonly: true
           type: string
-        # inputIPRange:
-        #   type: string
+        inputIPRange:
+          type: string
         ipCount:
           x-speakeasy-param-readonly: true
           type: integer
