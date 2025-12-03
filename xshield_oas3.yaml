@@ -4804,30 +4804,13 @@ components:
           type: string
         namedNetworkName:
           type: string
-    null.String:
-      properties:
-        string:
-          type: string
-        valid:
-          description: Valid is true if String is not NULL
-          type: boolean
-      type: object
-    null.Int:
-      properties:
-        int64:
-          format: int64
-          type: integer
-        valid:
-          description: Valid is true if Int64 is not NULL
-          type: boolean
-      type: object
     metadata.TemplateRuleHitMetrics:
       type: object
       properties:
         lastEvaluated:
           type: string
         totalHits:
-          $ref: '#/components/schemas/null.String'
+          type: string
     metadata.Path:
       type: object
       properties:
@@ -6804,8 +6787,8 @@ components:
         assignedByTagBasedPolicy:
           x-speakeasy-param-readonly: true
           type: boolean
-        domain:
-          type: string
+        # domain:
+        #   type: string
         ipRanges:
           # x-speakeasy-terraform-ignore: true
           type: array
@@ -6817,7 +6800,7 @@ components:
           type: boolean
         namedNetworkAssignments:
           x-speakeasy-param-readonly: true
-          $ref: '#/components/schemas/null.Int'
+          type: integer
         namedNetworkDescription:
           maxLength: 1000
           type: string
@@ -6848,7 +6831,7 @@ components:
           type: integer
         usergroupNamedNetworkAssignments:
           x-speakeasy-param-readonly: true
-          $ref: '#/components/schemas/null.Int'
+          type: integer
       required:
       - namedNetworkName
     namednetwork.Range:

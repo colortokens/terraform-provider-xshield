@@ -5,10 +5,9 @@ package shared
 type NamednetworkNamedNetwork struct {
 	ID                                    *string             `json:"namedNetworkId,omitempty"`
 	AssignedByTagBasedPolicy              *bool               `json:"assignedByTagBasedPolicy,omitempty"`
-	Domain                                *string             `json:"domain,omitempty"`
 	IPRanges                              []NamednetworkRange `json:"ipRanges,omitempty"`
 	ColortokensManaged                    *bool               `json:"isOOBNetwork,omitempty"`
-	NamedNetworkAssignments               *NullInt            `json:"namedNetworkAssignments,omitempty"`
+	NamedNetworkAssignments               *int64              `json:"namedNetworkAssignments,omitempty"`
 	NamedNetworkDescription               *string             `json:"namedNetworkDescription,omitempty"`
 	NamedNetworkName                      *string             `json:"namedNetworkName,omitempty"`
 	NamednetworkTagBasedPolicyAssignments *int64              `json:"namednetworkTagBasedPolicyAssignments,omitempty"`
@@ -19,7 +18,7 @@ type NamednetworkNamedNetwork struct {
 	Service                               *string             `json:"service,omitempty"`
 	TotalComments                         *int64              `json:"totalComments,omitempty"`
 	TotalCount                            *int64              `json:"totalCount,omitempty"`
-	UsergroupNamedNetworkAssignments      *NullInt            `json:"usergroupNamedNetworkAssignments,omitempty"`
+	UsergroupNamedNetworkAssignments      *int64              `json:"usergroupNamedNetworkAssignments,omitempty"`
 }
 
 func (o *NamednetworkNamedNetwork) GetID() *string {
@@ -34,13 +33,6 @@ func (o *NamednetworkNamedNetwork) GetAssignedByTagBasedPolicy() *bool {
 		return nil
 	}
 	return o.AssignedByTagBasedPolicy
-}
-
-func (o *NamednetworkNamedNetwork) GetDomain() *string {
-	if o == nil {
-		return nil
-	}
-	return o.Domain
 }
 
 func (o *NamednetworkNamedNetwork) GetIPRanges() []NamednetworkRange {
@@ -58,11 +50,10 @@ func (o *NamednetworkNamedNetwork) GetColortokensManaged() *bool {
 }
 
 func (o *NamednetworkNamedNetwork) GetNamedNetworkAssignments() *int64 {
-	if o == nil || o.NamedNetworkAssignments == nil || !o.NamedNetworkAssignments.Valid {
+	if o == nil {
 		return nil
 	}
-	val := o.NamedNetworkAssignments.Int64
-	return &val
+	return o.NamedNetworkAssignments
 }
 
 func (o *NamednetworkNamedNetwork) GetNamedNetworkDescription() *string {
@@ -136,9 +127,8 @@ func (o *NamednetworkNamedNetwork) GetTotalCount() *int64 {
 }
 
 func (o *NamednetworkNamedNetwork) GetUsergroupNamedNetworkAssignments() *int64 {
-	if o == nil || o.UsergroupNamedNetworkAssignments == nil || !o.UsergroupNamedNetworkAssignments.Valid {
+	if o == nil {
 		return nil
 	}
-	val := o.UsergroupNamedNetworkAssignments.Int64
-	return &val
+	return o.UsergroupNamedNetworkAssignments
 }

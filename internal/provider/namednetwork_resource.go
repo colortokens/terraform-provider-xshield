@@ -40,7 +40,6 @@ type NamedNetworkResource struct {
 type NamedNetworkResourceModel struct {
 	AssignedByTagBasedPolicy              types.Bool                  `tfsdk:"assigned_by_tag_based_policy"`
 	ColortokensManaged                    types.Bool                  `tfsdk:"colortokens_managed"`
-	Domain                                types.String                `tfsdk:"domain"`
 	ID                                    types.String                `tfsdk:"id"`
 	IPRanges                              []tfTypes.NamednetworkRange `tfsdk:"ip_ranges"`
 	NamedNetworkAssignments               types.Int64                 `tfsdk:"named_network_assignments"`
@@ -69,10 +68,6 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 			},
 			"colortokens_managed": schema.BoolAttribute{
 				Computed: true,
-			},
-			"domain": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,

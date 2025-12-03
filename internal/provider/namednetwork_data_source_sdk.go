@@ -30,16 +30,7 @@ func (r *NamedNetworkDataSourceModel) RefreshFromSharedNamednetworkNamedNetwork(
 				r.IPRanges[ipRangesCount].IPRange = ipRanges1.IPRange
 			}
 		}
-		r.Domain = types.StringPointerValue(resp.Domain)
-
-		// Handle NullInt for NamedNetworkAssignments
-		if resp.NamedNetworkAssignments != nil && resp.NamedNetworkAssignments.Valid {
-			val := resp.NamedNetworkAssignments.Int64
-			r.NamedNetworkAssignments = types.Int64Value(val)
-		} else {
-			r.NamedNetworkAssignments = types.Int64Null()
-		}
-
+		r.NamedNetworkAssignments = types.Int64PointerValue(resp.NamedNetworkAssignments)
 		r.NamedNetworkDescription = types.StringPointerValue(resp.NamedNetworkDescription)
 		r.NamedNetworkName = types.StringPointerValue(resp.NamedNetworkName)
 		r.NamednetworkTagBasedPolicyAssignments = types.Int64PointerValue(resp.NamednetworkTagBasedPolicyAssignments)
@@ -49,13 +40,6 @@ func (r *NamedNetworkDataSourceModel) RefreshFromSharedNamednetworkNamedNetwork(
 		r.Service = types.StringPointerValue(resp.Service)
 		r.TotalComments = types.Int64PointerValue(resp.TotalComments)
 		r.TotalCount = types.Int64PointerValue(resp.TotalCount)
-
-		// Handle NullInt for UsergroupNamedNetworkAssignments
-		if resp.UsergroupNamedNetworkAssignments != nil && resp.UsergroupNamedNetworkAssignments.Valid {
-			val := resp.UsergroupNamedNetworkAssignments.Int64
-			r.UsergroupNamedNetworkAssignments = types.Int64Value(val)
-		} else {
-			r.UsergroupNamedNetworkAssignments = types.Int64Null()
-		}
+		r.UsergroupNamedNetworkAssignments = types.Int64PointerValue(resp.UsergroupNamedNetworkAssignments)
 	}
 }
