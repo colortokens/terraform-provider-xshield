@@ -5,10 +5,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -111,7 +115,7 @@ func (r *AssetResource) Metadata(ctx context.Context, req resource.MetadataReque
 
 func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Asset Resource",
+		MarkdownDescription: "Asset Resource. **Note: Assets cannot be created through Terraform. You must import existing assets using 'terraform import'.**",
 		Attributes: map[string]schema.Attribute{
 			"agent_id": schema.StringAttribute{
 				Computed: true,
@@ -673,68 +677,43 @@ func (r *AssetResource) Configure(ctx context.Context, req resource.ConfigureReq
 		return
 	}
 
-	client, ok := req.ProviderData.(*sdk.Xshield)
-
+	providerData, ok := req.ProviderData.(*sdk.Xshield)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
 			fmt.Sprintf("Expected *sdk.Xshield, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
-	r.client = client
+	r.client = providerData
+}
+
+// ModifyPlan prevents asset creation through Terraform
+func (r *AssetResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Check if this is a create operation (prior state is null)
+	var priorStateIsNull bool
+
+	if req.State.Raw.IsNull() {
+		priorStateIsNull = true
+	}
+
+	// If this is a create operation (no prior state), return an error
+	if priorStateIsNull {
+		resp.Diagnostics.AddError(
+			"Asset creation not supported",
+			"Assets cannot be created through Terraform. Please import an existing asset using 'terraform import' and then manage it with Terraform.",
+		)
+		return
+	}
 }
 
 func (r *AssetResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data *AssetResourceModel
-	var plan types.Object
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	resp.Diagnostics.Append(plan.As(ctx, &data, basetypes.ObjectAsOptions{
-		UnhandledNullAsEmpty:    true,
-		UnhandledUnknownAsEmpty: true,
-	})...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	assetID := data.ID.ValueString()
-
-	request := operations.GetAssetRequest{
-		AssetID: assetID,
-	}
-	res, err := r.client.Assets.GetAsset(ctx, request)
-	if err != nil {
-		resp.Diagnostics.AddError("failure to invoke API", err.Error())
-		if res != nil && res.RawResponse != nil {
-			resp.Diagnostics.AddError("unexpected http request/response", debugResponse(res.RawResponse))
-		}
-		return
-	}
-	if res == nil {
-		resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", res))
-		return
-	}
-	if res.StatusCode != 200 {
-		resp.Diagnostics.AddError(fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", res.StatusCode), debugResponse(res.RawResponse))
-		return
-	}
-	if !(res.AssetDetails != nil) {
-		resp.Diagnostics.AddError("unexpected response from API. Got an unexpected response body", debugResponse(res.RawResponse))
-		return
-	}
-	data.RefreshFromSharedAssetDetails(res.AssetDetails)
-	refreshPlan(ctx, plan, &data, resp.Diagnostics)
-
-	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// Assets cannot be created through Terraform, only imported and then updated
+	resp.Diagnostics.AddError(
+		"Asset creation not supported",
+		"Assets cannot be created through Terraform. Please import an existing asset using 'terraform import' and then manage it with Terraform.",
+	)
 }
 
 func (r *AssetResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -860,5 +839,72 @@ func (r *AssetResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 }
 
 func (r *AssetResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	// Check if the import ID is a UUID (existing behavior) or a name
+	if isAssetUUID(req.ID) {
+		// Existing behavior - direct ID import
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+		return
+	}
+
+	// If not a UUID, assume it's a name and look up the asset
+	// Create a search criteria that filters by the asset name
+	searchCriteria := fmt.Sprintf("assetName = '%s'", req.ID)
+	listReq := operations.ListAssetsRequest{
+		SearchInput: shared.SearchInput{
+			Criteria: searchCriteria,
+		},
+	}
+
+	// Add debug logging
+	tflog.Info(ctx, "Importing asset by name", map[string]interface{}{
+		"name":            req.ID,
+		"search_criteria": listReq.SearchInput.Criteria,
+	})
+
+	// Try to get the assets - explicitly request JSON format
+	jsonAccept := operations.WithAcceptHeaderOverride(operations.AcceptHeaderEnumApplicationJson)
+	assets, err := r.client.Assets.ListAssets(ctx, listReq, jsonAccept)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error retrieving assets",
+			fmt.Sprintf("Could not list assets to find by name: %s", err),
+		)
+		return
+	}
+
+	// Process the JSON response
+	if assets.AssetSearchResults != nil && len(assets.AssetSearchResults.Items) > 0 {
+		// Find the asset with the matching name
+		var foundID string
+		for _, asset := range assets.AssetSearchResults.Items {
+			if asset.AssetName == req.ID {
+				if asset.AssetID != nil {
+					foundID = *asset.AssetID
+					break
+				}
+			}
+		}
+
+		if foundID != "" {
+			tflog.Info(ctx, "Found asset", map[string]interface{}{
+				"id":   foundID,
+				"name": req.ID,
+			})
+			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+			return
+		}
+	}
+
+	resp.Diagnostics.AddError(
+		"Asset not found",
+		fmt.Sprintf("No asset found with name: %s", req.ID),
+	)
+}
+
+// Helper to check if a string is a UUID
+func isAssetUUID(s string) bool {
+	// Simple UUID format check (not comprehensive)
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
+	return matched
 }
