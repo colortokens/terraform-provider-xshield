@@ -33,12 +33,20 @@ type SegmentDataSource struct {
 
 // SegmentDataSourceModel describes the data model.
 type SegmentDataSourceModel struct {
-	AutoSynchronizeEnabled               types.Bool                              `tfsdk:"auto_synchronize_enabled"`
 	BaselineBreachImpactScore            types.Int64                             `tfsdk:"baseline_breach_impact_score"`
 	BaselineMatchingAssets               types.Int64                             `tfsdk:"baseline_matching_assets"`
 	Criteria                             types.String                            `tfsdk:"criteria"`
+	CriteriaAsParams                     types.String                            `tfsdk:"criteria_as_params"`
 	Description                          types.String                            `tfsdk:"description"`
 	ID                                   types.String                            `tfsdk:"id"`
+	InboundAutoSyncDeploymentMode        types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
+	InboundAutoSyncIntervalMinutes       types.Int64                             `tfsdk:"inbound_auto_sync_interval_minutes"`
+	InboundAutoSyncIncludeViolations     types.Bool                              `tfsdk:"inbound_auto_sync_include_violations"`
+	InboundAutoSyncViolationThreshold    types.Int64                             `tfsdk:"inbound_auto_sync_violation_threshold"`
+	OutboundAutoSyncDeploymentMode       types.String                            `tfsdk:"outbound_auto_sync_deployment_mode"`
+	OutboundAutoSyncIntervalMinutes      types.Int64                             `tfsdk:"outbound_auto_sync_interval_minutes"`
+	OutboundAutoSyncIncludeViolations    types.Bool                              `tfsdk:"outbound_auto_sync_include_violations"`
+	OutboundAutoSyncViolationThreshold   types.Int64                             `tfsdk:"outbound_auto_sync_violation_threshold"`
 	LowestInboundPolicyStatus            types.String                            `tfsdk:"lowest_inbound_policy_status"`
 	LowestOutboundPolicyStatus           types.String                            `tfsdk:"lowest_outbound_policy_status"`
 	LowestProgressiveInboundPolicyStatus types.String                            `tfsdk:"lowest_progressive_inbound_policy_status"`
@@ -63,9 +71,6 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 		MarkdownDescription: "Segment DataSource",
 
 		Attributes: map[string]schema.Attribute{
-			"auto_synchronize_enabled": schema.BoolAttribute{
-				Computed: true,
-			},
 			"baseline_breach_impact_score": schema.Int64Attribute{
 				Computed: true,
 			},
@@ -75,6 +80,9 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			"criteria": schema.StringAttribute{
 				Computed: true,
 			},
+			"criteria_as_params": schema.StringAttribute{
+				Computed: true,
+			},
 			"description": schema.StringAttribute{
 				Computed: true,
 			},
@@ -82,6 +90,30 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed:    true,
 				Optional:    true,
 				Description: "ID of the segment. Either id or tag_based_policy_name must be provided.",
+			},
+			"inbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
+				Computed: true,
 			},
 			"lowest_inbound_policy_status": schema.StringAttribute{
 				Computed: true,

@@ -3,13 +3,16 @@
 package operations
 
 import (
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"net/http"
+
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 )
 
 type AutomationConfigurationRequest struct {
 	// Tag ID
 	TagbasedpolicyID string `pathParam:"style=simple,explode=false,name=tagbasedpolicyId"`
+	// Request body for automation configuration
+	RequestBody *shared.TagsBasedPolicyAutomationConfig `request:"mediaType=application/json"`
 }
 
 func (o *AutomationConfigurationRequest) GetTagbasedpolicyID() string {

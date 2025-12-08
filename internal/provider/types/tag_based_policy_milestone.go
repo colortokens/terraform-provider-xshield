@@ -5,7 +5,10 @@ package types
 import "github.com/hashicorp/terraform-plugin-framework/types"
 
 type TagBasedPolicyMilestone struct {
+	CompletedAt          types.String `tfsdk:"completed_at"`
 	CompletionPercentage types.Number `tfsdk:"completion_percentage"`
 	MilestoneID          types.Int64  `tfsdk:"milestone_id"`
 	Name                 types.String `tfsdk:"name"`
+	StartedAt            types.String `tfsdk:"started_at"`
+	TargetDate           types.String `tfsdk:"target_date"`
 }

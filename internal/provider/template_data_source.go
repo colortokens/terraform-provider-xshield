@@ -171,6 +171,17 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 						"uri": schema.StringAttribute{
 							Computed: true,
 						},
+						"rule_hit_metrics": schema.SingleNestedAttribute{
+							Computed: true,
+							Attributes: map[string]schema.Attribute{
+								"last_evaluated": schema.StringAttribute{
+									Computed: true,
+								},
+								"total_hits": schema.StringAttribute{
+									Computed: true,
+								},
+							},
+						},
 					},
 				},
 			},

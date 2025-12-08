@@ -21,6 +21,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -41,23 +44,25 @@ type SegmentResource struct {
 
 // SegmentResourceModel describes the resource data model.
 type SegmentResourceModel struct {
-	AutoSynchronizeEnabled               types.Bool                              `tfsdk:"auto_synchronize_enabled"`
-	BaselineBreachImpactScore            types.Int64                             `tfsdk:"baseline_breach_impact_score"`
-	BaselineMatchingAssets               types.Int64                             `tfsdk:"baseline_matching_assets"`
-	Criteria                             types.String                            `tfsdk:"criteria"`
-	Description                          types.String                            `tfsdk:"description"`
-	ID                                   types.String                            `tfsdk:"id"`
-	LowestInboundPolicyStatus            types.String                            `tfsdk:"lowest_inbound_policy_status"`
-	LowestOutboundPolicyStatus           types.String                            `tfsdk:"lowest_outbound_policy_status"`
-	LowestProgressiveInboundPolicyStatus types.String                            `tfsdk:"lowest_progressive_inbound_policy_status"`
-	MatchingAssets                       types.Int64                             `tfsdk:"matching_assets"`
-	Milestones                           []tfTypes.TagBasedPolicyMilestone       `tfsdk:"milestones"`
-	Namednetworks                        []tfTypes.MetadataNamedNetworkReference `tfsdk:"namednetworks"`
-	PolicyAutomationConfigurable         types.Bool                              `tfsdk:"policy_automation_configurable"`
-	TagBasedPolicyName                   types.String                            `tfsdk:"tag_based_policy_name"`
-	TargetBreachImpactScore              types.Int64                             `tfsdk:"target_breach_impact_score"`
-	Templates                            []tfTypes.TemplateReference             `tfsdk:"templates"`
-	Timeline                             types.Int64                             `tfsdk:"timeline"`
+	CreatedAt                              types.String                            `tfsdk:"created_at"`
+	Criteria                               types.String                            `tfsdk:"criteria"`
+	Description                            types.String                            `tfsdk:"description"`
+	ID                                     types.String                            `tfsdk:"id"`
+	InboundAutoSyncDeploymentMode          types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
+	InboundAutoSyncIntervalMinutes         types.Int64                             `tfsdk:"inbound_auto_sync_interval_minutes"`
+	InboundAutoSyncIncludeViolations       types.Bool                              `tfsdk:"inbound_auto_sync_include_violations"`
+	InboundAutoSyncViolationThreshold      types.Int64                             `tfsdk:"inbound_auto_sync_violation_threshold"`
+	OutboundAutoSyncDeploymentMode         types.String                            `tfsdk:"outbound_auto_sync_deployment_mode"`
+	OutboundAutoSyncIntervalMinutes        types.Int64                             `tfsdk:"outbound_auto_sync_interval_minutes"`
+	OutboundAutoSyncIncludeViolations      types.Bool                              `tfsdk:"outbound_auto_sync_include_violations"`
+	OutboundAutoSyncViolationThreshold     types.Int64                             `tfsdk:"outbound_auto_sync_violation_threshold"`
+	LowestInboundSegmentAssetPolicyStatus  types.String                            `tfsdk:"lowest_inbound_segment_asset_policy_status"`
+	LowestOutboundSegmentAssetPolicyStatus types.String                            `tfsdk:"lowest_outbound_segment_asset_policy_status"`
+	Namednetworks                          []tfTypes.MetadataNamedNetworkReference `tfsdk:"namednetworks"`
+	TagBasedPolicyName                     types.String                            `tfsdk:"tag_based_policy_name"`
+	TargetBreachImpactScore                types.Int64                             `tfsdk:"target_breach_impact_score"`
+	Templates                              []tfTypes.TemplateReference             `tfsdk:"templates"`
+	Timeline                               types.Int64                             `tfsdk:"timeline"`
 }
 
 func (r *SegmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -68,20 +73,19 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Segment Resource",
 		Attributes: map[string]schema.Attribute{
-			"auto_synchronize_enabled": schema.BoolAttribute{
-				Computed: true,
-			},
-			"baseline_breach_impact_score": schema.Int64Attribute{
-				Computed: true,
-			},
-			"baseline_matching_assets": schema.Int64Attribute{
-				Computed: true,
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: `Creation timestamp of the segment.`,
 			},
 			"criteria": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
 				// Note: The API might modify the criteria by adding additional conditions
 				// For example, it might add "AND 'managedby' in ('colortokens')" to the criteria
+				Description: `Criteria for the segment. Required for creation, computed for import.`,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Computed: true,
@@ -93,33 +97,67 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
-			"lowest_inbound_policy_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"lowest_outbound_policy_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"lowest_progressive_inbound_policy_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"matching_assets": schema.Int64Attribute{
-				Computed: true,
-			},
-			"milestones": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"completion_percentage": schema.NumberAttribute{
-							Computed: true,
-						},
-						"milestone_id": schema.Int64Attribute{
-							Computed: true,
-						},
-						"name": schema.StringAttribute{
-							Computed: true,
-						},
-					},
+			"inbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Inbound auto-sync deployment mode. Options: test, enforce, disable.`,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
+				Validators: []validator.String{
+					stringvalidator.OneOf("test", "enforce", "disable"),
+				},
+			},
+			"inbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Inbound auto-sync interval in minutes.`,
+			},
+			"inbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Whether to include violations in inbound auto-sync.`,
+			},
+			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Threshold for violations in inbound auto-sync.`,
+			},
+			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Outbound auto-sync deployment mode. Options: test, enforce, disable.`,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf("test", "enforce", "disable"),
+				},
+			},
+			"outbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Outbound auto-sync interval in minutes.`,
+			},
+			"outbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Whether to include violations in outbound auto-sync.`,
+			},
+			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Threshold for violations in outbound auto-sync.`,
+			},
+			"lowest_inbound_segment_asset_policy_status": schema.StringAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Lowest inbound segment asset policy status.`,
+			},
+			"lowest_outbound_segment_asset_policy_status": schema.StringAttribute{
+				Computed:    true,
+				Optional:    true,
+				Description: `Lowest outbound segment asset policy status.`,
 			},
 			"namednetworks": schema.ListNestedAttribute{
 				Computed: true,
@@ -140,22 +178,23 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 					},
 				},
 			},
-			"policy_automation_configurable": schema.BoolAttribute{
-				Computed: true,
-			},
 			"tag_based_policy_name": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Computed: false,
+				Optional: false,
+				Required: true,
 				Validators: []validator.String{
 					stringvalidator.UTF8LengthAtMost(256),
 				},
+				Description: `Segment name. Maximum length is 256 characters. Required.`,
 			},
 			"target_breach_impact_score": schema.Int64Attribute{
 				Computed: true,
 				Optional: true,
 				Validators: []validator.Int64{
-					int64validator.AtMost(100),
+					int64validator.Between(0, 100),
 				},
+				Default:     int64default.StaticInt64(50),
+				Description: `Target breach impact score. Default: 50. Range: 0-100.`,
 			},
 			"templates": schema.ListNestedAttribute{
 				Computed: true,
@@ -186,6 +225,8 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Validators: []validator.Int64{
 					int64validator.AtLeast(1),
 				},
+				Default:     int64default.StaticInt64(90),
+				Description: `Timeline in days. Default: 90. Minimum: 1.`,
 			},
 		},
 	}
@@ -250,7 +291,188 @@ func (r *SegmentResource) Create(ctx context.Context, req resource.CreateRequest
 		resp.Diagnostics.AddError("unexpected response from API. Got an unexpected response body", debugResponse(res.RawResponse))
 		return
 	}
+
+	// Save the original values before refreshing
+	originalCriteria := data.Criteria
+	originalInboundDeploymentMode := data.InboundAutoSyncDeploymentMode
+	originalOutboundDeploymentMode := data.OutboundAutoSyncDeploymentMode
+	originalInboundAutoSyncIntervalMinutes := data.InboundAutoSyncIntervalMinutes
+	originalInboundAutoSyncViolationThreshold := data.InboundAutoSyncViolationThreshold
+	originalOutboundAutoSyncIntervalMinutes := data.OutboundAutoSyncIntervalMinutes
+	originalOutboundAutoSyncViolationThreshold := data.OutboundAutoSyncViolationThreshold
+
+	// Refresh from API response
 	data.RefreshFromSharedTagBasedPolicyResponse(res.TagBasedPolicyResponse)
+
+	// Restore original values that the API modifies
+	if !originalCriteria.IsNull() {
+		data.Criteria = originalCriteria
+	}
+	if !originalInboundDeploymentMode.IsNull() {
+		data.InboundAutoSyncDeploymentMode = originalInboundDeploymentMode
+	}
+	if !originalOutboundDeploymentMode.IsNull() {
+		data.OutboundAutoSyncDeploymentMode = originalOutboundDeploymentMode
+	}
+
+	// Restore auto-sync fields if they're not null and the API returns -1
+	if !originalInboundAutoSyncIntervalMinutes.IsNull() &&
+		!data.InboundAutoSyncIntervalMinutes.IsNull() &&
+		data.InboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+		tflog.Info(ctx, fmt.Sprintf("Restoring inbound_auto_sync_interval_minutes: %d instead of %d",
+			originalInboundAutoSyncIntervalMinutes.ValueInt64(), data.InboundAutoSyncIntervalMinutes.ValueInt64()))
+		data.InboundAutoSyncIntervalMinutes = originalInboundAutoSyncIntervalMinutes
+	}
+
+	if !originalInboundAutoSyncViolationThreshold.IsNull() &&
+		!data.InboundAutoSyncViolationThreshold.IsNull() &&
+		data.InboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+		tflog.Info(ctx, fmt.Sprintf("Restoring inbound_auto_sync_violation_threshold: %d instead of %d",
+			originalInboundAutoSyncViolationThreshold.ValueInt64(), data.InboundAutoSyncViolationThreshold.ValueInt64()))
+		data.InboundAutoSyncViolationThreshold = originalInboundAutoSyncViolationThreshold
+	}
+
+	if !originalOutboundAutoSyncIntervalMinutes.IsNull() &&
+		!data.OutboundAutoSyncIntervalMinutes.IsNull() &&
+		data.OutboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+		tflog.Info(ctx, fmt.Sprintf("Restoring outbound_auto_sync_interval_minutes: %d instead of %d",
+			originalOutboundAutoSyncIntervalMinutes.ValueInt64(), data.OutboundAutoSyncIntervalMinutes.ValueInt64()))
+		data.OutboundAutoSyncIntervalMinutes = originalOutboundAutoSyncIntervalMinutes
+	}
+
+	if !originalOutboundAutoSyncViolationThreshold.IsNull() &&
+		!data.OutboundAutoSyncViolationThreshold.IsNull() &&
+		data.OutboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+		tflog.Info(ctx, fmt.Sprintf("Restoring outbound_auto_sync_violation_threshold: %d instead of %d",
+			originalOutboundAutoSyncViolationThreshold.ValueInt64(), data.OutboundAutoSyncViolationThreshold.ValueInt64()))
+		data.OutboundAutoSyncViolationThreshold = originalOutboundAutoSyncViolationThreshold
+	}
+
+	// Check if we need to configure automation settings
+	if !data.InboundAutoSyncDeploymentMode.IsNull() || !data.InboundAutoSyncIntervalMinutes.IsNull() ||
+		!data.InboundAutoSyncIncludeViolations.IsNull() || !data.InboundAutoSyncViolationThreshold.IsNull() ||
+		!data.OutboundAutoSyncDeploymentMode.IsNull() || !data.OutboundAutoSyncIntervalMinutes.IsNull() ||
+		!data.OutboundAutoSyncIncludeViolations.IsNull() || !data.OutboundAutoSyncViolationThreshold.IsNull() ||
+		!data.LowestInboundSegmentAssetPolicyStatus.IsNull() || !data.LowestOutboundSegmentAssetPolicyStatus.IsNull() {
+
+		// Create automation configuration request
+		automationConfig := &shared.TagsBasedPolicyAutomationConfig{}
+
+		// Set inbound auto-sync fields if they're not null
+		if !data.InboundAutoSyncDeploymentMode.IsNull() {
+			strMode := data.InboundAutoSyncDeploymentMode.ValueString()
+			mode := shared.AutoDeploymentMode(strMode)
+			automationConfig.InboundAutoSyncDeploymentMode = &mode
+		}
+		if !data.InboundAutoSyncIntervalMinutes.IsNull() {
+			interval := data.InboundAutoSyncIntervalMinutes.ValueInt64()
+			automationConfig.InboundAutoSyncIntervalMinutes = &interval
+		}
+		if !data.InboundAutoSyncIncludeViolations.IsNull() {
+			includeViolations := data.InboundAutoSyncIncludeViolations.ValueBool()
+			automationConfig.InboundAutoSyncIncludeViolations = &includeViolations
+		}
+		if !data.InboundAutoSyncViolationThreshold.IsNull() {
+			threshold := data.InboundAutoSyncViolationThreshold.ValueInt64()
+			automationConfig.InboundAutoSyncViolationThreshold = &threshold
+		}
+
+		// Set outbound auto-sync fields if they're not null
+		if !data.OutboundAutoSyncDeploymentMode.IsNull() {
+			strMode := data.OutboundAutoSyncDeploymentMode.ValueString()
+			mode := shared.AutoDeploymentMode(strMode)
+			automationConfig.OutboundAutoSyncDeploymentMode = &mode
+		}
+		if !data.OutboundAutoSyncIntervalMinutes.IsNull() {
+			interval := data.OutboundAutoSyncIntervalMinutes.ValueInt64()
+			automationConfig.OutboundAutoSyncIntervalMinutes = &interval
+		}
+		if !data.OutboundAutoSyncIncludeViolations.IsNull() {
+			includeViolations := data.OutboundAutoSyncIncludeViolations.ValueBool()
+			automationConfig.OutboundAutoSyncIncludeViolations = &includeViolations
+		}
+		if !data.OutboundAutoSyncViolationThreshold.IsNull() {
+			threshold := data.OutboundAutoSyncViolationThreshold.ValueInt64()
+			automationConfig.OutboundAutoSyncViolationThreshold = &threshold
+		}
+
+		// Set policy status fields if they're not null
+		if !data.LowestInboundSegmentAssetPolicyStatus.IsNull() {
+			status := data.LowestInboundSegmentAssetPolicyStatus.ValueString()
+			automationConfig.LowestInboundSegmentAssetPolicyStatus = &status
+		}
+		if !data.LowestOutboundSegmentAssetPolicyStatus.IsNull() {
+			status := data.LowestOutboundSegmentAssetPolicyStatus.ValueString()
+			automationConfig.LowestOutboundSegmentAssetPolicyStatus = &status
+		}
+
+		// Create the automation configuration request
+		automationRequest := operations.AutomationConfigurationRequest{
+			TagbasedpolicyID: data.ID.ValueString(),
+			RequestBody:      automationConfig,
+		}
+
+		// Call the automation configuration API
+		automationRes, err := r.client.Tagbasedpolicies.AutomationConfiguration(ctx, automationRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("failure to invoke automation API", err.Error())
+			if automationRes != nil && automationRes.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(automationRes.RawResponse))
+			}
+			return
+		}
+		if automationRes == nil {
+			resp.Diagnostics.AddError("unexpected response from automation API", fmt.Sprintf("%v", automationRes))
+			return
+		}
+		if automationRes.StatusCode != 202 && automationRes.StatusCode != 200 {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from automation API. Got an unexpected response code %v", automationRes.StatusCode),
+				debugResponse(automationRes.RawResponse),
+			)
+			return
+		}
+
+		// Read the updated segment to get the latest state
+		readRequest := operations.GetTagBasedPolicyRequest{
+			TagbasedpolicyID: data.ID.ValueString(),
+		}
+		readRes, err := r.client.Tagbasedpolicies.GetTagBasedPolicy(ctx, readRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("failure to read updated segment", err.Error())
+			if readRes != nil && readRes.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(readRes.RawResponse))
+			}
+			return
+		}
+		if readRes == nil {
+			resp.Diagnostics.AddError("unexpected response from API", fmt.Sprintf("%v", readRes))
+			return
+		}
+		if readRes.StatusCode != 200 {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", readRes.StatusCode),
+				debugResponse(readRes.RawResponse),
+			)
+			return
+		}
+		if !(readRes.TagBasedPolicyResponse != nil) {
+			resp.Diagnostics.AddError("unexpected response from API. Got an unexpected response body", debugResponse(readRes.RawResponse))
+			return
+		}
+
+		// Update our data with the latest from the API
+		data.RefreshFromSharedTagBasedPolicyResponse(readRes.TagBasedPolicyResponse)
+	}
+
+	// Log final values before saving to state
+	tflog.Info(ctx, fmt.Sprintf("Final criteria value: %s", data.Criteria.ValueString()))
+	tflog.Info(ctx, fmt.Sprintf("Final inbound_auto_sync_interval_minutes value: %d", data.InboundAutoSyncIntervalMinutes.ValueInt64()))
+	tflog.Info(ctx, fmt.Sprintf("Final inbound_auto_sync_violation_threshold value: %d", data.InboundAutoSyncViolationThreshold.ValueInt64()))
+	tflog.Info(ctx, fmt.Sprintf("Final outbound_auto_sync_interval_minutes value: %d", data.OutboundAutoSyncIntervalMinutes.ValueInt64()))
+	tflog.Info(ctx, fmt.Sprintf("Final outbound_auto_sync_violation_threshold value: %d", data.OutboundAutoSyncViolationThreshold.ValueInt64()))
+
+	// Refresh plan to ensure consistency
 	refreshPlan(ctx, plan, &data, resp.Diagnostics)
 
 	// Save updated data into Terraform state
@@ -279,6 +501,14 @@ func (r *SegmentResource) Read(ctx context.Context, req resource.ReadRequest, re
 	targetBreachImpactScore := data.TargetBreachImpactScore
 	timeline := data.Timeline
 	criteria := data.Criteria
+	inboundDeploymentMode := data.InboundAutoSyncDeploymentMode
+	outboundDeploymentMode := data.OutboundAutoSyncDeploymentMode
+
+	// Save auto-sync fields
+	inboundAutoSyncIntervalMinutes := data.InboundAutoSyncIntervalMinutes
+	inboundAutoSyncViolationThreshold := data.InboundAutoSyncViolationThreshold
+	outboundAutoSyncIntervalMinutes := data.OutboundAutoSyncIntervalMinutes
+	outboundAutoSyncViolationThreshold := data.OutboundAutoSyncViolationThreshold
 
 	var tagbasedpolicyID string
 	tagbasedpolicyID = data.ID.ValueString()
@@ -312,21 +542,49 @@ func (r *SegmentResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 	data.RefreshFromSharedTagBasedPolicyResponse(res.TagBasedPolicyResponse)
 
-	// Set computed fields to null
-	data.AutoSynchronizeEnabled = types.BoolNull()
-	data.BaselineBreachImpactScore = types.Int64Null()
-	data.BaselineMatchingAssets = types.Int64Null()
-	data.LowestInboundPolicyStatus = types.StringNull()
-	data.LowestOutboundPolicyStatus = types.StringNull()
-	data.LowestProgressiveInboundPolicyStatus = types.StringNull()
-	data.MatchingAssets = types.Int64Null()
-	data.Milestones = []tfTypes.TagBasedPolicyMilestone{}
-	data.PolicyAutomationConfigurable = types.BoolNull()
+	if !targetBreachImpactScore.IsNull() {
+		data.TargetBreachImpactScore = targetBreachImpactScore
+	}
+	// For timeline
+	if !timeline.IsNull() {
+		data.Timeline = timeline
+	}
+	// For criteria
+	if !criteria.IsNull() {
+		data.Criteria = criteria
+	}
+	// For deployment modes
+	if !inboundDeploymentMode.IsNull() {
+		data.InboundAutoSyncDeploymentMode = inboundDeploymentMode
+	}
+	if !outboundDeploymentMode.IsNull() {
+		data.OutboundAutoSyncDeploymentMode = outboundDeploymentMode
+	}
 
-	// Restore preserved fields
-	data.TargetBreachImpactScore = targetBreachImpactScore
-	data.Timeline = timeline
-	data.Criteria = criteria
+	// Restore auto-sync fields if they're not null and the API returns -1
+	if !inboundAutoSyncIntervalMinutes.IsNull() &&
+		!data.InboundAutoSyncIntervalMinutes.IsNull() &&
+		data.InboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+		data.InboundAutoSyncIntervalMinutes = inboundAutoSyncIntervalMinutes
+	}
+
+	if !inboundAutoSyncViolationThreshold.IsNull() &&
+		!data.InboundAutoSyncViolationThreshold.IsNull() &&
+		data.InboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+		data.InboundAutoSyncViolationThreshold = inboundAutoSyncViolationThreshold
+	}
+
+	if !outboundAutoSyncIntervalMinutes.IsNull() &&
+		!data.OutboundAutoSyncIntervalMinutes.IsNull() &&
+		data.OutboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+		data.OutboundAutoSyncIntervalMinutes = outboundAutoSyncIntervalMinutes
+	}
+
+	if !outboundAutoSyncViolationThreshold.IsNull() &&
+		!data.OutboundAutoSyncViolationThreshold.IsNull() &&
+		data.OutboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+		data.OutboundAutoSyncViolationThreshold = outboundAutoSyncViolationThreshold
+	}
 
 	// Only set namednetwork_name to null if it's not returned by the API
 	for i := range data.Namednetworks {
@@ -783,9 +1041,105 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 		tflog.Info(ctx, logMsg)
 	}
 
+	// 6. Check if we need to update automation settings
+	automationChanged := false
+
+	// Check if any of the auto-sync fields have changed
+	if !planData.InboundAutoSyncDeploymentMode.Equal(stateData.InboundAutoSyncDeploymentMode) ||
+		!planData.InboundAutoSyncIntervalMinutes.Equal(stateData.InboundAutoSyncIntervalMinutes) ||
+		!planData.InboundAutoSyncIncludeViolations.Equal(stateData.InboundAutoSyncIncludeViolations) ||
+		!planData.InboundAutoSyncViolationThreshold.Equal(stateData.InboundAutoSyncViolationThreshold) ||
+		!planData.OutboundAutoSyncDeploymentMode.Equal(stateData.OutboundAutoSyncDeploymentMode) ||
+		!planData.OutboundAutoSyncIntervalMinutes.Equal(stateData.OutboundAutoSyncIntervalMinutes) ||
+		!planData.OutboundAutoSyncIncludeViolations.Equal(stateData.OutboundAutoSyncIncludeViolations) ||
+		!planData.OutboundAutoSyncViolationThreshold.Equal(stateData.OutboundAutoSyncViolationThreshold) ||
+		!planData.LowestInboundSegmentAssetPolicyStatus.Equal(stateData.LowestInboundSegmentAssetPolicyStatus) ||
+		!planData.LowestOutboundSegmentAssetPolicyStatus.Equal(stateData.LowestOutboundSegmentAssetPolicyStatus) {
+
+		automationChanged = true
+
+		// Create automation configuration request
+		automationConfig := &shared.TagsBasedPolicyAutomationConfig{}
+
+		// Set inbound auto-sync fields if they're not null
+		if !planData.InboundAutoSyncDeploymentMode.IsNull() {
+			strMode := planData.InboundAutoSyncDeploymentMode.ValueString()
+			mode := shared.AutoDeploymentMode(strMode)
+			automationConfig.InboundAutoSyncDeploymentMode = &mode
+		}
+		if !planData.InboundAutoSyncIntervalMinutes.IsNull() {
+			interval := planData.InboundAutoSyncIntervalMinutes.ValueInt64()
+			automationConfig.InboundAutoSyncIntervalMinutes = &interval
+		}
+		if !planData.InboundAutoSyncIncludeViolations.IsNull() {
+			includeViolations := planData.InboundAutoSyncIncludeViolations.ValueBool()
+			automationConfig.InboundAutoSyncIncludeViolations = &includeViolations
+		}
+		if !planData.InboundAutoSyncViolationThreshold.IsNull() {
+			threshold := planData.InboundAutoSyncViolationThreshold.ValueInt64()
+			automationConfig.InboundAutoSyncViolationThreshold = &threshold
+		}
+
+		// Set outbound auto-sync fields if they're not null
+		if !planData.OutboundAutoSyncDeploymentMode.IsNull() {
+			strMode := planData.OutboundAutoSyncDeploymentMode.ValueString()
+			mode := shared.AutoDeploymentMode(strMode)
+			automationConfig.OutboundAutoSyncDeploymentMode = &mode
+		}
+		if !planData.OutboundAutoSyncIntervalMinutes.IsNull() {
+			interval := planData.OutboundAutoSyncIntervalMinutes.ValueInt64()
+			automationConfig.OutboundAutoSyncIntervalMinutes = &interval
+		}
+		if !planData.OutboundAutoSyncIncludeViolations.IsNull() {
+			includeViolations := planData.OutboundAutoSyncIncludeViolations.ValueBool()
+			automationConfig.OutboundAutoSyncIncludeViolations = &includeViolations
+		}
+		if !planData.OutboundAutoSyncViolationThreshold.IsNull() {
+			threshold := planData.OutboundAutoSyncViolationThreshold.ValueInt64()
+			automationConfig.OutboundAutoSyncViolationThreshold = &threshold
+		}
+
+		// Set policy status fields if they're not null
+		if !planData.LowestInboundSegmentAssetPolicyStatus.IsNull() {
+			status := planData.LowestInboundSegmentAssetPolicyStatus.ValueString()
+			automationConfig.LowestInboundSegmentAssetPolicyStatus = &status
+		}
+		if !planData.LowestOutboundSegmentAssetPolicyStatus.IsNull() {
+			status := planData.LowestOutboundSegmentAssetPolicyStatus.ValueString()
+			automationConfig.LowestOutboundSegmentAssetPolicyStatus = &status
+		}
+
+		// Create the automation configuration request
+		automationRequest := operations.AutomationConfigurationRequest{
+			TagbasedpolicyID: tagbasedpolicyID,
+			RequestBody:      automationConfig,
+		}
+
+		// Call the automation configuration API
+		automationRes, err := r.client.Tagbasedpolicies.AutomationConfiguration(ctx, automationRequest)
+		if err != nil {
+			resp.Diagnostics.AddError("failure to invoke automation API", err.Error())
+			if automationRes != nil && automationRes.RawResponse != nil {
+				resp.Diagnostics.AddError("unexpected http request/response", debugResponse(automationRes.RawResponse))
+			}
+			return
+		}
+		if automationRes == nil {
+			resp.Diagnostics.AddError("unexpected response from automation API", fmt.Sprintf("%v", automationRes))
+			return
+		}
+		if automationRes.StatusCode != 202 && automationRes.StatusCode != 200 {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf("unexpected response from automation API. Got an unexpected response code %v", automationRes.StatusCode),
+				debugResponse(automationRes.RawResponse),
+			)
+			return
+		}
+	}
+
 	// 7. If we made any changes, refresh the state from the API
 	if metadataChanged || len(templateIDsToAdd) > 0 || len(templateIDsToRemove) > 0 ||
-		len(namedNetworkIDsToAdd) > 0 || len(namedNetworkIDsToRemove) > 0 {
+		len(namedNetworkIDsToAdd) > 0 || len(namedNetworkIDsToRemove) > 0 || automationChanged {
 		// Read the latest state from the API
 		readRequest := operations.GetTagBasedPolicyRequest{
 			TagbasedpolicyID: tagbasedpolicyID,
@@ -818,7 +1172,53 @@ func (r *SegmentResource) Update(ctx context.Context, req resource.UpdateRequest
 
 		// Update our data with the latest from the API
 		if readRes.TagBasedPolicyResponse != nil {
+			// Save the original values before refreshing
+			originalCriteria := planData.Criteria
+			originalInboundDeploymentMode := planData.InboundAutoSyncDeploymentMode
+			originalOutboundDeploymentMode := planData.OutboundAutoSyncDeploymentMode
+			originalInboundAutoSyncIntervalMinutes := planData.InboundAutoSyncIntervalMinutes
+			originalInboundAutoSyncViolationThreshold := planData.InboundAutoSyncViolationThreshold
+			originalOutboundAutoSyncIntervalMinutes := planData.OutboundAutoSyncIntervalMinutes
+			originalOutboundAutoSyncViolationThreshold := planData.OutboundAutoSyncViolationThreshold
+
+			// Refresh from API response
 			data.RefreshFromSharedTagBasedPolicyResponse(readRes.TagBasedPolicyResponse)
+
+			// Restore original values that the API modifies
+			if !originalCriteria.IsNull() {
+				data.Criteria = originalCriteria
+			}
+			if !originalInboundDeploymentMode.IsNull() {
+				data.InboundAutoSyncDeploymentMode = originalInboundDeploymentMode
+			}
+			if !originalOutboundDeploymentMode.IsNull() {
+				data.OutboundAutoSyncDeploymentMode = originalOutboundDeploymentMode
+			}
+
+			// Restore auto-sync fields if they're not null and the API returns -1
+			if !originalInboundAutoSyncIntervalMinutes.IsNull() &&
+				!data.InboundAutoSyncIntervalMinutes.IsNull() &&
+				data.InboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+				data.InboundAutoSyncIntervalMinutes = originalInboundAutoSyncIntervalMinutes
+			}
+
+			if !originalInboundAutoSyncViolationThreshold.IsNull() &&
+				!data.InboundAutoSyncViolationThreshold.IsNull() &&
+				data.InboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+				data.InboundAutoSyncViolationThreshold = originalInboundAutoSyncViolationThreshold
+			}
+
+			if !originalOutboundAutoSyncIntervalMinutes.IsNull() &&
+				!data.OutboundAutoSyncIntervalMinutes.IsNull() &&
+				data.OutboundAutoSyncIntervalMinutes.ValueInt64() == -1 {
+				data.OutboundAutoSyncIntervalMinutes = originalOutboundAutoSyncIntervalMinutes
+			}
+
+			if !originalOutboundAutoSyncViolationThreshold.IsNull() &&
+				!data.OutboundAutoSyncViolationThreshold.IsNull() &&
+				data.OutboundAutoSyncViolationThreshold.ValueInt64() == -1 {
+				data.OutboundAutoSyncViolationThreshold = originalOutboundAutoSyncViolationThreshold
+			}
 		}
 	}
 

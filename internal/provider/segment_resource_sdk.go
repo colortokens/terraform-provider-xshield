@@ -3,10 +3,11 @@
 package provider
 
 import (
+	"time"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"math/big"
 )
 
 func (r *SegmentResourceModel) ToSharedTagBasedPolicy() *shared.TagBasedPolicy {
@@ -99,37 +100,23 @@ func (r *SegmentResourceModel) ToSharedTagBasedPolicy() *shared.TagBasedPolicy {
 
 func (r *SegmentResourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *shared.TagBasedPolicyResponse) {
 	if resp != nil {
-		r.AutoSynchronizeEnabled = types.BoolPointerValue(resp.AutoSynchronizeEnabled)
-		r.BaselineBreachImpactScore = types.Int64PointerValue(resp.BaselineBreachImpactScore)
-		r.BaselineMatchingAssets = types.Int64PointerValue(resp.BaselineMatchingAssets)
-		r.Criteria = types.StringPointerValue(resp.Criteria)
+		if resp.Criteria != nil {
+			r.Criteria = types.StringValue(*resp.Criteria)
+		} else {
+			r.Criteria = types.StringNull()
+		}
 		r.Description = types.StringPointerValue(resp.Description)
 		r.ID = types.StringPointerValue(resp.ID)
-		r.LowestInboundPolicyStatus = types.StringPointerValue(resp.LowestInboundPolicyStatus)
-		r.LowestOutboundPolicyStatus = types.StringPointerValue(resp.LowestOutboundPolicyStatus)
-		r.LowestProgressiveInboundPolicyStatus = types.StringPointerValue(resp.LowestProgressiveInboundPolicyStatus)
-		r.MatchingAssets = types.Int64PointerValue(resp.MatchingAssets)
-		r.Milestones = []tfTypes.TagBasedPolicyMilestone{}
-		if len(r.Milestones) > len(resp.Milestones) {
-			r.Milestones = r.Milestones[:len(resp.Milestones)]
-		}
-		for milestonesCount, milestonesItem := range resp.Milestones {
-			var milestones1 tfTypes.TagBasedPolicyMilestone
-			if milestonesItem.CompletionPercentage != nil {
-				milestones1.CompletionPercentage = types.NumberValue(big.NewFloat(float64(*milestonesItem.CompletionPercentage)))
-			} else {
-				milestones1.CompletionPercentage = types.NumberNull()
-			}
-			milestones1.MilestoneID = types.Int64PointerValue(milestonesItem.MilestoneID)
-			milestones1.Name = types.StringPointerValue(milestonesItem.Name)
-			if milestonesCount+1 > len(r.Milestones) {
-				r.Milestones = append(r.Milestones, milestones1)
-			} else {
-				r.Milestones[milestonesCount].CompletionPercentage = milestones1.CompletionPercentage
-				r.Milestones[milestonesCount].MilestoneID = milestones1.MilestoneID
-				r.Milestones[milestonesCount].Name = milestones1.Name
-			}
-		}
+		r.InboundAutoSyncDeploymentMode = types.StringPointerValue(resp.InboundAutoSyncDeploymentMode)
+		r.InboundAutoSyncIntervalMinutes = types.Int64PointerValue(resp.InboundAutoSyncIntervalMinutes)
+		r.InboundAutoSyncIncludeViolations = types.BoolPointerValue(resp.InboundAutoSyncIncludeViolations)
+		r.InboundAutoSyncViolationThreshold = types.Int64PointerValue(resp.InboundAutoSyncViolationThreshold)
+		r.OutboundAutoSyncDeploymentMode = types.StringPointerValue(resp.OutboundAutoSyncDeploymentMode)
+		r.OutboundAutoSyncIntervalMinutes = types.Int64PointerValue(resp.OutboundAutoSyncIntervalMinutes)
+		r.OutboundAutoSyncIncludeViolations = types.BoolPointerValue(resp.OutboundAutoSyncIncludeViolations)
+		r.OutboundAutoSyncViolationThreshold = types.Int64PointerValue(resp.OutboundAutoSyncViolationThreshold)
+		r.LowestInboundSegmentAssetPolicyStatus = types.StringPointerValue(resp.LowestInboundSegmentAssetPolicyStatus)
+		r.LowestOutboundSegmentAssetPolicyStatus = types.StringPointerValue(resp.LowestOutboundSegmentAssetPolicyStatus)
 		r.Namednetworks = []tfTypes.MetadataNamedNetworkReference{}
 		if len(r.Namednetworks) > len(resp.Namednetworks) {
 			r.Namednetworks = r.Namednetworks[:len(resp.Namednetworks)]
@@ -145,7 +132,6 @@ func (r *SegmentResourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *sha
 				r.Namednetworks[namednetworksCount].NamedNetworkName = namednetworks1.NamedNetworkName
 			}
 		}
-		r.PolicyAutomationConfigurable = types.BoolPointerValue(resp.PolicyAutomationConfigurable)
 		r.TagBasedPolicyName = types.StringPointerValue(resp.TagBasedPolicyName)
 		r.TargetBreachImpactScore = types.Int64PointerValue(resp.TargetBreachImpactScore)
 		r.Templates = []tfTypes.TemplateReference{}
@@ -164,5 +150,12 @@ func (r *SegmentResourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *sha
 			}
 		}
 		r.Timeline = types.Int64PointerValue(resp.Timeline)
+
+		// Handle time fields
+		if resp.CreatedAt != nil && !resp.CreatedAt.Time.IsZero() {
+			r.CreatedAt = types.StringValue(resp.CreatedAt.Time.Format(time.RFC3339))
+		} else {
+			r.CreatedAt = types.StringNull()
+		}
 	}
 }

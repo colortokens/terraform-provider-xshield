@@ -3,23 +3,38 @@
 package shared
 
 type TagBasedPolicyResponse struct {
-	ID                                   *string                         `json:"tagBasedPolicyId,omitempty"`
-	Description                          *string                         `json:"description,omitempty"`
-	TagBasedPolicyName                   *string                         `json:"tagBasedPolicyName,omitempty"`
-	TargetBreachImpactScore              *int64                          `json:"targetBreachImpactScore,omitempty"`
-	Timeline                             *int64                          `json:"timeline,omitempty"`
-	Criteria                             *string                         `json:"criteria,omitempty"`
-	Namednetworks                        []MetadataNamedNetworkReference `json:"namednetworks,omitempty"`
-	Templates                            []TemplateReference             `json:"templates,omitempty"`
-	Milestones                           []TagBasedPolicyMilestone       `json:"milestones,omitempty"`
-	MatchingAssets                       *int64                          `json:"matchingAssets,omitempty"`
-	BaselineBreachImpactScore            *int64                          `json:"baselineBreachImpactScore,omitempty"`
-	BaselineMatchingAssets               *int64                          `json:"baselineMatchingAssets,omitempty"`
-	PolicyAutomationConfigurable         *bool                           `json:"policyAutomationConfigurable,omitempty"`
-	AutoSynchronizeEnabled               *bool                           `json:"autoSynchronizeEnabled,omitempty"`
-	LowestInboundPolicyStatus            *string                         `json:"lowestInboundPolicyStatus,omitempty"`
-	LowestOutboundPolicyStatus           *string                         `json:"lowestOutboundPolicyStatus,omitempty"`
-	LowestProgressiveInboundPolicyStatus *string                         `json:"lowestProgressiveInboundPolicyStatus,omitempty"`
+	ID                                     *string                         `json:"tagBasedPolicyId,omitempty"`
+	Description                            *string                         `json:"description,omitempty"`
+	TagBasedPolicyName                     *string                         `json:"tagBasedPolicyName,omitempty"`
+	TargetBreachImpactScore                *int64                          `json:"targetBreachImpactScore,omitempty"`
+	Timeline                               *int64                          `json:"timeline,omitempty"`
+	Criteria                               *string                         `json:"criteria,omitempty"`
+	CriteriaAsParams                       *string                         `json:"criteriaAsParams,omitempty"`
+	Namednetworks                          []MetadataNamedNetworkReference `json:"namednetworks,omitempty"`
+	Templates                              []TemplateReference             `json:"templates,omitempty"`
+	Milestones                             []TagBasedPolicyMilestone       `json:"milestones,omitempty"`
+	MatchingAssets                         *int64                          `json:"matchingAssets,omitempty"`
+	BaselineBreachImpactScore              *int64                          `json:"baselineBreachImpactScore,omitempty"`
+	BaselineMatchingAssets                 *int64                          `json:"baselineMatchingAssets,omitempty"`
+	CreatedAt                              *SafeTime                       `json:"createdAt,omitempty"`
+	PolicyAutomationConfigurable           *bool                           `json:"policyAutomationConfigurable,omitempty"`
+	LowestInboundSegmentAssetPolicyStatus  *string                         `json:"lowestInboundSegmentAssetPolicyStatus,omitempty"`
+	LowestOutboundSegmentAssetPolicyStatus *string                         `json:"lowestOutboundSegmentAssetPolicyStatus,omitempty"`
+	InboundAutoSyncDeploymentMode          *string                         `json:"inboundAutoSyncDeploymentMode,omitempty"`
+	InboundAutoSyncIntervalMinutes         *int64                          `json:"inboundAutoSyncIntervalMinutes,omitempty"`
+	InboundAutoSyncIncludeViolations       *bool                           `json:"inboundAutoSyncIncludeViolations,omitempty"`
+	InboundAutoSyncViolationThreshold      *int64                          `json:"inboundAutoSyncViolationThreshold,omitempty"`
+	OutboundAutoSyncDeploymentMode         *string                         `json:"outboundAutoSyncDeploymentMode,omitempty"`
+	OutboundAutoSyncIntervalMinutes        *int64                          `json:"outboundAutoSyncIntervalMinutes,omitempty"`
+	OutboundAutoSyncIncludeViolations      *bool                           `json:"outboundAutoSyncIncludeViolations,omitempty"`
+	OutboundAutoSyncViolationThreshold     *int64                          `json:"outboundAutoSyncViolationThreshold,omitempty"`
+	LowestProgressiveInboundPolicyStatus   *string                         `json:"lowestProgressiveInboundPolicyStatus,omitempty"`
+	LowestProgressiveOutboundPolicyStatus  *string                         `json:"lowestProgressiveOutboundPolicyStatus,omitempty"`
+	TemplatesAssigned                      *int64                          `json:"templatesAssigned,omitempty"`
+	NamednetworksAssigned                  *int64                          `json:"namednetworksAssigned,omitempty"`
+	AllowTemplatesAssigned                 *int64                          `json:"allowTemplatesAssigned,omitempty"`
+	BlockTemplatesAssigned                 *int64                          `json:"blockTemplatesAssigned,omitempty"`
+	ActiveBreachModeTemplatesAssigned      *int64                          `json:"activeBreachModeTemplatesAssigned,omitempty"`
 }
 
 func (o *TagBasedPolicyResponse) GetID() *string {
@@ -113,25 +128,74 @@ func (o *TagBasedPolicyResponse) GetPolicyAutomationConfigurable() *bool {
 	return o.PolicyAutomationConfigurable
 }
 
-func (o *TagBasedPolicyResponse) GetAutoSynchronizeEnabled() *bool {
+func (o *TagBasedPolicyResponse) GetLowestInboundSegmentAssetPolicyStatus() *string {
 	if o == nil {
 		return nil
 	}
-	return o.AutoSynchronizeEnabled
+	return o.LowestInboundSegmentAssetPolicyStatus
 }
 
-func (o *TagBasedPolicyResponse) GetLowestInboundPolicyStatus() *string {
+func (o *TagBasedPolicyResponse) GetLowestOutboundSegmentAssetPolicyStatus() *string {
 	if o == nil {
 		return nil
 	}
-	return o.LowestInboundPolicyStatus
+	return o.LowestOutboundSegmentAssetPolicyStatus
 }
 
-func (o *TagBasedPolicyResponse) GetLowestOutboundPolicyStatus() *string {
+func (o *TagBasedPolicyResponse) GetInboundAutoSyncDeploymentMode() *string {
 	if o == nil {
 		return nil
 	}
-	return o.LowestOutboundPolicyStatus
+	return o.InboundAutoSyncDeploymentMode
+}
+
+func (o *TagBasedPolicyResponse) GetInboundAutoSyncIntervalMinutes() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.InboundAutoSyncIntervalMinutes
+}
+
+func (o *TagBasedPolicyResponse) GetInboundAutoSyncIncludeViolations() *bool {
+	if o == nil {
+		return nil
+	}
+	return o.InboundAutoSyncIncludeViolations
+}
+
+func (o *TagBasedPolicyResponse) GetInboundAutoSyncViolationThreshold() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.InboundAutoSyncViolationThreshold
+}
+
+func (o *TagBasedPolicyResponse) GetOutboundAutoSyncDeploymentMode() *string {
+	if o == nil {
+		return nil
+	}
+	return o.OutboundAutoSyncDeploymentMode
+}
+
+func (o *TagBasedPolicyResponse) GetOutboundAutoSyncIntervalMinutes() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.OutboundAutoSyncIntervalMinutes
+}
+
+func (o *TagBasedPolicyResponse) GetOutboundAutoSyncIncludeViolations() *bool {
+	if o == nil {
+		return nil
+	}
+	return o.OutboundAutoSyncIncludeViolations
+}
+
+func (o *TagBasedPolicyResponse) GetOutboundAutoSyncViolationThreshold() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.OutboundAutoSyncViolationThreshold
 }
 
 func (o *TagBasedPolicyResponse) GetLowestProgressiveInboundPolicyStatus() *string {
@@ -139,4 +203,53 @@ func (o *TagBasedPolicyResponse) GetLowestProgressiveInboundPolicyStatus() *stri
 		return nil
 	}
 	return o.LowestProgressiveInboundPolicyStatus
+}
+
+func (o *TagBasedPolicyResponse) GetLowestProgressiveOutboundPolicyStatus() *string {
+	if o == nil {
+		return nil
+	}
+	return o.LowestProgressiveOutboundPolicyStatus
+}
+
+func (o *TagBasedPolicyResponse) GetTemplatesAssigned() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.TemplatesAssigned
+}
+
+func (o *TagBasedPolicyResponse) GetNamednetworksAssigned() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.NamednetworksAssigned
+}
+
+func (o *TagBasedPolicyResponse) GetAllowTemplatesAssigned() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.AllowTemplatesAssigned
+}
+
+func (o *TagBasedPolicyResponse) GetBlockTemplatesAssigned() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.BlockTemplatesAssigned
+}
+
+func (o *TagBasedPolicyResponse) GetActiveBreachModeTemplatesAssigned() *int64 {
+	if o == nil {
+		return nil
+	}
+	return o.ActiveBreachModeTemplatesAssigned
+}
+
+func (o *TagBasedPolicyResponse) GetCriteriaAsParams() *string {
+	if o == nil {
+		return nil
+	}
+	return o.CriteriaAsParams
 }

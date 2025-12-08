@@ -68,3 +68,14 @@ func (o *TagBasedPolicy) GetTemplates() []TemplateReference {
 	}
 	return o.Templates
 }
+
+// NewTagBasedPolicy creates a new TagBasedPolicy with default values
+func NewTagBasedPolicy() *TagBasedPolicy {
+	defaultTargetBreachImpactScore := int64(50)
+	defaultTimeline := int64(90)
+
+	return &TagBasedPolicy{
+		TargetBreachImpactScore: &defaultTargetBreachImpactScore,
+		Timeline:                &defaultTimeline,
+	}
+}

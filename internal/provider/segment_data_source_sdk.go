@@ -3,22 +3,41 @@
 package provider
 
 import (
+	"math/big"
+
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"math/big"
 )
 
 func (r *SegmentDataSourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *shared.TagBasedPolicyResponse) {
 	if resp != nil {
-		r.AutoSynchronizeEnabled = types.BoolPointerValue(resp.AutoSynchronizeEnabled)
 		r.BaselineBreachImpactScore = types.Int64PointerValue(resp.BaselineBreachImpactScore)
 		r.BaselineMatchingAssets = types.Int64PointerValue(resp.BaselineMatchingAssets)
-		r.Criteria = types.StringPointerValue(resp.Criteria)
+		// Set criteria field
+		if resp.Criteria != nil {
+			r.Criteria = types.StringValue(*resp.Criteria)
+		} else {
+			r.Criteria = types.StringNull()
+		}
+		// Set criteriaAsParams field
+		if resp.CriteriaAsParams != nil {
+			r.CriteriaAsParams = types.StringValue(*resp.CriteriaAsParams)
+		} else {
+			r.CriteriaAsParams = types.StringNull()
+		}
 		r.Description = types.StringPointerValue(resp.Description)
 		r.ID = types.StringPointerValue(resp.ID)
-		r.LowestInboundPolicyStatus = types.StringPointerValue(resp.LowestInboundPolicyStatus)
-		r.LowestOutboundPolicyStatus = types.StringPointerValue(resp.LowestOutboundPolicyStatus)
+		r.InboundAutoSyncDeploymentMode = types.StringPointerValue(resp.InboundAutoSyncDeploymentMode)
+		r.InboundAutoSyncIntervalMinutes = types.Int64PointerValue(resp.InboundAutoSyncIntervalMinutes)
+		r.InboundAutoSyncIncludeViolations = types.BoolPointerValue(resp.InboundAutoSyncIncludeViolations)
+		r.InboundAutoSyncViolationThreshold = types.Int64PointerValue(resp.InboundAutoSyncViolationThreshold)
+		r.OutboundAutoSyncDeploymentMode = types.StringPointerValue(resp.OutboundAutoSyncDeploymentMode)
+		r.OutboundAutoSyncIntervalMinutes = types.Int64PointerValue(resp.OutboundAutoSyncIntervalMinutes)
+		r.OutboundAutoSyncIncludeViolations = types.BoolPointerValue(resp.OutboundAutoSyncIncludeViolations)
+		r.OutboundAutoSyncViolationThreshold = types.Int64PointerValue(resp.OutboundAutoSyncViolationThreshold)
+		r.LowestInboundPolicyStatus = types.StringPointerValue(resp.LowestInboundSegmentAssetPolicyStatus)
+		r.LowestOutboundPolicyStatus = types.StringPointerValue(resp.LowestOutboundSegmentAssetPolicyStatus)
 		r.LowestProgressiveInboundPolicyStatus = types.StringPointerValue(resp.LowestProgressiveInboundPolicyStatus)
 		r.MatchingAssets = types.Int64PointerValue(resp.MatchingAssets)
 		r.Milestones = []tfTypes.TagBasedPolicyMilestone{}

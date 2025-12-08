@@ -2,10 +2,17 @@
 
 package shared
 
+import (
+	"time"
+)
+
 type TagBasedPolicyMilestone struct {
-	CompletionPercentage *float64 `json:"completionPercentage,omitempty"`
-	MilestoneID          *int64   `json:"milestoneId,omitempty"`
-	Name                 *string  `json:"name,omitempty"`
+	CompletedAt          *SafeTime `json:"completedAt,omitempty"`
+	CompletionPercentage *float64  `json:"completionPercentage,omitempty"`
+	MilestoneID          *int64    `json:"milestoneId,omitempty"`
+	Name                 *string   `json:"name,omitempty"`
+	StartedAt            *SafeTime `json:"startedAt,omitempty"`
+	TargetDate           *SafeTime `json:"targetDate,omitempty"`
 }
 
 func (o *TagBasedPolicyMilestone) GetCompletionPercentage() *float64 {
@@ -27,4 +34,28 @@ func (o *TagBasedPolicyMilestone) GetName() *string {
 		return nil
 	}
 	return o.Name
+}
+
+func (o *TagBasedPolicyMilestone) GetCompletedAt() *time.Time {
+	if o == nil || o.CompletedAt == nil {
+		return nil
+	}
+	t := o.CompletedAt.Time
+	return &t
+}
+
+func (o *TagBasedPolicyMilestone) GetStartedAt() *time.Time {
+	if o == nil || o.StartedAt == nil {
+		return nil
+	}
+	t := o.StartedAt.Time
+	return &t
+}
+
+func (o *TagBasedPolicyMilestone) GetTargetDate() *time.Time {
+	if o == nil || o.TargetDate == nil {
+		return nil
+	}
+	t := o.TargetDate.Time
+	return &t
 }

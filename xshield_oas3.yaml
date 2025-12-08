@@ -3192,18 +3192,28 @@ paths:
     put:
       tags:
       - tagbasedpolicies
+      - published
+      consumes:
+      - application/json
       summary: Send Automation Request on all assets matching tag based policy.
       description: Send Automation Request on all assets matching tag based policy.
       operationId: AutomationConfiguration
       x-speakeasy-entity-operation: Segment#update#2
       parameters:
-      - name: tagbasedpolicyId
+      - description: Tag ID
         in: path
         x-speakeasy-match: id
         description: Tag ID
         required: true
+        type: string
+      - description: TagsBasedPolicyAutomationConfig
+        in: body
+        name: body
+        required: true
         schema:
-          type: string
+          $ref: '#/components/schemas/TagsBasedPolicyAutomationConfig'
+      produces:
+      - application/json
       responses:
         "202":
           description: Accepted
@@ -3211,21 +3221,16 @@ paths:
             x-ct-workrequest-id:
               description: Tracking identifier for the work request applying any changes
                 triggered by automation configuration change
-              schema:
-                type: string
-          content: {}
+              type: string
         "400":
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
         "500":
           description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      
       x-permission:
         permission: UPDATE_POLICY_AUTOMATION
         permissionScope:
@@ -6260,10 +6265,12 @@ components:
           maxLength: 256
           type: string
         targetBreachImpactScore:
+          default: 50
           maximum: 100
           minimum: 0
           type: integer
         timeline:
+          default: 90
           minimum: 1
           type: integer
         criteria:
@@ -6276,6 +6283,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TemplateReference'
+      required:
+        - criteria
+        - tagBasedPolicyName
     TagBasedPolicyResponse:
       type: object
       x-speakeasy-entity: Segment
@@ -6321,28 +6331,43 @@ components:
         baselineMatchingAssets:
           x-speakeasy-param-readonly: true
           type: integer
-        # createdAt:
-        #   x-speakeasy-param-readonly: true
-        #   format: date-time
-        #   type: string
+        createdAt:
+          x-speakeasy-param-readonly: true
+          format: date-time
+          type: string
         policyAutomationConfigurable:
           x-speakeasy-param-readonly: true
           type: boolean
-        # policyProgressiveLastRefreshed:
-        #   nullable: true
-        #   x-go-custom-tag: 'omitempty'
-        #   x-speakeasy-param-readonly: true
-        #   format: date-time
-        #   type: string
-        autoSynchronizeEnabled:
+        lowestInboundSegmentAssetPolicyStatus:
+          x-speakeasy-param-readonly: true
+          type: string
+        lowestOutboundSegmentAssetPolicyStatus:
+          x-speakeasy-param-readonly: true
+          type: string
+        inboundAutoSyncDeploymentMode:
+          x-speakeasy-param-readonly: true
+          type: string
+        inboundAutoSyncIntervalMinutes:
+          x-speakeasy-param-readonly: true
+          type: integer
+        inboundAutoSyncIncludeViolations:
           x-speakeasy-param-readonly: true
           type: boolean
-        lowestInboundPolicyStatus:
+        inboundAutoSyncViolationThreshold:
+          x-speakeasy-param-readonly: true
+          type: integer
+        outboundAutoSyncDeploymentMode:
           x-speakeasy-param-readonly: true
           type: string
-        lowestOutboundPolicyStatus:
+        outboundAutoSyncIntervalMinutes:
           x-speakeasy-param-readonly: true
-          type: string
+          type: integer
+        outboundAutoSyncIncludeViolations:
+          x-speakeasy-param-readonly: true
+          type: boolean
+        outboundAutoSyncViolationThreshold:
+          x-speakeasy-param-readonly: true
+          type: integer
         lowestProgressiveInboundPolicyStatus:
           x-speakeasy-param-readonly: true
           type: string
@@ -6356,33 +6381,82 @@ components:
     TagBasedPolicySummary:
       type: object
       properties:
-        autoSynchronizeEnabled:
-          type: boolean
+        activeBreachModeTemplatesAssigned:
+          type: integer
+        allowTemplatesAssigned:
+          type: integer
+        assetInboundStatus:
+          additionalProperties: true
+          type: object
+        assetOutboundStatus:
+          additionalProperties: true
+          type: object
+        baselineBreachImpactScore:
+          type: integer
+        baselineMatchingAssets:
+          type: integer
+        blockTemplatesAssigned:
+          type: integer
+        createdAt:
+          format: date-time
+          type: string
         criteria:
           type: string
+        criteriaAsParams:
+          type: string
         description:
+          maxLength: 1000
           type: string
-        lowestInboundPolicyStatus:
+        inboundAutoSyncDeploymentMode:
           type: string
-        lowestOutboundPolicyStatus:
-          type: string
+        inboundAutoSyncIncludeViolations:
+          type: boolean
+        inboundAutoSyncIntervalMinutes:
+          type: integer
+        inboundAutoSyncViolationThreshold:
+          type: integer
         lowestProgressiveInboundPolicyStatus:
+          type: string
+        lowestProgressiveOutboundPolicyStatus:
           type: string
         matchingAssets:
           type: integer
         namednetworksAssigned:
           type: integer
+        outboundAutoSyncDeploymentMode:
+          type: string
+        outboundAutoSyncIncludeViolations:
+          type: boolean
+        outboundAutoSyncIntervalMinutes:
+          type: integer
+        outboundAutoSyncViolationThreshold:
+          type: integer
         policyAutomationConfigurable:
           type: boolean
         policyProgressiveLastRefreshed:
-          type: string
           format: date-time
+          type: string
+        policyProgressiveOutboundLastRefreshed:
+          format: date-time
+          type: string
         tagBasedPolicyId:
           type: string
         tagBasedPolicyName:
+          maxLength: 256
           type: string
+        targetBreachImpactScore:
+          default: 50
+          maximum: 100
+          minimum: 0
+          type: integer
         templatesAssigned:
           type: integer
+        timeline:
+          default: 90
+          minimum: 1
+          type: integer
+      required:
+        - tagBasedPolicyName
     TagRule:
       required:
       - ruleCriteria
@@ -6580,21 +6654,21 @@ components:
     TagBasedPolicyMilestone:
       type: object
       properties:
-        # completedAt:
-        #   format: date-time
-        #   type: string
+        completedAt:
+          format: date-time
+          type: string
         completionPercentage:
           type: number
         milestoneId:
           type: integer
         name:
           type: string
-        # startedAt:
-        #   format: date-time
-        #   type: string
-        # targetDate:
-        #   format: date-time
-        #   type: string
+        startedAt:
+          format: date-time
+          type: string
+        targetDate:
+          format: date-time
+          type: string
     TemplateSummary:
       required:
       - templateName
@@ -6963,6 +7037,57 @@ components:
       description: WorkRequest definition Represents a unit of work that will be evaluated
         asynchronously and tracks its progress and can be used to monitor asynchronous
         processing
+    model.TagsBasedPolicyAutomationConfig:
+      properties:
+        inboundAutoSyncDeploymentMode:
+          allOf:
+          - $ref: '#/components/schemas/AutoDeploymentMode'
+          enum:
+          - test
+          - ' enforce'
+          - ' disable'
+        inboundAutoSyncIncludeViolations:
+          type: boolean
+        inboundAutoSyncIntervalMinutes:
+          type: integer
+        inboundAutoSyncViolationThreshold:
+          type: integer
+        lowestProgressiveInboundPolicyStatus:
+          enum:
+          - any
+          - allow-all
+          - allow-with-bandwidth
+          - zerotrust
+          type: string
+        lowestProgressiveOutboundPolicyStatus:
+          enum:
+          - any
+          - zerotrust
+          type: string
+        outboundAutoSyncDeploymentMode:
+          allOf:
+          - $ref: '#/components/schemas/AutoDeploymentMode'
+          enum:
+          - test
+          - ' enforce'
+          - ' disable'
+        outboundAutoSyncIncludeViolations:
+          type: boolean
+        outboundAutoSyncIntervalMinutes:
+          type: integer
+        outboundAutoSyncViolationThreshold:
+          type: integer
+      type: object
+    AutoDeploymentMode:
+      enum:
+      - test
+      - enforce
+      - disable
+      type: string
+      x-enum-varnames:
+      - AutoSyncTestMode
+      - AutoSyncEnforceMode
+      - AutoSyncDisableMode
   securitySchemes:
     JWT:
       type: apiKey

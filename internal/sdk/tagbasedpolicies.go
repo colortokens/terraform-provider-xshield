@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/hooks"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
@@ -1023,11 +1025,25 @@ func (s *Tagbasedpolicies) AutomationConfiguration(ctx context.Context, request 
 		defer cancel()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PUT", opURL, nil)
+	// Serialize the request body
+	var bodyReader io.Reader
+	if request.RequestBody != nil {
+		bodyBytes, err := utils.MarshalJSON(request.RequestBody, reflect.StructTag(""), true)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", opURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	// Set Content-Type header for JSON request body
+	if request.RequestBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("User-Agent", s.sdkConfiguration.UserAgent)
 
 	if err := utils.PopulateSecurity(ctx, req, s.sdkConfiguration.Security); err != nil {
