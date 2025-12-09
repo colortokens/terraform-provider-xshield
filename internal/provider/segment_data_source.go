@@ -36,7 +36,6 @@ type SegmentDataSourceModel struct {
 	BaselineBreachImpactScore            types.Int64                             `tfsdk:"baseline_breach_impact_score"`
 	BaselineMatchingAssets               types.Int64                             `tfsdk:"baseline_matching_assets"`
 	Criteria                             types.String                            `tfsdk:"criteria"`
-	CriteriaAsParams                     types.String                            `tfsdk:"criteria_as_params"`
 	Description                          types.String                            `tfsdk:"description"`
 	ID                                   types.String                            `tfsdk:"id"`
 	InboundAutoSyncDeploymentMode        types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
@@ -78,9 +77,6 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed: true,
 			},
 			"criteria": schema.StringAttribute{
-				Computed: true,
-			},
-			"criteria_as_params": schema.StringAttribute{
 				Computed: true,
 			},
 			"description": schema.StringAttribute{

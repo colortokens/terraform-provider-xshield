@@ -32,16 +32,24 @@ func (m *appendManagedByModifier) PlanModifyString(ctx context.Context, req plan
 
 	planValue := req.PlanValue.ValueString()
 
-	// Check if the managedby condition is already present
-	if !strings.Contains(planValue, "'managedby' in ('colortokens')") {
-		// Append the managedby condition
-		modifiedValue := planValue + " AND 'managedby' in ('colortokens')"
-		tflog.Debug(ctx, "AppendManagedByModifier: Appending managedby condition", map[string]interface{}{
-			"original": planValue,
-			"modified": modifiedValue,
+	// Check if the managedby field is mentioned in any form
+	// Look for common patterns like 'managedby' = or 'managedby' in
+	if strings.Contains(strings.ToLower(planValue), "'managedby'") ||
+		strings.Contains(strings.ToLower(planValue), "\"managedby\"") {
+		// managedby is already specified in some form, honor it
+		tflog.Debug(ctx, "AppendManagedByModifier: managedby already specified, not modifying", map[string]interface{}{
+			"criteria": planValue,
 		})
-		resp.PlanValue = types.StringValue(modifiedValue)
+		return
 	}
+
+	// managedby not found, append the default condition
+	modifiedValue := planValue + " AND 'managedby' in ('colortokens')"
+	tflog.Debug(ctx, "AppendManagedByModifier: Appending managedby condition", map[string]interface{}{
+		"original": planValue,
+		"modified": modifiedValue,
+	})
+	resp.PlanValue = types.StringValue(modifiedValue)
 }
 
 // NormalizeDeploymentModeModifier returns a plan modifier that converts "enforce" to "enforced"

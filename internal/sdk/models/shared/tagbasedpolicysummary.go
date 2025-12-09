@@ -18,7 +18,6 @@ type TagBasedPolicySummary struct {
 	BlockTemplatesAssigned                 *int64                 `json:"blockTemplatesAssigned,omitempty"`
 	CreatedAt                              *SafeTime              `json:"createdAt,omitempty"`
 	Criteria                               *string                `json:"criteria,omitempty"`
-	CriteriaAsParams                       *string                `json:"criteriaAsParams,omitempty"`
 	Description                            *string                `json:"description,omitempty"`
 	InboundAutoSyncDeploymentMode          *string                `json:"inboundAutoSyncDeploymentMode,omitempty"`
 	InboundAutoSyncIncludeViolations       *bool                  `json:"inboundAutoSyncIncludeViolations,omitempty"`
@@ -60,7 +59,6 @@ func (t *TagBasedPolicySummary) UnmarshalJSON(data []byte) error {
 		BlockTemplatesAssigned                 *int64                 `json:"blockTemplatesAssigned,omitempty"`
 		CreatedAt                              *string                `json:"createdAt,omitempty"`
 		Criteria                               *string                `json:"criteria,omitempty"`
-		CriteriaAsParams                       *string                `json:"criteriaAsParams,omitempty"`
 		Description                            *string                `json:"description,omitempty"`
 		InboundAutoSyncDeploymentMode          *string                `json:"inboundAutoSyncDeploymentMode,omitempty"`
 		InboundAutoSyncIncludeViolations       *bool                  `json:"inboundAutoSyncIncludeViolations,omitempty"`
@@ -101,7 +99,6 @@ func (t *TagBasedPolicySummary) UnmarshalJSON(data []byte) error {
 	t.BaselineMatchingAssets = temp.BaselineMatchingAssets
 	t.BlockTemplatesAssigned = temp.BlockTemplatesAssigned
 	t.Criteria = temp.Criteria
-	t.CriteriaAsParams = temp.CriteriaAsParams
 	t.Description = temp.Description
 	t.InboundAutoSyncDeploymentMode = temp.InboundAutoSyncDeploymentMode
 	t.InboundAutoSyncIncludeViolations = temp.InboundAutoSyncIncludeViolations
@@ -217,13 +214,6 @@ func (o *TagBasedPolicySummary) GetCriteria() *string {
 		return nil
 	}
 	return o.Criteria
-}
-
-func (o *TagBasedPolicySummary) GetCriteriaAsParams() *string {
-	if o == nil {
-		return nil
-	}
-	return o.CriteriaAsParams
 }
 
 func (o *TagBasedPolicySummary) GetDescription() *string {

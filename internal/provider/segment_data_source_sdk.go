@@ -20,12 +20,6 @@ func (r *SegmentDataSourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *s
 		} else {
 			r.Criteria = types.StringNull()
 		}
-		// Set criteriaAsParams field
-		if resp.CriteriaAsParams != nil {
-			r.CriteriaAsParams = types.StringValue(*resp.CriteriaAsParams)
-		} else {
-			r.CriteriaAsParams = types.StringNull()
-		}
 		r.Description = types.StringPointerValue(resp.Description)
 		r.ID = types.StringPointerValue(resp.ID)
 		r.InboundAutoSyncDeploymentMode = types.StringPointerValue(resp.InboundAutoSyncDeploymentMode)

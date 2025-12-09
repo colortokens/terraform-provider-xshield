@@ -6528,8 +6528,6 @@ components:
           type: string
         criteria:
           type: string
-        criteriaAsParams:
-          type: string
         description:
           maxLength: 1000
           type: string

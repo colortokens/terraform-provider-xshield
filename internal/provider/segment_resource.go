@@ -465,13 +465,6 @@ func (r *SegmentResource) Create(ctx context.Context, req resource.CreateRequest
 		data.RefreshFromSharedTagBasedPolicyResponse(readRes.TagBasedPolicyResponse)
 	}
 
-	// Log final values before saving to state
-	tflog.Info(ctx, fmt.Sprintf("Final criteria value: %s", data.Criteria.ValueString()))
-	tflog.Info(ctx, fmt.Sprintf("Final inbound_auto_sync_interval_minutes value: %d", data.InboundAutoSyncIntervalMinutes.ValueInt64()))
-	tflog.Info(ctx, fmt.Sprintf("Final inbound_auto_sync_violation_threshold value: %d", data.InboundAutoSyncViolationThreshold.ValueInt64()))
-	tflog.Info(ctx, fmt.Sprintf("Final outbound_auto_sync_interval_minutes value: %d", data.OutboundAutoSyncIntervalMinutes.ValueInt64()))
-	tflog.Info(ctx, fmt.Sprintf("Final outbound_auto_sync_violation_threshold value: %d", data.OutboundAutoSyncViolationThreshold.ValueInt64()))
-
 	// Refresh plan to ensure consistency
 	refreshPlan(ctx, plan, &data, resp.Diagnostics)
 
