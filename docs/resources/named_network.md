@@ -14,16 +14,24 @@ NamedNetwork Resource
 
 ```terraform
 resource "xshield_named_network" "my_namednetwork" {
+  # Basic configuration
+  named_network_name        = "...my_named_network_name..."        # Name of the named network
+  named_network_description = "...my_named_network_description..." # Description of the named network
+  
+  # IP ranges to include in this named network
   ip_ranges = [
     {
-      ip_range = "...my_ip_range..."
+      ip_range = "192.168.1.0/24" # CIDR notation for the IP range
+    },
+    {
+      ip_range = "10.0.0.0/16"   # Another IP range example
     }
   ]
-  named_network_description = "...my_named_network_description..."
-  named_network_name        = "...my_named_network_name..."
-  program_as_intranet       = false
-  region                    = "...my_region..."
-  service                   = "...my_service..."
+  
+  # Additional settings
+  program_as_intranet = false              # Whether to treat programs as intranet traffic
+  region              = "...my_region..."  # Region associated with this named network
+  service             = "...my_service..." # Service associated with this named network
 }
 ```
 
@@ -32,36 +40,36 @@ resource "xshield_named_network" "my_namednetwork" {
 
 ### Optional
 
-- `ip_ranges` (Attributes List) (see [below for nested schema](#nestedatt--ip_ranges))
-- `named_network_description` (String)
-- `named_network_name` (String)
-- `program_as_intranet` (Boolean)
-- `region` (String)
-- `service` (String)
+- `ip_ranges` (Attributes List) List of IP ranges to include in this named network (see [below for nested schema](#nestedatt--ip_ranges))
+- `named_network_description` (String) Description of the named network. Maximum length is 1000 characters.
+- `named_network_name` (String) Name of the named network. Maximum length is 256 characters. Required.
+- `program_as_intranet` (Boolean) Whether to treat programs as intranet traffic
+- `region` (String) Region associated with this named network
+- `service` (String) Service associated with this named network
 
 ### Read-Only
 
-- `assigned_by_tag_based_policy` (Boolean)
-- `colortokens_managed` (Boolean)
-- `id` (String) The ID of this resource.
-- `named_network_assignments` (Number)
-- `namednetwork_tag_based_policy_assignments` (Number)
-- `program_as_internet` (Boolean)
-- `total_comments` (Number)
-- `total_count` (Number)
-- `usergroup_named_network_assignments` (Number)
+- `assigned_by_tag_based_policy` (Boolean) Whether this named network is assigned by a tag-based policy
+- `colortokens_managed` (Boolean) Whether this named network is managed by ColorTokens
+- `id` (String) The ID of this resource
+- `named_network_assignments` (Number) Count of assets assigned to this named network
+- `namednetwork_tag_based_policy_assignments` (Number) Count of tag-based policies that reference this named network
+- `program_as_internet` (Boolean) Whether programs are treated as internet traffic
+- `total_comments` (Number) Total number of comments on this named network
+- `total_count` (Number) Total count of IP addresses in this named network
+- `usergroup_named_network_assignments` (Number) Count of user groups assigned to this named network
 
 <a id="nestedatt--ip_ranges"></a>
 ### Nested Schema for `ip_ranges`
 
 Optional:
 
-- `ip_range` (String)
+- `ip_range` (String) CIDR notation of the IP range (e.g., "192.168.1.0/24")
 
 Read-Only:
 
-- `id` (String)
-- `ip_count` (Number)
+- `id` (String) Unique identifier for this IP range
+- `ip_count` (Number) Count of IP addresses in this range
 
 ## Import
 

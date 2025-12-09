@@ -14,6 +14,8 @@ Asset DataSource
 
 ```terraform
 data "xshield_asset" "my_asset" {
+  # Currently only lookup by ID is supported
+  id = "12345678-1234-1234-1234-123456789012"
 }
 ```
 
@@ -22,99 +24,122 @@ data "xshield_asset" "my_asset" {
 
 ### Required
 
-- `asset_name` (String)
-- `type` (String)
+- `id` (String) ID of the asset to look up
 
 ### Optional
 
-- `core_tags` (Map of String)
+- `asset_name` (String) Name of the asset (not currently used for lookup)
 
 ### Read-Only
 
-- `agent_id` (String)
-- `agent_name` (String)
-- `agent_status` (String)
-- `agent_version` (String)
-- `asset_availability` (String)
-- `asset_internet_facing` (Boolean)
-- `asset_risk` (String)
-- `attack_surface` (String)
+- `active_breach_mode_templates_assigned` (Number) Number of active breach mode templates assigned to the asset
+- `agent_id` (String) Unique identifier for the agent installed on this asset
+- `agent_last_check_in_time` (String) Timestamp of the last agent check-in
+- `agent_name` (String) Name of the agent installed on this asset
+- `agent_status` (String) Current status of the agent
+- `agent_version` (String) Version of the agent software
+- `allow_templates_assigned` (Number) Number of allow templates assigned to the asset
+- `asset_availability` (String) Availability status of the asset
+- `asset_internet_facing` (Boolean) Whether the asset is exposed to the internet
+- `asset_progressive_last_refreshed` (String) Timestamp when progressive policies were last refreshed
+- `asset_progressive_outbound_last_refreshed` (String) Timestamp when progressive outbound policies were last refreshed
+- `asset_risk` (String) Risk assessment for the asset
+- `attack_surface` (String) Attack surface assessment
 - `attack_surface_pending_changes` (Attributes) (see [below for nested schema](#nestedatt--attack_surface_pending_changes))
-- `auto_synchronize_enabled` (Boolean)
-- `blast_radius` (String)
+- `auto_synchronize_enabled` (Boolean) Whether auto-synchronization is enabled
+- `blast_radius` (String) Blast radius assessment
 - `blast_radius_pending_changes` (Attributes) (see [below for nested schema](#nestedatt--blast_radius_pending_changes))
-- `business_value` (String)
+- `block_malicious_ips` (Boolean) Whether blocking of malicious IPs is enabled
+- `business_value` (String) Business value classification of the asset
 - `cloud_tags` (Attributes List) (see [below for nested schema](#nestedatt--cloud_tags))
-- `cluster_identifier` (String)
-- `container_namespace` (String)
-- `cpu_core_count` (Number)
-- `cpu_name` (String)
-- `current_traffic_configuration` (String)
-- `deterministic_id` (String)
-- `disk_capacity_in_gb` (Number)
-- `host_name` (String)
-- `id` (String) The ID of this resource.
-- `inbound_asset_status` (String)
+- `cluster_identifier` (String) Identifier for the cluster this asset belongs to
+- `container_namespace` (String) Namespace for containerized assets
+- `cpu_core_count` (Number) Number of CPU cores
+- `cpu_name` (String) CPU model name
+- `current_traffic_configuration` (String) Current traffic configuration mode
+- `deterministic_id` (String) Deterministic identifier for the asset
+- `disk_capacity_in_gb` (Number) Disk capacity in gigabytes
+- `fw_coexistence_cfg_status` (String) Firewall coexistence configuration status
+- `host_name` (String) Hostname of the asset
+- `id` (String) The ID of this resource
+- `inbound_asset_deployment_state` (String) Deployment state for inbound policies
+- `inbound_asset_status` (String) Status of inbound policies
 - `inbound_internet_paths` (Attributes) (see [below for nested schema](#nestedatt--inbound_internet_paths))
 - `inbound_internet_ports` (Attributes) (see [below for nested schema](#nestedatt--inbound_internet_ports))
 - `inbound_intranet_paths` (Attributes) (see [below for nested schema](#nestedatt--inbound_intranet_paths))
 - `inbound_intranet_ports` (Attributes) (see [below for nested schema](#nestedatt--inbound_intranet_ports))
 - `interfaces` (Attributes List) (see [below for nested schema](#nestedatt--interfaces))
-- `kernel_architecture` (String)
-- `kernel_version` (String)
-- `lowest_inbound_asset_status` (String)
-- `lowest_outbound_asset_status` (String)
-- `lowest_progressive_inbound_asset_status` (String)
+- `kernel_architecture` (String) Architecture of the kernel
+- `kernel_version` (String) Version of the kernel
+- `lan_interface_name` (String) Name of the LAN interface
+- `lowest_inbound_asset_status` (String) Lowest status level for inbound policies
+- `lowest_outbound_asset_status` (String) Lowest status level for outbound policies
+- `lowest_progressive_inbound_asset_status` (String) Lowest status level for progressive inbound policies
+- `lowest_progressive_outbound_asset_status` (String) Lowest status level for progressive outbound policies
+- `managed_by` (String) Entity managing this asset
+- `micro_deployment_enabled` (Boolean) Whether micro-deployment is enabled
+- `most_recent_new_path` (String) Most recent new network path detected
 - `named_network_changes` (Attributes List) (see [below for nested schema](#nestedatt--named_network_changes))
-- `namednetworks_assigned` (Number)
-- `os_name` (String)
-- `outbound_asset_status` (String)
+- `namednetworks_assigned` (Number) Number of named networks assigned
+- `new_path_processing_stopped` (Boolean) Whether new path processing has been stopped
+- `os_name` (String) Operating system name
+- `outbound_asset_deployment_state` (String) Deployment state for outbound policies
+- `outbound_asset_status` (String) Status of outbound policies
 - `outbound_internet_paths` (Attributes) (see [below for nested schema](#nestedatt--outbound_internet_paths))
 - `outbound_intranet_paths` (Attributes) (see [below for nested schema](#nestedatt--outbound_intranet_paths))
-- `pending_attack_surface_changes` (Boolean)
-- `pending_blast_radius_changes` (Boolean)
-- `platform` (String)
-- `policies_assigned` (Number)
-- `policy_status` (String)
-- `ram_capacity_in_mb` (Number)
-- `security_patches` (Number)
+- `pending_attack_surface_changes` (Boolean) Whether there are pending attack surface changes
+- `pending_blast_radius_changes` (Boolean) Whether there are pending blast radius changes
+- `pending_fw_coexistence_update_changes` (Attributes) (see [below for nested schema](#nestedatt--pending_fw_coexistence_update_changes))
+- `platform` (String) Platform of the asset
+- `policies_assigned` (Number) Number of policies assigned
+- `policy_status` (String) Status of policy application
+- `programs` (Attributes List) Running processes or containers (see [below for nested schema](#nestedatt--programs))
+- `progressive_inbound_asset_status` (String) Status of progressive inbound policies
+- `ram_capacity_in_mb` (Number) RAM capacity in megabytes
+- `rule_synchronize_status` (String) Status of rule synchronization
+- `security_patches` (Number) Number of security patches applied
+- `serial_number` (String) Serial number of the asset
 - `tags` (Attributes List) (see [below for nested schema](#nestedatt--tags))
 - `template_changes` (Attributes List) (see [below for nested schema](#nestedatt--template_changes))
-- `templates_assigned` (Number)
-- `total_comments` (Number)
-- `total_inbound_comments` (Number)
-- `total_outbound_comments` (Number)
-- `total_paths` (Number)
-- `total_ports` (Number)
-- `total_ports_path_restricted` (Number)
-- `unreviewed_paths` (Number)
-- `unreviewed_ports` (Number)
+- `templates_assigned` (Number) Number of templates assigned
+- `total_breach_response_comments` (Number) Total number of breach response comments
+- `total_comments` (Number) Total number of comments
+- `total_inbound_comments` (Number) Total number of inbound comments
+- `total_outbound_comments` (Number) Total number of outbound comments
+- `total_paths` (Number) Total number of network paths
+- `total_ports` (Number) Total number of ports
+- `total_ports_path_restricted` (Number) Total number of restricted ports/paths
+- `unreviewed_paths` (Number) Number of unreviewed paths
+- `unreviewed_ports` (Number) Number of unreviewed ports
+- `usergroup_most_recent_new_path` (String) Most recent new path detected for user groups
 - `usergroup_outbound_internet_paths` (Attributes) (see [below for nested schema](#nestedatt--usergroup_outbound_internet_paths))
 - `usergroup_outbound_intranet_paths` (Attributes) (see [below for nested schema](#nestedatt--usergroup_outbound_intranet_paths))
-- `usergroup_total_paths` (Number)
-- `usergroup_unreviewed_paths` (Number)
+- `usergroup_total_paths` (Number) Total number of user group paths
+- `usergroup_unreviewed_paths` (Number) Number of unreviewed user group paths
 - `usergroups` (Attributes List) (see [below for nested schema](#nestedatt--usergroups))
 - `users` (Attributes List) (see [below for nested schema](#nestedatt--users))
-- `vendor_info` (String)
-- `virtualization_system` (String)
-- `vulnerabilities` (Number)
+- `vendor_info` (String) Vendor information
+- `virtualization_system` (String) Virtualization system in use
+- `vulnerabilities` (Number) Number of vulnerabilities detected
 
 <a id="nestedatt--attack_surface_pending_changes"></a>
 ### Nested Schema for `attack_surface_pending_changes`
 
 Read-Only:
 
-- `allow_templates` (List of String)
-- `block_templates` (List of String)
-- `internet_paths` (Number)
-- `internet_ports` (Number)
-- `intranet_change` (List of String)
-- `intranet_paths` (Number)
-- `intranet_ports` (Number)
-- `namednetwork_change` (List of String)
-- `progressive_sync_pending` (Boolean)
-- `unassigned_allow_templates` (List of String)
-- `unassigned_block_templates` (List of String)
+- `allow_templates` (List of String) List of allow templates with pending changes
+- `block_templates` (List of String) List of block templates with pending changes
+- `fw_coexistence_cfg_update_pending` (Boolean) Whether firewall coexistence configuration update is pending
+- `internet_paths` (Number) Number of internet paths with pending changes
+- `internet_ports` (Number) Number of internet ports with pending changes
+- `intranet_change` (List of String) List of intranet changes pending
+- `intranet_paths` (Number) Number of intranet paths with pending changes
+- `intranet_ports` (Number) Number of intranet ports with pending changes
+- `namednetwork_change` (List of String) List of named network changes pending
+- `peer_change` (Boolean) Whether peer changes are pending
+- `progressive_sync_pending` (Boolean) Whether progressive sync is pending
+- `unassigned_allow_templates` (List of String) List of unassigned allow templates with pending changes
+- `unassigned_block_templates` (List of String) List of unassigned block templates with pending changes
 
 
 <a id="nestedatt--blast_radius_pending_changes"></a>
@@ -122,17 +147,19 @@ Read-Only:
 
 Read-Only:
 
-- `allow_templates` (List of String)
-- `block_templates` (List of String)
-- `internet_paths` (Number)
-- `internet_ports` (Number)
-- `intranet_change` (List of String)
-- `intranet_paths` (Number)
-- `intranet_ports` (Number)
-- `namednetwork_change` (List of String)
-- `progressive_sync_pending` (Boolean)
-- `unassigned_allow_templates` (List of String)
-- `unassigned_block_templates` (List of String)
+- `allow_templates` (List of String) List of allow templates with pending changes in blast radius
+- `block_templates` (List of String) List of block templates with pending changes in blast radius
+- `fw_coexistence_cfg_update_pending` (Boolean) Whether firewall coexistence configuration update is pending in blast radius
+- `internet_paths` (Number) Number of internet paths with pending changes in blast radius
+- `internet_ports` (Number) Number of internet ports with pending changes in blast radius
+- `intranet_change` (List of String) List of intranet changes pending in blast radius
+- `intranet_paths` (Number) Number of intranet paths with pending changes in blast radius
+- `intranet_ports` (Number) Number of intranet ports with pending changes in blast radius
+- `namednetwork_change` (List of String) List of named network changes pending in blast radius
+- `peer_change` (Boolean) Whether peer changes are pending in blast radius
+- `progressive_sync_pending` (Boolean) Whether progressive sync is pending in blast radius
+- `unassigned_allow_templates` (List of String) List of unassigned allow templates with pending changes in blast radius
+- `unassigned_block_templates` (List of String) List of unassigned block templates with pending changes in blast radius
 
 
 <a id="nestedatt--cloud_tags"></a>
@@ -142,8 +169,8 @@ Read-Only:
 
 - `id` (String) Unique identifier for this tag instance. Should be provided to any other endpoints accepting tagId to reference this particular tag definition.
 - `is_cloud_tag` (Boolean) Set to true if tag is mirror of cloud provider resource tag (AWS / AZURE / GCP / OCI)
-- `key` (String) Tag Name, human readable name for this tag e.g Environment
-- `value` (String) Tag Value, human readable value for this tag e.g Development
+- `key` (String) Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.
+- `value` (String) Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.
 
 
 <a id="nestedatt--inbound_internet_paths"></a>
@@ -245,8 +272,8 @@ Read-Only:
 
 - `id` (String) Unique identifier for this tag instance. Should be provided to any other endpoints accepting tagId to reference this particular tag definition.
 - `is_cloud_tag` (Boolean) Set to true if tag is mirror of cloud provider resource tag (AWS / AZURE / GCP / OCI)
-- `key` (String) Tag Name, human readable name for this tag e.g Environment
-- `value` (String) Tag Value, human readable value for this tag e.g Development
+- `key` (String) Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.
+- `value` (String) Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.
 
 
 <a id="nestedatt--template_changes"></a>
@@ -280,6 +307,24 @@ Read-Only:
 - `reviewed` (Number)
 - `total` (Number)
 - `unreviewed` (Number)
+
+
+<a id="nestedatt--pending_fw_coexistence_update_changes"></a>
+### Nested Schema for `pending_fw_coexistence_update_changes`
+
+Read-Only:
+
+- `fw_coexistence_cfg_update_pending` (Boolean) Whether firewall coexistence configuration update is pending
+
+
+<a id="nestedatt--programs"></a>
+### Nested Schema for `programs`
+
+Read-Only:
+
+- `image` (String) Container image or program image
+- `name` (String) Name of the program or container
+- `path` (String) Path to the program or container
 
 
 <a id="nestedatt--usergroups"></a>

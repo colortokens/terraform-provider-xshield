@@ -14,13 +14,21 @@ TagRule Resource
 
 ```terraform
 resource "xshield_tag_rule" "my_tagrule" {
+  # Required field - criteria expression that defines when this tag rule should be applied
+  rule_criteria = "...my_rule_criteria..."
+  
+  # Optional fields
+  rule_name        = "...my_rule_name..."        # Name for identification
+  rule_description = "...my_rule_description..." # Description explaining purpose
+  rule_enabled     = true                        # Whether rule is active
+  
+  # Tags to apply when rule criteria matches an asset
+  # Keys represent tag names, values represent tag values
   on_match = {
-    key = "value"
+    environment = "production"
+    application = "web-server"
+    owner       = "platform-team"
   }
-  rule_criteria    = "...my_rule_criteria..."
-  rule_description = "...my_rule_description..."
-  rule_enabled     = true
-  rule_name        = "...my_rule_name..."
 }
 ```
 
@@ -29,19 +37,19 @@ resource "xshield_tag_rule" "my_tagrule" {
 
 ### Required
 
-- `rule_criteria` (String)
+- `rule_criteria` (String) Criteria expression that defines when this tag rule should be applied. Uses the same expression language as segments.
 
 ### Optional
 
-- `on_match` (Map of String)
-- `rule_description` (String)
-- `rule_enabled` (Boolean)
-- `rule_name` (String)
+- `on_match` (Map of String) Key-value pairs to apply as tags when the rule criteria matches an asset. Keys represent tag names and values represent tag values.
+- `rule_description` (String) Description of the tag rule explaining its purpose and function.
+- `rule_enabled` (Boolean) Whether the tag rule is currently active and being evaluated against assets. Default is true.
+- `rule_name` (String) Name of the tag rule for identification and display purposes.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
-- `matching_assets` (Number)
+- `id` (String) The unique identifier of this tag rule resource.
+- `matching_assets` (Number) Count of assets currently matching this tag rule's criteria.
 
 ## Import
 
