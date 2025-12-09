@@ -251,11 +251,11 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 						},
 						"key": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment`,
+							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
 						},
 						"value": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development`,
+							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
 						},
 					},
 				},
@@ -507,11 +507,11 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 						},
 						"key": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment`,
+							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
 						},
 						"value": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development`,
+							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
 						},
 					},
 				},

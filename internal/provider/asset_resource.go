@@ -37,76 +37,117 @@ type AssetResource struct {
 
 // AssetResourceModel describes the resource data model.
 type AssetResourceModel struct {
-	AgentID                             types.String                            `tfsdk:"agent_id"`
-	AgentName                           types.String                            `tfsdk:"agent_name"`
-	AgentStatus                         types.String                            `tfsdk:"agent_status"`
-	AgentVersion                        types.String                            `tfsdk:"agent_version"`
-	AssetAvailability                   types.String                            `tfsdk:"asset_availability"`
-	AssetInternetFacing                 types.Bool                              `tfsdk:"asset_internet_facing"`
-	AssetName                           types.String                            `tfsdk:"asset_name"`
-	AssetRisk                           types.String                            `tfsdk:"asset_risk"`
-	AttackSurface                       types.String                            `tfsdk:"attack_surface"`
-	AttackSurfacePendingChanges         *tfTypes.PendingChanges                 `tfsdk:"attack_surface_pending_changes"`
-	AutoSynchronizeEnabled              types.Bool                              `tfsdk:"auto_synchronize_enabled"`
-	BlastRadius                         types.String                            `tfsdk:"blast_radius"`
-	BlastRadiusPendingChanges           *tfTypes.PendingChanges                 `tfsdk:"blast_radius_pending_changes"`
-	BusinessValue                       types.String                            `tfsdk:"business_value"`
-	CloudTags                           []tfTypes.Tag                           `tfsdk:"cloud_tags"`
-	ClusterIdentifier                   types.String                            `tfsdk:"cluster_identifier"`
-	ContainerNamespace                  types.String                            `tfsdk:"container_namespace"`
-	CoreTags                            map[string]types.String                 `tfsdk:"core_tags"`
-	CPUCoreCount                        types.Int64                             `tfsdk:"cpu_core_count"`
-	CPUName                             types.String                            `tfsdk:"cpu_name"`
-	CurrentTrafficConfiguration         types.String                            `tfsdk:"current_traffic_configuration"`
-	DeterministicID                     types.String                            `tfsdk:"deterministic_id"`
-	DiskCapacityInGB                    types.Int64                             `tfsdk:"disk_capacity_in_gb"`
-	HostName                            types.String                            `tfsdk:"host_name"`
-	ID                                  types.String                            `tfsdk:"id"`
-	InboundAssetStatus                  types.String                            `tfsdk:"inbound_asset_status"`
-	InboundInternetPaths                *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_paths"`
-	InboundInternetPorts                *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_ports"`
-	InboundIntranetPaths                *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_paths"`
-	InboundIntranetPorts                *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_ports"`
-	Interfaces                          []tfTypes.NetworkInterface              `tfsdk:"interfaces"`
-	KernelArchitecture                  types.String                            `tfsdk:"kernel_architecture"`
-	KernelVersion                       types.String                            `tfsdk:"kernel_version"`
-	LowestInboundAssetStatus            types.String                            `tfsdk:"lowest_inbound_asset_status"`
-	LowestOutboundAssetStatus           types.String                            `tfsdk:"lowest_outbound_asset_status"`
-	LowestProgressiveInboundAssetStatus types.String                            `tfsdk:"lowest_progressive_inbound_asset_status"`
-	NamedNetworkChanges                 []tfTypes.MetadataNamedNetworkReference `tfsdk:"named_network_changes"`
-	NamednetworksAssigned               types.Int64                             `tfsdk:"namednetworks_assigned"`
-	OsName                              types.String                            `tfsdk:"os_name"`
-	OutboundAssetStatus                 types.String                            `tfsdk:"outbound_asset_status"`
-	OutboundInternetPaths               *tfTypes.ReviewCoverage                 `tfsdk:"outbound_internet_paths"`
-	OutboundIntranetPaths               *tfTypes.ReviewCoverage                 `tfsdk:"outbound_intranet_paths"`
-	PendingAttackSurfaceChanges         types.Bool                              `tfsdk:"pending_attack_surface_changes"`
-	PendingBlastRadiusChanges           types.Bool                              `tfsdk:"pending_blast_radius_changes"`
-	Platform                            types.String                            `tfsdk:"platform"`
-	PoliciesAssigned                    types.Int64                             `tfsdk:"policies_assigned"`
-	PolicyStatus                        types.String                            `tfsdk:"policy_status"`
-	RAMCapacityInMB                     types.Int64                             `tfsdk:"ram_capacity_in_mb"`
-	SecurityPatches                     types.Int64                             `tfsdk:"security_patches"`
-	Tags                                []tfTypes.Tag                           `tfsdk:"tags"`
-	TemplateChanges                     []tfTypes.TemplateReference             `tfsdk:"template_changes"`
-	TemplatesAssigned                   types.Int64                             `tfsdk:"templates_assigned"`
-	TotalComments                       types.Int64                             `tfsdk:"total_comments"`
-	TotalInboundComments                types.Int64                             `tfsdk:"total_inbound_comments"`
-	TotalOutboundComments               types.Int64                             `tfsdk:"total_outbound_comments"`
-	TotalPaths                          types.Int64                             `tfsdk:"total_paths"`
-	TotalPorts                          types.Int64                             `tfsdk:"total_ports"`
-	TotalPortsPathRestricted            types.Int64                             `tfsdk:"total_ports_path_restricted"`
-	Type                                types.String                            `tfsdk:"type"`
-	UnreviewedPaths                     types.Int64                             `tfsdk:"unreviewed_paths"`
-	UnreviewedPorts                     types.Int64                             `tfsdk:"unreviewed_ports"`
-	UsergroupOutboundInternetPaths      *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_internet_paths"`
-	UsergroupOutboundIntranetPaths      *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_intranet_paths"`
-	UsergroupTotalPaths                 types.Int64                             `tfsdk:"usergroup_total_paths"`
-	UsergroupUnreviewedPaths            types.Int64                             `tfsdk:"usergroup_unreviewed_paths"`
-	Usergroups                          []tfTypes.AssetGroup                    `tfsdk:"usergroups"`
-	Users                               []tfTypes.AssetUser                     `tfsdk:"users"`
-	VendorInfo                          types.String                            `tfsdk:"vendor_info"`
-	VirtualizationSystem                types.String                            `tfsdk:"virtualization_system"`
-	Vulnerabilities                     types.Int64                             `tfsdk:"vulnerabilities"`
+	ActiveBreachModeTemplatesAssigned     types.Int64                             `tfsdk:"active_breach_mode_templates_assigned"`
+	AgentID                               types.String                            `tfsdk:"agent_id"`
+	AgentLastCheckInTime                  types.String                            `tfsdk:"agent_last_check_in_time"`
+	AgentName                             types.String                            `tfsdk:"agent_name"`
+	AgentStatus                           types.String                            `tfsdk:"agent_status"`
+	AgentVersion                          types.String                            `tfsdk:"agent_version"`
+	AllowTemplatesAssigned                types.Int64                             `tfsdk:"allow_templates_assigned"`
+	AssetAvailability                     types.String                            `tfsdk:"asset_availability"`
+	AssetInternetFacing                   types.Bool                              `tfsdk:"asset_internet_facing"`
+	AssetName                             types.String                            `tfsdk:"asset_name"`
+	AssetProgressiveLastRefreshed         types.String                            `tfsdk:"asset_progressive_last_refreshed"`
+	AssetProgressiveOutboundLastRefreshed types.String                            `tfsdk:"asset_progressive_outbound_last_refreshed"`
+	AssetRisk                             types.String                            `tfsdk:"asset_risk"`
+	AttackSurface                         types.String                            `tfsdk:"attack_surface"`
+	AttackSurfacePendingChanges           *tfTypes.PendingChanges                 `tfsdk:"attack_surface_pending_changes"`
+	AutoSynchronizeEnabled                types.Bool                              `tfsdk:"auto_synchronize_enabled"`
+	BlastRadius                           types.String                            `tfsdk:"blast_radius"`
+	BlastRadiusPendingChanges             *tfTypes.PendingChanges                 `tfsdk:"blast_radius_pending_changes"`
+	BlockMaliciousIPs                     types.String                            `tfsdk:"block_malicious_ips"`
+	BlockTemplatesAssigned                types.Int64                             `tfsdk:"block_templates_assigned"`
+	BreachResponseLevel                   types.String                            `tfsdk:"breach_response_level"`
+	BreachResponseModeSynced              types.String                            `tfsdk:"breach_response_mode_synced"`
+	BusinessValue                         types.String                            `tfsdk:"business_value"`
+	CloudTags                             []tfTypes.Tag                           `tfsdk:"cloud_tags"`
+	ClusterIdentifier                     types.String                            `tfsdk:"cluster_identifier"`
+	ContainerNamespace                    types.String                            `tfsdk:"container_namespace"`
+	CoreTags                              map[string]types.String                 `tfsdk:"core_tags"`
+	CPUCoreCount                          types.Int64                             `tfsdk:"cpu_core_count"`
+	CPUName                               types.String                            `tfsdk:"cpu_name"`
+	CurrentTrafficConfiguration           types.String                            `tfsdk:"current_traffic_configuration"`
+	DeterministicID                       types.String                            `tfsdk:"deterministic_id"`
+	DiskCapacityInGB                      types.Int64                             `tfsdk:"disk_capacity_in_gb"`
+	FwCoexistenceCfgStatus                types.String                            `tfsdk:"fw_coexistence_cfg_status"`
+	HostName                              types.String                            `tfsdk:"host_name"`
+	ID                                    types.String                            `tfsdk:"id"`
+	InboundAssetDeploymentState           types.String                            `tfsdk:"inbound_asset_deployment_state"`
+	InboundAssetPolicyMode                types.String                            `tfsdk:"inbound_asset_policy_mode"`
+	InboundAssetPolicyUpdatedAt           types.String                            `tfsdk:"inbound_asset_policy_updated_at"`
+	InboundAssetStatus                    types.String                            `tfsdk:"inbound_asset_status"`
+	InboundAutoSyncDeploymentMode         types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
+	InboundAutoSyncIncludeViolations      types.Bool                              `tfsdk:"inbound_auto_sync_include_violations"`
+	InboundAutoSyncIntervalMinutes        types.Int64                             `tfsdk:"inbound_auto_sync_interval_minutes"`
+	InboundAutoSyncViolationThreshold     types.Int64                             `tfsdk:"inbound_auto_sync_violation_threshold"`
+	InboundInternetPaths                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_paths"`
+	InboundInternetPorts                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_ports"`
+	InboundIntranetPaths                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_paths"`
+	InboundIntranetPorts                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_ports"`
+	Interfaces                            []tfTypes.NetworkInterface              `tfsdk:"interfaces"`
+	KernelArchitecture                    types.String                            `tfsdk:"kernel_architecture"`
+	KernelVersion                         types.String                            `tfsdk:"kernel_version"`
+	LanInterfaceName                      types.String                            `tfsdk:"lan_interface_name"`
+	LastPolicyDeploymentTriggeredAt       types.String                            `tfsdk:"last_policy_deployment_triggered_at"`
+	LateralMovementAttacks                types.Int64                             `tfsdk:"lateral_movement_attacks"`
+	LateralMovementTechniques             types.Int64                             `tfsdk:"lateral_movement_techniques"`
+	LowestInboundAssetStatus              types.String                            `tfsdk:"lowest_inbound_asset_status"`
+	LowestOutboundAssetStatus             types.String                            `tfsdk:"lowest_outbound_asset_status"`
+	LowestProgressiveInboundAssetStatus   types.String                            `tfsdk:"lowest_progressive_inbound_asset_status"`
+	LowestProgressiveOutboundAssetStatus  types.String                            `tfsdk:"lowest_progressive_outbound_asset_status"`
+	ManagedBy                             types.String                            `tfsdk:"managed_by"`
+	MicroDeploymentEnabled                types.Bool                              `tfsdk:"micro_deployment_enabled"`
+	MostRecentNewPath                     types.String                            `tfsdk:"most_recent_new_path"`
+	NamedNetworkChanges                   []tfTypes.MetadataNamedNetworkReference `tfsdk:"named_network_changes"`
+	NamednetworksAssigned                 types.Int64                             `tfsdk:"namednetworks_assigned"`
+	NewPathProcessingStopped              types.Bool                              `tfsdk:"new_path_processing_stopped"`
+	OsName                                types.String                            `tfsdk:"os_name"`
+	OutboundAssetDeploymentState          types.String                            `tfsdk:"outbound_asset_deployment_state"`
+	OutboundAssetPolicyMode               types.String                            `tfsdk:"outbound_asset_policy_mode"`
+	OutboundAssetPolicyUpdatedAt          types.String                            `tfsdk:"outbound_asset_policy_updated_at"`
+	OutboundAssetStatus                   types.String                            `tfsdk:"outbound_asset_status"`
+	OutboundAutoSyncDeploymentMode        types.String                            `tfsdk:"outbound_auto_sync_deployment_mode"`
+	OutboundAutoSyncIncludeViolations     types.Bool                              `tfsdk:"outbound_auto_sync_include_violations"`
+	OutboundAutoSyncIntervalMinutes       types.Int64                             `tfsdk:"outbound_auto_sync_interval_minutes"`
+	OutboundAutoSyncViolationThreshold    types.Int64                             `tfsdk:"outbound_auto_sync_violation_threshold"`
+	OutboundInternetPaths                 *tfTypes.ReviewCoverage                 `tfsdk:"outbound_internet_paths"`
+	OutboundIntranetPaths                 *tfTypes.ReviewCoverage                 `tfsdk:"outbound_intranet_paths"`
+	PendingAttackSurfaceChanges           types.Bool                              `tfsdk:"pending_attack_surface_changes"`
+	PendingBlastRadiusChanges             types.Bool                              `tfsdk:"pending_blast_radius_changes"`
+	PendingFWCoexistenceUpdateChanges     types.Bool                              `tfsdk:"pending_fw_coexistence_update_changes"`
+	Platform                              types.String                            `tfsdk:"platform"`
+	PoliciesAssigned                      types.Int64                             `tfsdk:"policies_assigned"`
+	PolicyStatus                          types.String                            `tfsdk:"policy_status"`
+	Programs                              []tfTypes.Program                       `tfsdk:"programs"`
+	ProgressiveInboundAssetStatus         types.String                            `tfsdk:"progressive_inbound_asset_status"`
+	ProgressiveOutboundAssetStatus        types.String                            `tfsdk:"progressive_outbound_asset_status"`
+	RAMCapacityInMB                       types.Int64                             `tfsdk:"ram_capacity_in_mb"`
+	RuleSynchronizeStatus                 types.String                            `tfsdk:"rule_synchronize_status"`
+	SecurityPatches                       types.Int64                             `tfsdk:"security_patches"`
+	SerialNumber                          types.String                            `tfsdk:"serial_number"`
+	Tags                                  []tfTypes.Tag                           `tfsdk:"tags"`
+	TemplateChanges                       []tfTypes.TemplateReference             `tfsdk:"template_changes"`
+	TemplatesAssigned                     types.Int64                             `tfsdk:"templates_assigned"`
+	TotalBreachResponseComments           types.Int64                             `tfsdk:"total_breach_response_comments"`
+	TotalComments                         types.Int64                             `tfsdk:"total_comments"`
+	TotalInboundComments                  types.Int64                             `tfsdk:"total_inbound_comments"`
+	TotalOutboundComments                 types.Int64                             `tfsdk:"total_outbound_comments"`
+	TotalPaths                            types.Int64                             `tfsdk:"total_paths"`
+	TotalPorts                            types.Int64                             `tfsdk:"total_ports"`
+	TotalPortsPathRestricted              types.Int64                             `tfsdk:"total_ports_path_restricted"`
+	Type                                  types.String                            `tfsdk:"type"`
+	UnreviewedPaths                       types.Int64                             `tfsdk:"unreviewed_paths"`
+	UnreviewedPorts                       types.Int64                             `tfsdk:"unreviewed_ports"`
+	UsergroupMostRecentNewPath            types.String                            `tfsdk:"usergroup_most_recent_new_path"`
+	UsergroupOutboundInternetPaths        *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_internet_paths"`
+	UsergroupOutboundIntranetPaths        *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_intranet_paths"`
+	UsergroupTotalPaths                   types.Int64                             `tfsdk:"usergroup_total_paths"`
+	UsergroupUnreviewedPaths              types.Int64                             `tfsdk:"usergroup_unreviewed_paths"`
+	Usergroups                            []tfTypes.AssetGroup                    `tfsdk:"usergroups"`
+	Users                                 []tfTypes.AssetUser                     `tfsdk:"users"`
+	VendorInfo                            types.String                            `tfsdk:"vendor_info"`
+	VirtualizationSystem                  types.String                            `tfsdk:"virtualization_system"`
+	Vulnerabilities                       types.Int64                             `tfsdk:"vulnerabilities"`
 }
 
 func (r *AssetResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -117,7 +158,13 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Asset Resource. **Note: Assets cannot be created through Terraform. You must import existing assets using 'terraform import'.**",
 		Attributes: map[string]schema.Attribute{
+			"active_breach_mode_templates_assigned": schema.Int64Attribute{
+				Computed: true,
+			},
 			"agent_id": schema.StringAttribute{
+				Computed: true,
+			},
+			"agent_last_check_in_time": schema.StringAttribute{
 				Computed: true,
 			},
 			"agent_name": schema.StringAttribute{
@@ -129,6 +176,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"agent_version": schema.StringAttribute{
 				Computed: true,
 			},
+			"allow_templates_assigned": schema.Int64Attribute{
+				Computed: true,
+			},
 			"asset_availability": schema.StringAttribute{
 				Computed: true,
 			},
@@ -137,6 +187,12 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			},
 			"asset_name": schema.StringAttribute{
 				Required: true,
+			},
+			"asset_progressive_last_refreshed": schema.StringAttribute{
+				Computed: true,
+			},
+			"asset_progressive_outbound_last_refreshed": schema.StringAttribute{
+				Computed: true,
 			},
 			"asset_risk": schema.StringAttribute{
 				Computed: true,
@@ -154,6 +210,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"block_templates": schema.ListAttribute{
 						Computed:    true,
 						ElementType: types.StringType,
+					},
+					"fw_coexistence_cfg_update_pending": schema.BoolAttribute{
+						Computed: true,
 					},
 					"internet_paths": schema.Int64Attribute{
 						Computed: true,
@@ -174,6 +233,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					"namednetwork_change": schema.ListAttribute{
 						Computed:    true,
 						ElementType: types.StringType,
+					},
+					"peer_change": schema.BoolAttribute{
+						Computed: true,
 					},
 					"progressive_sync_pending": schema.BoolAttribute{
 						Computed: true,
@@ -205,6 +267,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Computed:    true,
 						ElementType: types.StringType,
 					},
+					"fw_coexistence_cfg_update_pending": schema.BoolAttribute{
+						Computed: true,
+					},
 					"internet_paths": schema.Int64Attribute{
 						Computed: true,
 					},
@@ -225,6 +290,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						Computed:    true,
 						ElementType: types.StringType,
 					},
+					"peer_change": schema.BoolAttribute{
+						Computed: true,
+					},
 					"progressive_sync_pending": schema.BoolAttribute{
 						Computed: true,
 					},
@@ -237,6 +305,18 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						ElementType: types.StringType,
 					},
 				},
+			},
+			"block_malicious_ips": schema.StringAttribute{
+				Computed: true,
+			},
+			"block_templates_assigned": schema.Int64Attribute{
+				Computed: true,
+			},
+			"breach_response_level": schema.StringAttribute{
+				Computed: true,
+			},
+			"breach_response_mode_synced": schema.StringAttribute{
+				Computed: true,
 			},
 			"business_value": schema.StringAttribute{
 				Computed: true,
@@ -255,11 +335,11 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						},
 						"key": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment`,
+							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
 						},
 						"value": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development`,
+							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
 						},
 					},
 				},
@@ -298,13 +378,37 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"disk_capacity_in_gb": schema.Int64Attribute{
 				Computed: true,
 			},
+			"fw_coexistence_cfg_status": schema.StringAttribute{
+				Computed: true,
+			},
 			"host_name": schema.StringAttribute{
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
+			"inbound_asset_deployment_state": schema.StringAttribute{
+				Computed: true,
+			},
+			"inbound_asset_policy_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"inbound_asset_policy_updated_at": schema.StringAttribute{
+				Computed: true,
+			},
 			"inbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed: true,
+			},
+			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
 				Computed: true,
 			},
 			"inbound_internet_paths": schema.SingleNestedAttribute{
@@ -414,6 +518,18 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"kernel_version": schema.StringAttribute{
 				Computed: true,
 			},
+			"lan_interface_name": schema.StringAttribute{
+				Computed: true,
+			},
+			"last_policy_deployment_triggered_at": schema.StringAttribute{
+				Computed: true,
+			},
+			"lateral_movement_attacks": schema.Int64Attribute{
+				Computed: true,
+			},
+			"lateral_movement_techniques": schema.Int64Attribute{
+				Computed: true,
+			},
 			"lowest_inbound_asset_status": schema.StringAttribute{
 				Computed: true,
 			},
@@ -421,6 +537,18 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Computed: true,
 			},
 			"lowest_progressive_inbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
+			"lowest_progressive_outbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
+			"managed_by": schema.StringAttribute{
+				Computed: true,
+			},
+			"micro_deployment_enabled": schema.BoolAttribute{
+				Computed: true,
+			},
+			"most_recent_new_path": schema.StringAttribute{
 				Computed: true,
 			},
 			"named_network_changes": schema.ListNestedAttribute{
@@ -439,10 +567,34 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"namednetworks_assigned": schema.Int64Attribute{
 				Computed: true,
 			},
+			"new_path_processing_stopped": schema.BoolAttribute{
+				Computed: true,
+			},
 			"os_name": schema.StringAttribute{
 				Computed: true,
 			},
+			"outbound_asset_deployment_state": schema.StringAttribute{
+				Computed: true,
+			},
+			"outbound_asset_policy_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"outbound_asset_policy_updated_at": schema.StringAttribute{
+				Computed: true,
+			},
 			"outbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_include_violations": schema.BoolAttribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_interval_minutes": schema.Int64Attribute{
+				Computed: true,
+			},
+			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
 				Computed: true,
 			},
 			"outbound_internet_paths": schema.SingleNestedAttribute{
@@ -491,6 +643,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"pending_blast_radius_changes": schema.BoolAttribute{
 				Computed: true,
 			},
+			"pending_fw_coexistence_update_changes": schema.BoolAttribute{
+				Computed: true,
+			},
 			"platform": schema.StringAttribute{
 				Computed: true,
 			},
@@ -500,10 +655,38 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"policy_status": schema.StringAttribute{
 				Computed: true,
 			},
+			"programs": schema.ListNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"image": schema.StringAttribute{
+							Computed: true,
+						},
+						"name": schema.StringAttribute{
+							Computed: true,
+						},
+						"path": schema.StringAttribute{
+							Computed: true,
+						},
+					},
+				},
+			},
+			"progressive_inbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
+			"progressive_outbound_asset_status": schema.StringAttribute{
+				Computed: true,
+			},
 			"ram_capacity_in_mb": schema.Int64Attribute{
 				Computed: true,
 			},
+			"rule_synchronize_status": schema.StringAttribute{
+				Computed: true,
+			},
 			"security_patches": schema.Int64Attribute{
+				Computed: true,
+			},
+			"serial_number": schema.StringAttribute{
 				Computed: true,
 			},
 			"tags": schema.ListNestedAttribute{
@@ -520,11 +703,11 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 						},
 						"key": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment`,
+							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
 						},
 						"value": schema.StringAttribute{
 							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development`,
+							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
 						},
 					},
 				},
@@ -543,6 +726,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				},
 			},
 			"templates_assigned": schema.Int64Attribute{
+				Computed: true,
+			},
+			"total_breach_response_comments": schema.Int64Attribute{
 				Computed: true,
 			},
 			"total_comments": schema.Int64Attribute{
@@ -570,6 +756,9 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Computed: true,
 			},
 			"unreviewed_ports": schema.Int64Attribute{
+				Computed: true,
+			},
+			"usergroup_most_recent_new_path": schema.StringAttribute{
 				Computed: true,
 			},
 			"usergroup_outbound_internet_paths": schema.SingleNestedAttribute{

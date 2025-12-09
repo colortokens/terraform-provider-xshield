@@ -4952,7 +4952,13 @@ components:
       type: object
       x-speakeasy-entity: Asset
       properties:
+        activeBreachModeTemplatesAssigned:
+          x-speakeasy-param-readonly: true
+          type: integer
         agentId:
+          x-speakeasy-param-readonly: true
+          type: string
+        agentLastCheckInTime:
           x-speakeasy-param-readonly: true
           type: string
         agentName:
@@ -4964,6 +4970,9 @@ components:
         agentVersion:
           x-speakeasy-param-readonly: true
           type: string
+        allowTemplatesAssigned:
+          x-speakeasy-param-readonly: true
+          type: integer
         assetAvailability:
           x-speakeasy-param-readonly: true
           type: string
@@ -4977,10 +4986,14 @@ components:
         assetName:
           type: string
           example: myhostname.company.com
-        # assetProgressiveLastRefreshed:
-        #   x-speakeasy-param-readonly: true
-        #   type: string
-        #   format: date-time
+        assetProgressiveLastRefreshed:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
+        assetProgressiveOutboundLastRefreshed:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
         assetRisk:
           x-speakeasy-param-readonly: true
           type: string
@@ -4990,15 +5003,24 @@ components:
         attackSurfacePendingChanges:
           x-speakeasy-param-readonly: true
           $ref: '#/components/schemas/PendingChanges'
-        autoSynchronizeEnabled:
-          x-speakeasy-param-readonly: true
-          type: boolean
         blastRadius:
           x-speakeasy-param-readonly: true
           type: string
         blastRadiusPendingChanges:
           x-speakeasy-param-readonly: true
           $ref: '#/components/schemas/PendingChanges'
+        blockMaliciousIPs:
+          x-speakeasy-param-readonly: true
+          type: string
+        blockTemplatesAssigned:
+          x-speakeasy-param-readonly: true
+          type: integer
+        breachResponseLevel:
+          x-speakeasy-param-readonly: true
+          type: string
+        breachResponseModeSynced:
+          x-speakeasy-param-readonly: true
+          type: string
         businessValue:
           x-speakeasy-param-readonly: true
           type: string
@@ -5031,18 +5053,43 @@ components:
           - enable-all
           - enable-inbound-only
           - enable-outbound-only
-        deterministicId:  
+        deterministicId:
           x-speakeasy-param-readonly: true
           type: string
         diskCapacityInGB:
           x-speakeasy-param-readonly: true
           type: integer
+        fwCoexistenceCfgStatus:
+          x-speakeasy-param-readonly: true
+          type: string
         hostName:
           x-speakeasy-param-readonly: true
           type: string
+        inboundAssetDeploymentState:
+          x-speakeasy-param-readonly: true
+          type: string
+        inboundAssetPolicyMode:
+          x-speakeasy-param-readonly: true
+          type: string
+        inboundAssetPolicyUpdatedAt:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
         inboundAssetStatus:
           x-speakeasy-param-readonly: true
           type: string
+        inboundAutoSyncDeploymentMode:
+          x-speakeasy-param-readonly: true
+          type: string
+        inboundAutoSyncIncludeViolations:
+          x-speakeasy-param-readonly: true
+          type: boolean
+        inboundAutoSyncIntervalMinutes:
+          x-speakeasy-param-readonly: true
+          type: integer
+        inboundAutoSyncViolationThreshold:
+          x-speakeasy-param-readonly: true
+          type: integer
         inboundInternetPaths:
           x-speakeasy-param-readonly: true
           $ref: '#/components/schemas/ReviewCoverage'
@@ -5066,23 +5113,35 @@ components:
         kernelVersion:
           x-speakeasy-param-readonly: true
           type: string
-        # lastPolicyDeploymentTriggeredAt:
-        #   x-speakeasy-param-readonly: true
-        #   type: string
-        #   format: date-time
-        lowestInboundAssetStatus:
+        lanInterfaceName:
           x-speakeasy-param-readonly: true
           type: string
-        lowestOutboundAssetStatus:
+        lastPolicyDeploymentTriggeredAt:
           x-speakeasy-param-readonly: true
           type: string
+          format: date-time
+        lateralMovementAttacks:
+          x-speakeasy-param-readonly: true
+          type: integer
+        lateralMovementTechniques:
+          x-speakeasy-param-readonly: true
+          type: integer
         lowestProgressiveInboundAssetStatus:
           x-speakeasy-param-readonly: true
           type: string
-        # mostRecentNewPath:
-        #   x-speakeasy-param-readonly: true
-        #   type: string
-        #   format: date-time
+        lowestProgressiveOutboundAssetStatus:
+          x-speakeasy-param-readonly: true
+          type: string
+        managedBy:
+          x-speakeasy-param-readonly: true
+          type: string
+        microDeploymentEnabled:
+          x-speakeasy-param-readonly: true
+          type: boolean
+        mostRecentNewPath:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
         namedNetworkChanges:
           x-speakeasy-param-readonly: true
           type: array
@@ -5091,12 +5150,37 @@ components:
         namednetworksAssigned:
           x-speakeasy-param-readonly: true
           type: integer
+        newPathProcessingStopped:
+          x-speakeasy-param-readonly: true
+          type: boolean
         osName:
           x-speakeasy-param-readonly: true
           type: string
+        outboundAssetDeploymentState:
+          x-speakeasy-param-readonly: true
+          type: string
+        outboundAssetPolicyMode:
+          x-speakeasy-param-readonly: true
+          type: string
+        outboundAssetPolicyUpdatedAt:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
         outboundAssetStatus:
           x-speakeasy-param-readonly: true
           type: string
+        outboundAutoSyncDeploymentMode:
+          x-speakeasy-param-readonly: true
+          type: string
+        outboundAutoSyncIncludeViolations:
+          x-speakeasy-param-readonly: true
+          type: boolean
+        outboundAutoSyncIntervalMinutes:
+          x-speakeasy-param-readonly: true
+          type: integer
+        outboundAutoSyncViolationThreshold:
+          x-speakeasy-param-readonly: true
+          type: integer
         outboundInternetPaths:
           x-speakeasy-param-readonly: true
           $ref: '#/components/schemas/ReviewCoverage'
@@ -5109,6 +5193,9 @@ components:
         pendingBlastRadiusChanges:
           x-speakeasy-param-readonly: true
           type: boolean
+        pendingFWCoexistenceUpdateChanges:
+          x-speakeasy-param-readonly: true
+          type: boolean
         platform:
           x-speakeasy-param-readonly: true
           type: string
@@ -5118,12 +5205,29 @@ components:
         policyStatus:
           x-speakeasy-param-readonly: true
           type: string
+        programs:
+          x-speakeasy-param-readonly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Program'
+        progressiveInboundAssetStatus:
+          x-speakeasy-param-readonly: true
+          type: string
+        progressiveOutboundAssetStatus:
+          x-speakeasy-param-readonly: true
+          type: string
         ramCapacityInMB:
           x-speakeasy-param-readonly: true
           type: integer
+        ruleSynchronizeStatus:
+          x-speakeasy-param-readonly: true
+          type: string
         securityPatches:
           x-speakeasy-param-readonly: true
           type: integer
+        serialNumber:
+          x-speakeasy-param-readonly: true
+          type: string
         tags:
           x-speakeasy-param-readonly: true
           type: array
@@ -5135,6 +5239,9 @@ components:
           items:
             $ref: '#/components/schemas/TemplateReference'
         templatesAssigned:
+          x-speakeasy-param-readonly: true
+          type: integer
+        totalBreachResponseComments:
           x-speakeasy-param-readonly: true
           type: integer
         totalComments:
@@ -5163,10 +5270,10 @@ components:
         unreviewedPorts:
           x-speakeasy-param-readonly: true
           type: integer
-        # usergroupMostRecentNewPath:
-        #   x-speakeasy-param-readonly: true
-        #   type: string
-        #   format: date-time
+        usergroupMostRecentNewPath:
+          x-speakeasy-param-readonly: true
+          type: string
+          format: date-time
         usergroupOutboundInternetPaths:
           x-speakeasy-param-readonly: true
           $ref: '#/components/schemas/ReviewCoverage'
@@ -6064,6 +6171,19 @@ components:
             $ref: '#/components/schemas/PathsNamedNetworkRecommendation'
         metadata:
           $ref: '#/components/schemas/PaginationSummary'
+    Program:
+      required:
+      - name
+      type: object
+      description: Program definition Represents a running process in the case of a
+        VM / physical host or may represent a container in context of kubernetes services.
+      properties:
+        image:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
     PendingChanges:
       type: object
       properties:
@@ -6075,6 +6195,8 @@ components:
           type: array
           items:
             type: string
+        fwCoexistenceCfgUpdatePending:
+          type: boolean
         internetPaths:
           type: integer
         internetPorts:
@@ -6091,6 +6213,8 @@ components:
           type: array
           items:
             type: string
+        peerChange:
+          type: boolean
         progressiveSyncPending:
           type: boolean
         unassignedAllowTemplates:
@@ -6235,10 +6359,12 @@ components:
           type: string
           description: "Tag Name, human readable name for this tag e.g Environment"
           example: Environment
+          maxLength: 256
         value:
           type: string
           description: "Tag Value, human readable value for this tag e.g Development"
           example: Development
+          maxLength: 256
       description: Tag definition. All combinations of TagName and TagValue must be
         case-insensitively unique.
     TagBasedPolicies:

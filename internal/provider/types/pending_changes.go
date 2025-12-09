@@ -5,15 +5,17 @@ package types
 import "github.com/hashicorp/terraform-plugin-framework/types"
 
 type PendingChanges struct {
-	AllowTemplates           []types.String `tfsdk:"allow_templates"`
-	BlockTemplates           []types.String `tfsdk:"block_templates"`
-	InternetPaths            types.Int64    `tfsdk:"internet_paths"`
-	InternetPorts            types.Int64    `tfsdk:"internet_ports"`
-	IntranetChange           []types.String `tfsdk:"intranet_change"`
-	IntranetPaths            types.Int64    `tfsdk:"intranet_paths"`
-	IntranetPorts            types.Int64    `tfsdk:"intranet_ports"`
-	NamednetworkChange       []types.String `tfsdk:"namednetwork_change"`
-	ProgressiveSyncPending   types.Bool     `tfsdk:"progressive_sync_pending"`
-	UnassignedAllowTemplates []types.String `tfsdk:"unassigned_allow_templates"`
-	UnassignedBlockTemplates []types.String `tfsdk:"unassigned_block_templates"`
+	AllowTemplates                []types.String `tfsdk:"allow_templates"`
+	BlockTemplates                []types.String `tfsdk:"block_templates"`
+	FwCoexistenceCfgUpdatePending types.Bool     `tfsdk:"fw_coexistence_cfg_update_pending"`
+	InternetPaths                 types.Int64    `tfsdk:"internet_paths"`
+	InternetPorts                 types.Int64    `tfsdk:"internet_ports"`
+	IntranetChange                []types.String `tfsdk:"intranet_change"`
+	IntranetPaths                 types.Int64    `tfsdk:"intranet_paths"`
+	IntranetPorts                 types.Int64    `tfsdk:"intranet_ports"`
+	NamednetworkChange            []types.String `tfsdk:"namednetwork_change"`
+	PeerChange                    types.Bool     `tfsdk:"peer_change"`
+	ProgressiveSyncPending        types.Bool     `tfsdk:"progressive_sync_pending"`
+	UnassignedAllowTemplates      []types.String `tfsdk:"unassigned_allow_templates"`
+	UnassignedBlockTemplates      []types.String `tfsdk:"unassigned_block_templates"`
 }
