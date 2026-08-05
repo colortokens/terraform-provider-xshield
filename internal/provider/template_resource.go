@@ -173,6 +173,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
+						speakeasy_objectvalidators.RequiredAttributes("direction"),
 					},
 					PlanModifiers: []planmodifier.Object{
 						speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),
@@ -427,6 +428,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
+						speakeasy_objectvalidators.RequiredAttributes("listen_port", "listen_port_reviewed"),
 					},
 					PlanModifiers: []planmodifier.Object{
 						speakeasy_objectplanmodifier.SuppressDiff(speakeasy_objectplanmodifier.ExplicitSuppress),

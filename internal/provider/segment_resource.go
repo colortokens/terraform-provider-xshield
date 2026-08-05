@@ -165,6 +165,7 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
+						speakeasy_objectvalidators.AtLeastOneOf("named_network_id", "named_network_name"),
 					},
 					Attributes: map[string]schema.Attribute{
 						"named_network_id": schema.StringAttribute{
@@ -202,6 +203,7 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
+						speakeasy_objectvalidators.AtLeastOneOf("template_id", "template_name"),
 					},
 					Attributes: map[string]schema.Attribute{
 						"template_id": schema.StringAttribute{

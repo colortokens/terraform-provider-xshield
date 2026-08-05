@@ -78,6 +78,7 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
+						speakeasy_objectvalidators.RequiredAttributes("ip_range"),
 					},
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
