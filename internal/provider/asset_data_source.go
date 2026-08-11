@@ -9,6 +9,7 @@ import (
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -132,7 +133,9 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed: true,
 			},
 			"asset_name": schema.StringAttribute{
-				Required: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "Name of the asset. Either id or asset_name must be provided.",
 			},
 			"asset_risk": schema.StringAttribute{
 				Computed: true,
@@ -289,7 +292,9 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Optional:    true,
+				Description: "ID of the asset. Either id or asset_name must be provided.",
 			},
 			"inbound_asset_status": schema.StringAttribute{
 				Computed: true,
@@ -551,7 +556,7 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed: true,
 			},
 			"type": schema.StringAttribute{
-				Required: true,
+				Computed: true,
 			},
 			"unreviewed_paths": schema.Int64Attribute{
 				Computed: true,
@@ -696,7 +701,10 @@ func (r *AssetDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
-	assetID := data.ID.ValueString()
+	assetID, ok := resolveAssetID(ctx, r.client, data, resp)
+	if !ok {
+		return
+	}
 
 	request := operations.GetAssetRequest{
 		AssetID: assetID,
@@ -729,4 +737,53 @@ func (r *AssetDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// resolveAssetID returns the asset id to read. Callers may identify an asset by
+// id or by name; the name path mirrors the lookup ImportState performs, so both
+// entry points agree on which asset a name refers to.
+func resolveAssetID(ctx context.Context, client *sdk.Xshield, data *AssetDataSourceModel, resp *datasource.ReadResponse) (string, bool) {
+	if !data.ID.IsNull() && data.ID.ValueString() != "" {
+		return data.ID.ValueString(), true
+	}
+
+	assetName := data.AssetName.ValueString()
+	if data.AssetName.IsNull() || assetName == "" {
+		resp.Diagnostics.AddError(
+			"Missing asset identifier",
+			"Either id or asset_name must be provided to look up an asset.",
+		)
+		return "", false
+	}
+
+	listReq := operations.ListAssetsRequest{
+		SearchInput: shared.SearchInput{
+			Criteria: fmt.Sprintf("assetName = '%s'", assetName),
+		},
+	}
+
+	jsonAccept := operations.WithAcceptHeaderOverride(operations.AcceptHeaderEnumApplicationJson)
+	assets, err := client.Assets.ListAssets(ctx, listReq, jsonAccept)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error retrieving assets",
+			fmt.Sprintf("Could not list assets to find by name: %s", err),
+		)
+		return "", false
+	}
+
+	if assets.AssetSearchResults != nil {
+		for _, asset := range assets.AssetSearchResults.Items {
+			if asset.AssetName == assetName && asset.AssetID != nil {
+				return *asset.AssetID, true
+			}
+		}
+	}
+
+	resp.Diagnostics.AddError(
+		"Asset not found",
+		fmt.Sprintf("No asset found with name: %s", assetName),
+	)
+
+	return "", false
 }

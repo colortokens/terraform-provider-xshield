@@ -128,6 +128,10 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 	config := buildConfigProvider(data, resp)
 
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// Create custom HTTP client with provider configuration
 	httpClient, err := newHTTPClientWithOptions(data)
 	if err != nil {
@@ -226,19 +230,19 @@ func newHTTPClientWithOptions(data XshieldProviderModel) (*http.Client, error) {
 
 func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {
 	if data.TenancyId.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("tenancy_id"), "required attribute is missing or empty", "")
+		resp.Diagnostics.AddAttributeError(path.Root("tenancy_id"), "required attribute is missing or empty", "")
 	}
 
 	if data.PrincipalId.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("user_id"), "required attribute is missing or empty", "")
+		resp.Diagnostics.AddAttributeError(path.Root("user_id"), "required attribute is missing or empty", "")
 	}
 
 	if data.FingerPrint.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("fingerprint"), "required attribute is missing or empty", "")
+		resp.Diagnostics.AddAttributeError(path.Root("fingerprint"), "required attribute is missing or empty", "")
 	}
 
 	if data.PrivateKeyLocation.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("private_key_location"), "required attribute is missing or empty", "")
+		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "required attribute is missing or empty", "")
 	}
 
 	if resp.Diagnostics.HasError() {
