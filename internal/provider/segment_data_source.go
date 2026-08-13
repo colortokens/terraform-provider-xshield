@@ -127,6 +127,9 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"completed_at": schema.StringAttribute{
+							Computed: true,
+						},
 						"completion_percentage": schema.NumberAttribute{
 							Computed: true,
 						},
@@ -134,6 +137,12 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 							Computed: true,
 						},
 						"name": schema.StringAttribute{
+							Computed: true,
+						},
+						"started_at": schema.StringAttribute{
+							Computed: true,
+						},
+						"target_date": schema.StringAttribute{
 							Computed: true,
 						},
 					},

@@ -17,11 +17,11 @@ func testAccTagRuleConfig(name, description string, enabled bool, onMatchValue s
 resource "xshield_tag_rule" "test" {
   rule_name        = %q
   rule_description = %q
-  rule_criteria    = "tags.Environment = 'terraform-acceptance'"
+  rule_criteria    = "'osName' in ('Linux')"
   rule_enabled     = %t
 
   on_match = {
-    Environment = %q
+    environment = %q
   }
 }
 `, name, description, enabled, onMatchValue))
@@ -42,7 +42,7 @@ func TestAccTagRuleResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("rule_description"), knownvalue.StringExact("created by acceptance test")),
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("rule_enabled"), knownvalue.Bool(true)),
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("on_match"), knownvalue.MapExact(map[string]knownvalue.Check{
-						"Environment": knownvalue.StringExact("staging"),
+						"environment": knownvalue.StringExact("staging"),
 					})),
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("id"), knownvalue.NotNull()),
 				},
@@ -53,7 +53,7 @@ func TestAccTagRuleResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("rule_name"), knownvalue.StringExact(updatedName)),
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("rule_enabled"), knownvalue.Bool(false)),
 					statecheck.ExpectKnownValue("xshield_tag_rule.test", tfjsonpath.New("on_match"), knownvalue.MapExact(map[string]knownvalue.Check{
-						"Environment": knownvalue.StringExact("production"),
+						"environment": knownvalue.StringExact("production"),
 					})),
 				},
 			},

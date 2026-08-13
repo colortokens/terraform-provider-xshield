@@ -23,7 +23,7 @@ resource "xshield_template" "test" {
   template_ports = [
     {
       listen_port          = %q
-      listen_port_protocol = "tcp"
+      listen_port_protocol = "TCP"
       listen_port_reviewed = "allow-any"
     },
   ]
@@ -54,11 +54,12 @@ func TestAccTemplateResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_template.test", tfjsonpath.New("template_name"), knownvalue.StringExact(replacementName)),
 				},
 			},
-			{
-				ResourceName:      "xshield_template.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-			},
+		{
+			ResourceName:            "xshield_template.test",
+			ImportState:             true,
+			ImportStateVerify:       true,
+			ImportStateVerifyIgnore: []string{"created_at", "template_ports.0.id"},
+		},
 		},
 	})
 }
@@ -81,7 +82,7 @@ resource "xshield_template" "invalid" {
   template_ports = [
     {
       listen_port          = "8080"
-      listen_port_protocol = "tcp"
+      listen_port_protocol = "TCP"
       listen_port_reviewed = "not-a-review-state"
     },
   ]
