@@ -54,12 +54,12 @@ func TestAccTemplateResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_template.test", tfjsonpath.New("template_name"), knownvalue.StringExact(replacementName)),
 				},
 			},
-		{
-			ResourceName:            "xshield_template.test",
-			ImportState:             true,
-			ImportStateVerify:       true,
-			ImportStateVerifyIgnore: []string{"created_at", "template_ports.0.id"},
-		},
+			{
+				ResourceName:            "xshield_template.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"created_at", "template_ports.0.id"},
+			},
 		},
 	})
 }

@@ -52,12 +52,12 @@ func TestAccSegmentResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_segment.test", tfjsonpath.New("timeline"), knownvalue.Int64Exact(20)),
 				},
 			},
-		{
-			ResourceName:            "xshield_segment.test",
-			ImportState:             true,
-			ImportStateVerify:       true,
-			ImportStateVerifyIgnore: []string{"criteria"},
-		},
+			{
+				ResourceName:            "xshield_segment.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"criteria"},
+			},
 		},
 	})
 }

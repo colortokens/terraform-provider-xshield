@@ -52,12 +52,12 @@ func TestAccNamedNetworkResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_named_network.test", tfjsonpath.New("named_network_description"), knownvalue.StringExact("updated by acceptance test")),
 				},
 			},
-		{
-			ResourceName:            "xshield_named_network.test",
-			ImportState:             true,
-			ImportStateVerify:       true,
-			ImportStateVerifyIgnore: []string{"ip_ranges.0.id", "ip_ranges.0.ip_count"},
-		},
+			{
+				ResourceName:            "xshield_named_network.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"ip_ranges.0.id", "ip_ranges.0.ip_count"},
+			},
 		},
 	})
 }
