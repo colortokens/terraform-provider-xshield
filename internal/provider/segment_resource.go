@@ -21,7 +21,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -112,16 +114,25 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Computed:    true,
 				Optional:    true,
 				Description: `Inbound auto-sync interval in minutes.`,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"inbound_auto_sync_include_violations": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
 				Description: `Whether to include violations in inbound auto-sync.`,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
 				Description: `Threshold for violations in inbound auto-sync.`,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
 				Computed:    true,
@@ -138,16 +149,25 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Computed:    true,
 				Optional:    true,
 				Description: `Outbound auto-sync interval in minutes.`,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"outbound_auto_sync_include_violations": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
 				Description: `Whether to include violations in outbound auto-sync.`,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
 				Description: `Threshold for violations in outbound auto-sync.`,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"lowest_inbound_segment_asset_policy_status": schema.StringAttribute{
 				Computed:    true,
