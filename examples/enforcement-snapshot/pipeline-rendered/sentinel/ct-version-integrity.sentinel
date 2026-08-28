@@ -1,0 +1,88 @@
+# ct-version-integrity - SOFT-MANDATORY (advisory during brownfield coexistence)
+#
+# Closes the time-of-check/time-of-use window between plan and apply.
+#
+# The data source resolved the expected snapshot when the PLAN ran. By the time
+# the APPLY gate evaluates, a security admin may have approved newer policy.
+# This policy re-reads the expected version at gate time and fails the run if
+# the plan was built from a different snapshot - the operator simply re-plans
+# and converges. Stale policy can never reach the fabric.
+#
+# Requires the Sentinel `http` import to be enabled for the policy set, and the
+# snapshot API to be reachable from the Sentinel runtime.
+
+import "tfplan/v2" as tfplan
+import "http"
+import "json"
+
+param xshield_api_base                # e.g. "https://ng.acme.colortokens.com"
+param cloud_account_id
+param region
+param api_token default ""            # bearer/JWT for the read-only principal
+
+expected_url = xshield_api_base +
+	"/api/policy-generator/cloud-snapshots/" + cloud_account_id +
+	"/" + region + "/expected"
+
+fetch_expected = func() {
+	req = http.request(expected_url).
+		with_header("Accept", "application/json")
+
+	if api_token is not "" {
+		req = req.with_header("Authorization", "Bearer " + api_token)
+	}
+
+	resp = http.get(req)
+	if resp.status_code is not 200 {
+		print("FAILED: could not resolve expected snapshot version:",
+			resp.status_code, expected_url)
+		return null
+	}
+	return json.unmarshal(resp.body)
+}
+
+expected = fetch_expected()
+
+ct_resources = filter tfplan.resource_changes as _, rc {
+	rc.mode is "managed" and
+		rc.change.after is not null and
+		(rc.change.after.tags else {}) contains "colortokens:snapshot-hash"
+}
+
+planned_hashes = [
+	rc.change.after.tags["colortokens:snapshot-hash"]
+	for _, rc in ct_resources
+]
+
+distinct_hashes = func() {
+	seen = {}
+	for planned_hashes as h {
+		seen = seen add {h: true}
+	}
+	return keys(seen)
+}
+
+hashes = distinct_hashes()
+
+# All rendered resources must come from ONE snapshot - a mixed plan means the
+# render was assembled from more than one version.
+single_snapshot = rule when length(hashes) > 0 {
+	length(hashes) is 1 or
+		print("DENIED: plan mixes multiple snapshot hashes:", hashes) and false
+}
+
+matches_expected = rule when length(hashes) is 1 and expected is not null {
+	hashes[0] is expected.contentHash or
+		print("RE-PLAN REQUIRED: plan was built from snapshot",
+			hashes[0], "but the expected snapshot is now",
+			expected.contentHash, "(version", expected.version, ").",
+			"Policy changed after this plan; re-plan to converge.") and false
+}
+
+api_reachable = rule {
+	expected is not null
+}
+
+main = rule {
+	api_reachable and single_snapshot and matches_expected
+}

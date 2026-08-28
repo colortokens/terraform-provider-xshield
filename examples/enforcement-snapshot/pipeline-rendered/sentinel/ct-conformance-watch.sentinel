@@ -1,0 +1,56 @@
+# ct-conformance-watch - ADVISORY
+#
+# Surfaces divergence inside the pipeline, at the moment of change, rather than
+# only in the console after the fact.
+#
+# Quarantined assets are fail-secure (their policy is NOT rendered), so this is
+# advisory by default - it must not block an otherwise-correct convergence run.
+# Raise to soft-mandatory once an estate is steady-state and quarantine should
+# genuinely be zero.
+
+import "tfplan/v2" as tfplan
+
+param max_quarantined default 0
+
+snapshots = filter tfplan.resource_changes as _, rc {
+	rc.mode is "data" and rc.type is "xshield_enforcement_snapshot"
+}
+
+quarantined = func() {
+	total = 0
+	for snapshots as _, s {
+		after = s.change.after else {}
+		total = total + (after.quarantined_assets else 0)
+	}
+	return total
+}
+
+q = quarantined()
+
+report_quarantine = func() {
+	print("ADVISORY:", q, "asset(s) are quarantined in the resolved snapshot.")
+	print("Their approved policy is NOT rendered (fail-secure) - they are running",
+		"on whatever their segment group already grants.")
+	print("Resolve in Xshield by promoting the divergence into a child segment,",
+		"then re-run. Threshold:", max_quarantined)
+	return true
+}
+
+conformance_clean = rule {
+	q <= max_quarantined or report_quarantine()
+}
+
+# Also surface the snapshot version being applied, so the run log carries the
+# audit breadcrumb without anyone consulting the dashboard.
+announce = func() {
+	for snapshots as _, s {
+		after = s.change.after else {}
+		print("ColorTokens: converging to snapshot version",
+			after.version else "?", "hash", after.content_hash else "?")
+	}
+	return true
+}
+
+main = rule {
+	announce() and conformance_clean
+}

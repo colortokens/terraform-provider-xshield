@@ -1,0 +1,55 @@
+# ct-mass-delete-guard - HARD-MANDATORY
+#
+# Backstop against a bad snapshot, an accidental module removal, or a compromised
+# upstream emptying an account's enforcement layer in one apply.
+#
+# Deliberately hard-mandatory: no soft override. Removing enforcement at scale
+# must be an explicit, separately-approved act (set ct_teardown_approved), not a
+# side effect of a routine convergence run.
+
+import "tfplan/v2" as tfplan
+import "tfrun"
+import "strings"
+
+param max_ct_deletes default 20
+param teardown_variable default "ct_teardown_approved"
+
+ct_deletions = filter tfplan.resource_changes as _, rc {
+	rc.mode is "managed" and
+		rc.change.actions contains "delete" and
+		rc.change.before is not null and
+		((rc.change.before.tags else {}) contains "colortokens:managed" or
+			strings.has_prefix(rc.change.before.name else "", "ct-"))
+}
+
+teardown_approved = func() {
+	vars = tfrun.variables else {}
+	if vars contains teardown_variable {
+		v = vars[teardown_variable].value
+		return v is "true" or v is true
+	}
+	return false
+}
+
+delete_count = length(ct_deletions)
+
+report = func() {
+	print("DENIED: plan removes", delete_count, "ColorTokens-managed resources",
+		"(limit", max_ct_deletes, ").")
+	print("If this is intentional teardown, set the workspace variable",
+		teardown_variable, "= true and re-run.")
+	print("If it is NOT intentional, the snapshot or module source may be wrong -",
+		"do not override.")
+	for ct_deletions as addr, _ {
+		print("  would delete:", addr)
+	}
+	return false
+}
+
+within_limit = rule {
+	delete_count <= max_ct_deletes or teardown_approved() or report()
+}
+
+main = rule {
+	within_limit
+}

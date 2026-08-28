@@ -144,6 +144,11 @@ var dataSourceLookupAttributes = map[string][]string{
 	"xshield_criteria":              {"criteria"},
 	"xshield_policy_changes":        {"criteria", "direction"},
 	"xshield_deployment_simulation": {"asset_id", "direction"},
+
+	// Enforcement point: the account and region select the snapshot. version is
+	// an optional pin and deliberately not a lookup key, since omitting it is
+	// what makes the read converge on the expected version.
+	"xshield_enforcement_snapshot": {"cloud_account_id", "region"},
 }
 
 func TestDataSourceLookupKeysAreConfigurable(t *testing.T) {

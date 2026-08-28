@@ -289,6 +289,9 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		NewPathsDataSource,
 		NewPolicyChangesDataSource,
 		NewWorkRequestDataSource,
+
+		// Compiled policy that a pipeline renders into native cloud constructs.
+		NewEnforcementSnapshotDataSource,
 	}
 }
 

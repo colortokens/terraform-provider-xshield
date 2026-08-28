@@ -1,0 +1,57 @@
+# ct-namespace-guard - ORG-WIDE, HARD-MANDATORY
+#
+# The single most important policy in the set, and the only one that attaches to
+# EVERY workspace (not just the enforcement workspace).
+#
+# It makes the ColorTokens namespace a one-writer namespace: nothing outside the
+# designated enforcement workspace may create, modify, or delete ColorTokens
+# security groups, rules, prefix lists, or workload-directory parameters.
+#
+# Why it matters: the directory decides which security groups every future
+# workload attaches. A principal able to rewrite it can silently redirect
+# production workloads onto groups of their choosing. Sentinel closes the
+# Terraform path; the IAM/SCP guardrail (see ../enforcement-workspace/
+# iam-guardrails.md) closes the console/API path. BOTH are required.
+
+import "tfplan/v2" as tfplan
+import "tfrun"
+import "strings"
+
+param enforcement_workspace_pattern default "ct-enforcement-"
+param directory_prefix default "/colortokens/"
+
+is_enforcement_workspace = strings.has_prefix(tfrun.workspace.name, enforcement_workspace_pattern)
+
+ct_tagged_resources = filter tfplan.resource_changes as _, rc {
+	rc.mode is "managed" and
+		(rc.change.actions contains "create" or
+			rc.change.actions contains "update" or
+			rc.change.actions contains "delete") and
+		rc.change.after is not null and
+		(rc.change.after.tags else {}) contains "colortokens:managed"
+}
+
+ct_directory_params = filter tfplan.resource_changes as _, rc {
+	rc.type is "aws_ssm_parameter" and
+		rc.mode is "managed" and
+		rc.change.after is not null and
+		strings.has_prefix(rc.change.after.name else "", directory_prefix)
+}
+
+violations = keys(ct_tagged_resources) + keys(ct_directory_params)
+
+print_violations = func() {
+	for violations as addr {
+		print("DENIED:", addr, "- ColorTokens-managed resources may only be",
+			"created by the account enforcement workspace.")
+	}
+	return true
+}
+
+only_enforcement_workspace_touches_ct = rule when length(violations) > 0 {
+	is_enforcement_workspace or print_violations() and false
+}
+
+main = rule {
+	only_enforcement_workspace_touches_ct
+}

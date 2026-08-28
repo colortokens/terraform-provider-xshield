@@ -1,0 +1,6 @@
+# never commit: local provider build, provider caches, generated demo key
+bin/
+.terraform/
+*.tfstate
+*.tfstate.*
+demo-signing-key.pem
