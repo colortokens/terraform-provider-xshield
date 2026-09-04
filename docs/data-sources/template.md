@@ -14,14 +14,6 @@ Template DataSource
 
 ```terraform
 data "xshield_template" "my_template" {
-  # You can look up a template by name
-  template_name = "web-server-template"
-  
-  # Or by ID if you know it
-  # id = "12345678-1234-1234-1234-123456789012"
-  
-  # You can also filter by type
-  # template_type = "application-template"
 }
 ```
 
@@ -30,22 +22,18 @@ data "xshield_template" "my_template" {
 
 ### Optional
 
-- `id` (String) ID of the template to look up
-- `template_name` (String) Name of the template to look up
-- `template_type` (String) Type of template to filter by ("application-template" or "block-template")
+- `id` (String) ID of the template. Either id or template_name must be provided.
+- `template_name` (String) Name of the template to look up. Either id or template_name must be provided.
 
 ### Read-Only
 
 - `access_policy_template` (Boolean) Whether this is an access policy template
 - `colortokens_managed` (Boolean) Whether this template is managed by ColorTokens
-- `created_at` (String) Template creation timestamp
-- `deleted_at` (String) Template deletion timestamp
-- `is_deleted` (Boolean) Whether the template is deleted
-- `template_breach_levels` (List of String) Template breach levels
 - `template_category` (String) Template category
 - `template_description` (String) Template description. Maximum length is 1000 characters.
 - `template_paths` (Attributes List) List of network paths defined in this template (see [below for nested schema](#nestedatt--template_paths))
 - `template_ports` (Attributes List) List of ports defined in this template (see [below for nested schema](#nestedatt--template_ports))
+- `template_type` (String) Type of template to filter by ("application-template" or "block-template")
 
 <a id="nestedatt--template_paths"></a>
 ### Nested Schema for `template_paths`
@@ -64,6 +52,7 @@ Read-Only:
 - `port` (String) Port number or range (e.g., "80", "443", "8000-8100")
 - `port_name` (String) Friendly name for the port
 - `protocol` (String) Network protocol (e.g., TCP, UDP, HTTP)
+- `rule_hit_metrics` (Attributes) (see [below for nested schema](#nestedatt--template_paths--rule_hit_metrics))
 - `source_asset_id` (String) ID of the source asset for this path
 - `source_named_network` (Attributes) Source named network for this path (see [below for nested schema](#nestedatt--template_paths--source_named_network))
 - `source_tag_based_policy` (Attributes) Source segment for this path (see [below for nested schema](#nestedatt--template_paths--source_tag_based_policy))
@@ -88,6 +77,15 @@ Read-Only:
 - `criteria` (String) Criteria expression for the destination segment
 - `tag_based_policy_id` (String) ID of the destination segment
 - `tag_based_policy_name` (String) Name of the destination segment
+
+
+<a id="nestedatt--template_paths--rule_hit_metrics"></a>
+### Nested Schema for `template_paths.rule_hit_metrics`
+
+Read-Only:
+
+- `last_evaluated` (String)
+- `total_hits` (String)
 
 
 <a id="nestedatt--template_paths--source_named_network"></a>

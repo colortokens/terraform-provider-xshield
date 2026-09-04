@@ -238,7 +238,7 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 	}
 
 	if data.PrivateKeyLocation.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("private_key_location"), "required attribute is missing or empty", "")
+		resp.Diagnostics.AddAttributeError(path.Root("provider").AtName("private_key_path"), "required attribute is missing or empty", "")
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -252,6 +252,7 @@ func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resou
 	return []func() resource.Resource{
 		NewAssetResource,
 		NewNamedNetworkResource,
+		NewPolicyDeploymentResource,
 		NewSegmentResource,
 		NewTagRuleResource,
 		NewTemplateResource,
@@ -260,11 +261,30 @@ func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resou
 
 func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
+		// One object, looked up by id or name.
 		NewAssetDataSource,
 		NewNamedNetworkDataSource,
 		NewSegmentDataSource,
 		NewTagRuleDataSource,
 		NewTemplateDataSource,
+
+		// Sets of objects, selected by criteria.
+		NewAssetsDataSource,
+		NewNamedNetworksDataSource,
+		NewSegmentsDataSource,
+		NewTagRulesDataSource,
+		NewTemplatesDataSource,
+
+		// What the tenant looks like, for writing a criteria and a template
+		// without the portal.
+		NewCriteriaDataSource,
+		NewDeploymentSimulationDataSource,
+		NewFieldsDataSource,
+		NewFieldValuesDataSource,
+		NewOpenPortsDataSource,
+		NewPathsDataSource,
+		NewPolicyChangesDataSource,
+		NewWorkRequestDataSource,
 	}
 }
 

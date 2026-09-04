@@ -3,31 +3,38 @@
 page_title: "xshield_tag_rule Resource - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  TagRule Resource
+  A tag rule: a criteria that, when it matches an asset, applies the tags in on_match to it. Tag rules are how assets acquire the tags that segment criteria then select on.
+  How many assets a rule currently matches is a live property of the tenant, recomputed as assets are created, changed and deleted, so it is not part of this resource. Read it from the xshield_tag_rule data source for one rule or xshield_tag_rules for all of them. To size a criteria before writing a rule, use xshield_criteria, which also warns when the criteria selects nothing and returns sample asset names.
 ---
 
 # xshield_tag_rule (Resource)
 
-TagRule Resource
+A tag rule: a criteria that, when it matches an asset, applies the tags in `on_match` to it. Tag rules are how assets acquire the tags that segment criteria then select on.
+
+How many assets a rule currently matches is a live property of the tenant, recomputed as assets are created, changed and deleted, so it is not part of this resource. Read it from the `xshield_tag_rule` data source for one rule or `xshield_tag_rules` for all of them. To size a criteria before writing a rule, use `xshield_criteria`, which also warns when the criteria selects nothing and returns sample asset names.
 
 ## Example Usage
 
 ```terraform
-resource "xshield_tag_rule" "my_tagrule" {
-  # Required field - criteria expression that defines when this tag rule should be applied
-  rule_criteria = "...my_rule_criteria..."
-  
-  # Optional fields
-  rule_name        = "...my_rule_name..."        # Name for identification
-  rule_description = "...my_rule_description..." # Description explaining purpose
-  rule_enabled     = true                        # Whether rule is active
-  
-  # Tags to apply when rule criteria matches an asset
-  # Keys represent tag names, values represent tag values
+# A tag rule applies core tags to the assets its criteria matches. Those tags are
+# what segment criteria then select on, so tag rules run first in practice.
+
+# Confirm the values you are matching on actually exist in the tenant.
+data "xshield_field_values" "os" {
+  field = "osname"
+}
+
+resource "xshield_tag_rule" "payroll_db" {
+  rule_name        = "tag-payroll-databases"
+  rule_description = "Tag the payroll database servers so the segment can select them"
+  rule_enabled     = true
+
+  # Unlike a segment criteria, a rule criteria is stored exactly as written.
+  rule_criteria = "assetname like 'payroll-db-%'"
+
   on_match = {
-    environment = "production"
-    application = "web-server"
-    owner       = "platform-team"
+    application = "payroll"
+    role        = "db"
   }
 }
 ```
@@ -49,12 +56,18 @@ resource "xshield_tag_rule" "my_tagrule" {
 ### Read-Only
 
 - `id` (String) The unique identifier of this tag rule resource.
-- `matching_assets` (Number) Count of assets currently matching this tag rule's criteria.
 
 ## Import
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
-terraform import xshield_tag_rule.my_xshield_tag_rule ""
+# Import by id.
+terraform import xshield_tag_rule.my_tag_rule "12345678-1234-1234-1234-123456789012"
+
+# Or by name. The name must be unique; an ambiguous name is reported as an
+# error rather than resolved to an arbitrary object.
+terraform import xshield_tag_rule.my_tag_rule "tag-production"
 ```

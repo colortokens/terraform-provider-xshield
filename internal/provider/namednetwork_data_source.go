@@ -60,10 +60,12 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 
 		Attributes: map[string]schema.Attribute{
 			"assigned_by_tag_based_policy": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this named network is assigned by a tag-based policy`,
+				Computed:    true,
 			},
 			"colortokens_managed": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this named network is managed by ColorTokens`,
+				Computed:    true,
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -71,26 +73,32 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 				Description: "ID of the named network. Either id or named_network_name must be provided.",
 			},
 			"ip_ranges": schema.ListNestedAttribute{
-				Computed: true,
+				Description: `List of IP ranges included in this named network`,
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for this IP range`,
+							Computed:    true,
 						},
 						"ip_count": schema.Int64Attribute{
-							Computed: true,
+							Description: `Count of IP addresses in this range`,
+							Computed:    true,
 						},
 						"ip_range": schema.StringAttribute{
-							Computed: true,
+							Description: `CIDR notation of the IP range (e.g., "192.168.1.0/24")`,
+							Computed:    true,
 						},
 					},
 				},
 			},
 			"named_network_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of assets assigned to this named network`,
+				Computed:    true,
 			},
 			"named_network_description": schema.StringAttribute{
-				Computed: true,
+				Description: `Description of the named network. Maximum length is 1000 characters.`,
+				Computed:    true,
 			},
 			"named_network_name": schema.StringAttribute{
 				Computed:    true,
@@ -98,28 +106,36 @@ func (r *NamedNetworkDataSource) Schema(ctx context.Context, req datasource.Sche
 				Description: "Name of the named network to look up. Either id or named_network_name must be provided.",
 			},
 			"namednetwork_tag_based_policy_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of tag-based policies that reference this named network`,
+				Computed:    true,
 			},
 			"program_as_internet": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether programs are treated as internet traffic`,
+				Computed:    true,
 			},
 			"program_as_intranet": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether programs are treated as intranet traffic`,
+				Computed:    true,
 			},
 			"region": schema.StringAttribute{
-				Computed: true,
+				Description: `Region associated with this named network`,
+				Computed:    true,
 			},
 			"service": schema.StringAttribute{
-				Computed: true,
+				Description: `Service associated with this named network`,
+				Computed:    true,
 			},
 			"total_comments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Total number of comments on this named network`,
+				Computed:    true,
 			},
 			"total_count": schema.Int64Attribute{
-				Computed: true,
+				Description: `Total count of IP addresses in this named network`,
+				Computed:    true,
 			},
 			"usergroup_named_network_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of user groups assigned to this named network`,
+				Computed:    true,
 			},
 		},
 	}

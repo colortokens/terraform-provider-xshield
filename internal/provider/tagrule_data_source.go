@@ -56,20 +56,25 @@ func (r *TagRuleDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Description: "ID of the tag rule. Either id or rule_name must be provided.",
 			},
 			"matching_assets": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of assets currently matching this tag rule's criteria`,
+				Computed:    true,
 			},
 			"on_match": schema.MapAttribute{
+				Description: `Key-value pairs applied as tags when the rule criteria matches an asset`,
 				Computed:    true,
 				ElementType: types.StringType,
 			},
 			"rule_criteria": schema.StringAttribute{
-				Computed: true,
+				Description: `Criteria expression that defines when this tag rule should be applied`,
+				Computed:    true,
 			},
 			"rule_description": schema.StringAttribute{
-				Computed: true,
+				Description: `Description of the tag rule explaining its purpose and function`,
+				Computed:    true,
 			},
 			"rule_enabled": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether the tag rule is currently active and being evaluated against assets`,
+				Computed:    true,
 			},
 			"rule_name": schema.StringAttribute{
 				Computed:    true,

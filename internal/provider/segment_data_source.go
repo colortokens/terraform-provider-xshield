@@ -71,16 +71,20 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 
 		Attributes: map[string]schema.Attribute{
 			"baseline_breach_impact_score": schema.Int64Attribute{
-				Computed: true,
+				Description: `Baseline breach impact score for this segment`,
+				Computed:    true,
 			},
 			"baseline_matching_assets": schema.Int64Attribute{
-				Computed: true,
+				Description: `Number of baseline matching assets`,
+				Computed:    true,
 			},
 			"criteria": schema.StringAttribute{
-				Computed: true,
+				Description: `Criteria expression defining segment membership`,
+				Computed:    true,
 			},
 			"description": schema.StringAttribute{
-				Computed: true,
+				Description: `Description of the segment. Maximum length is 1000 characters.`,
+				Computed:    true,
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -88,72 +92,92 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Description: "ID of the segment. Either id or tag_based_policy_name must be provided.",
 			},
 			"inbound_auto_sync_deployment_mode": schema.StringAttribute{
-				Computed: true,
+				Description: `Inbound auto-sync deployment mode. Options: test, enforce, disable.`,
+				Computed:    true,
 			},
 			"inbound_auto_sync_interval_minutes": schema.Int64Attribute{
-				Computed: true,
+				Description: `Inbound auto-sync interval in minutes.`,
+				Computed:    true,
 			},
 			"inbound_auto_sync_include_violations": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether to include violations in inbound auto-sync.`,
+				Computed:    true,
 			},
 			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
-				Computed: true,
+				Description: `Threshold for violations in inbound auto-sync.`,
+				Computed:    true,
 			},
 			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
-				Computed: true,
+				Description: `Outbound auto-sync deployment mode. Options: test, enforce, disable.`,
+				Computed:    true,
 			},
 			"outbound_auto_sync_interval_minutes": schema.Int64Attribute{
-				Computed: true,
+				Description: `Outbound auto-sync interval in minutes.`,
+				Computed:    true,
 			},
 			"outbound_auto_sync_include_violations": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether to include violations in outbound auto-sync.`,
+				Computed:    true,
 			},
 			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
-				Computed: true,
+				Description: `Threshold for violations in outbound auto-sync.`,
+				Computed:    true,
 			},
 			"lowest_inbound_policy_status": schema.StringAttribute{
-				Computed: true,
+				Description: `Lowest status level for inbound policies`,
+				Computed:    true,
 			},
 			"lowest_outbound_policy_status": schema.StringAttribute{
-				Computed: true,
+				Description: `Lowest status level for outbound policies`,
+				Computed:    true,
 			},
 			"lowest_progressive_inbound_policy_status": schema.StringAttribute{
-				Computed: true,
+				Description: `Lowest status level for progressive inbound policies`,
+				Computed:    true,
 			},
 			"matching_assets": schema.Int64Attribute{
-				Computed: true,
+				Description: `Number of assets matching this segment's criteria`,
+				Computed:    true,
 			},
 			"milestones": schema.ListNestedAttribute{
-				Computed: true,
+				Description: `List of milestones for this segment`,
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"completion_percentage": schema.NumberAttribute{
-							Computed: true,
+							Description: `Percentage of completion for this milestone`,
+							Computed:    true,
 						},
 						"milestone_id": schema.Int64Attribute{
-							Computed: true,
+							Description: `Unique identifier for the milestone`,
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: `Name of the milestone`,
+							Computed:    true,
 						},
 					},
 				},
 			},
 			"namednetworks": schema.ListNestedAttribute{
-				Computed: true,
+				Description: `List of named networks associated with this segment`,
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"named_network_id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for the named network`,
+							Computed:    true,
 						},
 						"named_network_name": schema.StringAttribute{
-							Computed: true,
+							Description: `Name of the named network`,
+							Computed:    true,
 						},
 					},
 				},
 			},
 			"policy_automation_configurable": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether policy automation is configurable for this segment`,
+				Computed:    true,
 			},
 			"tag_based_policy_name": schema.StringAttribute{
 				Computed:    true,
@@ -161,14 +185,17 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Description: "Name of the segment to look up. Either id or tag_based_policy_name must be provided.",
 			},
 			"target_breach_impact_score": schema.Int64Attribute{
-				Computed: true,
+				Description: `Target breach impact score. Range: 0-100, Default: 50.`,
+				Computed:    true,
 			},
 			"templates": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: `Templates attached to this segment, applied to every matching asset.`,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"template_id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for the template`,
+							Computed:    true,
 						},
 						"template_name": schema.StringAttribute{
 							Computed: true,
@@ -181,7 +208,8 @@ func (r *SegmentDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				},
 			},
 			"timeline": schema.Int64Attribute{
-				Computed: true,
+				Description: `Timeline in days. Default: 90, Minimum: 1.`,
+				Computed:    true,
 			},
 		},
 	}

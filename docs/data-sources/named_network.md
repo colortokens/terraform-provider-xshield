@@ -14,11 +14,6 @@ NamedNetwork DataSource
 
 ```terraform
 data "xshield_named_network" "my_namednetwork" {
-  # You can look up a named network by name
-  named_network_name = "internal-network"
-  
-  # Or by ID if you know it
-  # id = "12345678-1234-1234-1234-123456789012"
 }
 ```
 
@@ -27,8 +22,8 @@ data "xshield_named_network" "my_namednetwork" {
 
 ### Optional
 
-- `id` (String) ID of the named network to look up
-- `named_network_name` (String) Name of the named network to look up
+- `id` (String) ID of the named network. Either id or named_network_name must be provided.
+- `named_network_name` (String) Name of the named network to look up. Either id or named_network_name must be provided.
 
 ### Read-Only
 

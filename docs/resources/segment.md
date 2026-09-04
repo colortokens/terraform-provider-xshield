@@ -3,57 +3,61 @@
 page_title: "xshield_segment Resource - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  Segment Resource
+  A segment: a set of assets selected by a criteria, together with the templates and named networks whose rules apply to them.
+  Membership is not stored here. The criteria is evaluated by the backend, and it is re-evaluated whenever an asset is tagged, created or deleted, so how many assets a segment holds is a live property of the tenant rather than part of this resource. Three data sources report it without putting a moving number into Terraform state. xshield_criteria sizes a criteria before any segment exists, warns when it selects nothing, and lists sample asset names, which is the quickest way to confirm a criteria does what was intended. xshield_segment reports matching_assets for one segment, and xshield_segments reports it across every segment in the tenant.
+  Membership is also computed asynchronously after a write, so a count read immediately after terraform apply can still be catching up.
 ---
 
 # xshield_segment (Resource)
 
-Segment Resource
+A segment: a set of assets selected by a criteria, together with the templates and named networks whose rules apply to them.
+
+Membership is not stored here. The criteria is evaluated by the backend, and it is re-evaluated whenever an asset is tagged, created or deleted, so how many assets a segment holds is a live property of the tenant rather than part of this resource. Three data sources report it without putting a moving number into Terraform state. `xshield_criteria` sizes a criteria before any segment exists, warns when it selects nothing, and lists sample asset names, which is the quickest way to confirm a criteria does what was intended. `xshield_segment` reports `matching_assets` for one segment, and `xshield_segments` reports it across every segment in the tenant.
+
+Membership is also computed asynchronously after a write, so a count read immediately after `terraform apply` can still be catching up.
 
 ## Example Usage
 
 ```terraform
-resource "xshield_segment" "my_segment" {
-  # Required field
-  tag_based_policy_name = "...my_tag_based_policy_name..." # Segment name
-  
-  # Basic configuration
-  criteria    = "...my_criteria..."  # Criteria expression defining segment membership
-  description = "...my_description..." # Description of the segment
-  
-  # Breach impact and timeline settings
-  target_breach_impact_score = 61  # Range: 0-100, Default: 50
-  timeline                  = 10  # Timeline in days, Default: 90
-  
-  # Auto-sync configuration
-  inbound_auto_sync_deployment_mode  = "test"  # Options: test, enforce, disable
-  outbound_auto_sync_deployment_mode = "test"  # Options: test, enforce, disable
-  inbound_auto_sync_include_violations  = true
-  outbound_auto_sync_include_violations = true
-  inbound_auto_sync_interval_minutes  = 60
-  outbound_auto_sync_interval_minutes = 60
-  inbound_auto_sync_violation_threshold  = 10
-  outbound_auto_sync_violation_threshold = 10
-  
-  # Policy status settings
-  lowest_inbound_segment_asset_policy_status  = "default-allow"
-  lowest_outbound_segment_asset_policy_status = "default-allow"
-  
-  # Associated named networks
-  namednetworks = [
-    {
-      named_network_id   = "...my_named_network_id..."
-      named_network_name = "...my_named_network_name..."
-    }
-  ]
-  
-  # Associated templates
+# A segment selects assets by their tags and attaches policy to them.
+
+# Check the criteria before creating the segment: this reports how many assets it
+# selects today, and fails the plan if the expression is invalid.
+data "xshield_criteria" "payroll_db" {
+  criteria = "application = 'payroll' AND role = 'db'"
+}
+
+resource "xshield_segment" "payroll_db" {
+  tag_based_policy_name = "payroll-db"
+  description           = "Payroll database servers"
+  criteria              = data.xshield_criteria.payroll_db.criteria
+
+  # A segment criteria takes a strict subset of the search grammar: only =, !=,
+  # IN, NOT IN, AND and parentheses, over core tag fields. The backend also
+  # appends a managedby clause, which the provider applies during plan so the
+  # stored value matches.
+
+  target_breach_impact_score = 40
+  timeline                   = 90
+
+  # Attach policy. Either id or name works; a name is resolved during apply.
   templates = [
-    {
-      template_id   = "...my_template_id..."
-      template_name = "...my_template_name..."
-    }
+    { template_name = "payroll-web" },
   ]
+  namednetworks = [
+    { named_network_name = "corp-networks" },
+  ]
+
+  # The floor every member asset is held to.
+  lowest_inbound_segment_asset_policy_status = "zerotrust"
+
+  # Auto-sync deploys new rules on a schedule. The modes are test, enforce and
+  # disable; the API reads them back as under-test and enforced, which the
+  # provider maps for you.
+  inbound_auto_sync_deployment_mode     = "test"
+  inbound_auto_sync_interval_minutes    = 60
+  inbound_auto_sync_include_violations  = true
+  inbound_auto_sync_violation_threshold = 10
 }
 ```
 
@@ -62,40 +66,31 @@ resource "xshield_segment" "my_segment" {
 
 ### Required
 
-- `tag_based_policy_name` (String) Segment name. Maximum length is 256 characters.
+- `tag_based_policy_name` (String) Segment name. Maximum length is 256 characters. Required.
 
 ### Optional
 
-- `criteria` (String) Criteria for the segment. Required for creation, computed for import. The API might modify the criteria by adding additional conditions.
+- `criteria` (String) Criteria for the segment. Required for creation, computed for import. A criteria that does not mention managedby is stored as `(<criteria>) AND 'managedby' in ('colortokens')`; the provider applies that form during plan so the value matches what the API returns.
 - `description` (String) Description of the segment. Maximum length is 1000 characters.
 - `inbound_auto_sync_deployment_mode` (String) Inbound auto-sync deployment mode. Options: test, enforce, disable.
 - `inbound_auto_sync_include_violations` (Boolean) Whether to include violations in inbound auto-sync.
 - `inbound_auto_sync_interval_minutes` (Number) Inbound auto-sync interval in minutes.
 - `inbound_auto_sync_violation_threshold` (Number) Threshold for violations in inbound auto-sync.
-- `lowest_inbound_segment_asset_policy_status` (String) Lowest inbound segment asset policy status.
-- `lowest_outbound_segment_asset_policy_status` (String) Lowest outbound segment asset policy status.
+- `lowest_inbound_segment_asset_policy_status` (String) The furthest inbound auto-sync may take this segment's assets, ordered from most permissive to least: default-allow, allow-open-ports, allow-active-ports, zerotrust. Auto-sync stops at this floor and will not tighten an asset past it. Applied through the segment's policy automation settings, alongside inbound_auto_sync_deployment_mode.
+- `lowest_outbound_segment_asset_policy_status` (String) The furthest outbound auto-sync may take this segment's assets. Outbound is binary, so only default-allow and zerotrust are accepted; the intermediate port states that inbound allows do not exist in this direction. Applied through the segment's policy automation settings, alongside outbound_auto_sync_deployment_mode.
 - `namednetworks` (Attributes List) List of named networks associated with this segment (see [below for nested schema](#nestedatt--namednetworks))
 - `outbound_auto_sync_deployment_mode` (String) Outbound auto-sync deployment mode. Options: test, enforce, disable.
 - `outbound_auto_sync_include_violations` (Boolean) Whether to include violations in outbound auto-sync.
 - `outbound_auto_sync_interval_minutes` (Number) Outbound auto-sync interval in minutes.
 - `outbound_auto_sync_violation_threshold` (Number) Threshold for violations in outbound auto-sync.
 - `target_breach_impact_score` (Number) Target breach impact score. Default: 50. Range: 0-100.
-- `templates` (Attributes List) List of templates associated with this segment (see [below for nested schema](#nestedatt--templates))
+- `templates` (Attributes List) Templates attached to this segment, applied to every matching asset. Reference each by id or by name. (see [below for nested schema](#nestedatt--templates))
 - `timeline` (Number) Timeline in days. Default: 90. Minimum: 1.
 
 ### Read-Only
 
-- `auto_synchronize_enabled` (Boolean) Whether auto-synchronization is enabled for this segment
-- `baseline_breach_impact_score` (Number) Baseline breach impact score for this segment
-- `baseline_matching_assets` (Number) Number of baseline matching assets
-- `created_at` (String) Creation timestamp of the segment
+- `created_at` (String) Creation timestamp of the segment.
 - `id` (String) The ID of this resource
-- `lowest_inbound_policy_status` (String) Lowest status level for inbound policies
-- `lowest_outbound_policy_status` (String) Lowest status level for outbound policies
-- `lowest_progressive_inbound_policy_status` (String) Lowest status level for progressive inbound policies
-- `matching_assets` (Number) Number of assets matching this segment's criteria
-- `milestones` (Attributes List) List of milestones for this segment (see [below for nested schema](#nestedatt--milestones))
-- `policy_automation_configurable` (Boolean) Whether policy automation is configurable for this segment
 
 <a id="nestedatt--namednetworks"></a>
 ### Nested Schema for `namednetworks`
@@ -112,22 +107,19 @@ Optional:
 Optional:
 
 - `template_id` (String) Unique identifier for the template
-- `template_name` (String) Name of the template. Maximum length is 256 characters.
-
-
-<a id="nestedatt--milestones"></a>
-### Nested Schema for `milestones`
-
-Read-Only:
-
-- `completion_percentage` (Number) Percentage of completion for this milestone
-- `milestone_id` (Number) Unique identifier for the milestone
-- `name` (String) Name of the milestone
+- `template_name` (String) Template name. Maximum length is 256 characters.
 
 ## Import
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
-terraform import xshield_segment.my_xshield_segment ""
+# Import by id.
+terraform import xshield_segment.my_segment "12345678-1234-1234-1234-123456789012"
+
+# Or by name. The name must be unique; an ambiguous name is reported as an
+# error rather than resolved to an arbitrary object.
+terraform import xshield_segment.my_segment "payroll-db"
 ```

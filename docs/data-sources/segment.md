@@ -14,11 +14,6 @@ Segment DataSource
 
 ```terraform
 data "xshield_segment" "my_segment" {
-  # You can look up a segment by name
-  tag_based_policy_name = "production-segment"
-  
-  # Or by ID if you know it
-  # id = "12345678-1234-1234-1234-123456789012"
 }
 ```
 
@@ -27,15 +22,13 @@ data "xshield_segment" "my_segment" {
 
 ### Optional
 
-- `id` (String) ID of the segment to look up
-- `tag_based_policy_name` (String) Name of the segment to look up
+- `id` (String) ID of the segment. Either id or tag_based_policy_name must be provided.
+- `tag_based_policy_name` (String) Name of the segment to look up. Either id or tag_based_policy_name must be provided.
 
 ### Read-Only
 
-- `auto_synchronize_enabled` (Boolean) Whether auto-synchronization is enabled for this segment
 - `baseline_breach_impact_score` (Number) Baseline breach impact score for this segment
 - `baseline_matching_assets` (Number) Number of baseline matching assets
-- `created_at` (String) Creation timestamp of the segment
 - `criteria` (String) Criteria expression defining segment membership
 - `description` (String) Description of the segment. Maximum length is 1000 characters.
 - `inbound_auto_sync_deployment_mode` (String) Inbound auto-sync deployment mode. Options: test, enforce, disable.
@@ -43,9 +36,7 @@ data "xshield_segment" "my_segment" {
 - `inbound_auto_sync_interval_minutes` (Number) Inbound auto-sync interval in minutes.
 - `inbound_auto_sync_violation_threshold` (Number) Threshold for violations in inbound auto-sync.
 - `lowest_inbound_policy_status` (String) Lowest status level for inbound policies
-- `lowest_inbound_segment_asset_policy_status` (String) Lowest inbound segment asset policy status.
 - `lowest_outbound_policy_status` (String) Lowest status level for outbound policies
-- `lowest_outbound_segment_asset_policy_status` (String) Lowest outbound segment asset policy status.
 - `lowest_progressive_inbound_policy_status` (String) Lowest status level for progressive inbound policies
 - `matching_assets` (Number) Number of assets matching this segment's criteria
 - `milestones` (Attributes List) List of milestones for this segment (see [below for nested schema](#nestedatt--milestones))
@@ -56,7 +47,7 @@ data "xshield_segment" "my_segment" {
 - `outbound_auto_sync_violation_threshold` (Number) Threshold for violations in outbound auto-sync.
 - `policy_automation_configurable` (Boolean) Whether policy automation is configurable for this segment
 - `target_breach_impact_score` (Number) Target breach impact score. Range: 0-100, Default: 50.
-- `templates` (Attributes List) List of templates associated with this segment (see [below for nested schema](#nestedatt--templates))
+- `templates` (Attributes List) Templates attached to this segment, applied to every matching asset. (see [below for nested schema](#nestedatt--templates))
 - `timeline` (Number) Timeline in days. Default: 90, Minimum: 1.
 
 <a id="nestedatt--milestones"></a>
@@ -84,4 +75,4 @@ Read-Only:
 Read-Only:
 
 - `template_id` (String) Unique identifier for the template
-- `template_name` (String) Name of the template. Maximum length is 256 characters.
+- `template_name` (String) Template name. Maximum length is 256 characters.

@@ -91,6 +91,7 @@ type Xshield struct {
 	Assets           *Assets
 	Openports        *Openports
 	Paths            *Paths
+	Policy           *Policy
 	Tags             *Tags
 	Namednetworks    *Namednetworks
 	Templates        *Templates
@@ -209,6 +210,7 @@ func New(opts ...SDKOption) *Xshield {
 	sdk.Openports = newOpenports(sdk.sdkConfiguration)
 
 	sdk.Paths = newPaths(sdk.sdkConfiguration)
+	sdk.Policy = newPolicy(sdk.sdkConfiguration)
 
 	sdk.Tags = newTags(sdk.sdkConfiguration)
 

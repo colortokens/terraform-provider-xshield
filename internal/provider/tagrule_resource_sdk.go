@@ -49,7 +49,6 @@ func (r *TagRuleResourceModel) ToSharedTagRuleInput() *shared.TagRuleInput {
 func (r *TagRuleResourceModel) RefreshFromSharedTagRule(resp *shared.TagRule) {
 	if resp != nil {
 		r.ID = types.StringPointerValue(resp.ID)
-		r.MatchingAssets = types.Int64PointerValue(resp.MatchingAssets)
 		if len(resp.OnMatch) > 0 {
 			r.OnMatch = make(map[string]types.String, len(resp.OnMatch))
 			for key, value := range resp.OnMatch {
@@ -64,12 +63,6 @@ func (r *TagRuleResourceModel) RefreshFromSharedTagRule(resp *shared.TagRule) {
 }
 
 func (r *TagRuleResourceModel) ToSharedTagRule() *shared.TagRule {
-	matchingAssets := new(int64)
-	if !r.MatchingAssets.IsUnknown() && !r.MatchingAssets.IsNull() {
-		*matchingAssets = r.MatchingAssets.ValueInt64()
-	} else {
-		matchingAssets = nil
-	}
 	onMatch := make(map[string]string)
 	for onMatchKey, onMatchValue := range r.OnMatch {
 		var onMatchInst string
@@ -105,7 +98,6 @@ func (r *TagRuleResourceModel) ToSharedTagRule() *shared.TagRule {
 		ruleName = nil
 	}
 	out := shared.TagRule{
-		MatchingAssets:  matchingAssets,
 		OnMatch:         onMatch,
 		RuleCriteria:    ruleCriteria,
 		RuleDescription: ruleDescription,

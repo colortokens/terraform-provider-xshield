@@ -5,8 +5,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
 
 	speakeasy_boolplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/boolplanmodifier"
 	speakeasy_listplanmodifier "github.com/colortokens/terraform-provider-xshield/internal/planmodifiers/listplanmodifier"
@@ -85,13 +83,15 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 		MarkdownDescription: "Template Resource",
 		Attributes: map[string]schema.Attribute{
 			"access_policy_template": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this is an access policy template.`,
+				Computed:    true,
 				PlanModifiers: []planmodifier.Bool{
 					speakeasy_boolplanmodifier.SuppressDiff(speakeasy_boolplanmodifier.ExplicitSuppress),
 				},
 			},
 			"colortokens_managed": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this template is managed by ColorTokens.`,
+				Computed:    true,
 				PlanModifiers: []planmodifier.Bool{
 					speakeasy_boolplanmodifier.SuppressDiff(speakeasy_boolplanmodifier.ExplicitSuppress),
 				},
@@ -118,7 +118,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 				Description: `Whether the template is deleted.`,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Description: `The unique identifier of this template resource.`,
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 				},
@@ -180,8 +181,9 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 					},
 					Attributes: map[string]schema.Attribute{
 						"destination_asset_id": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `ID of the destination asset for this path.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -199,7 +201,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
+									Description: `Whether this is an access policy template.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -207,10 +209,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
+									Description: `Whether this is an access policy template.`,
 								},
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"destination_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -220,28 +222,31 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 							Attributes: map[string]schema.Attribute{
 								"criteria": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `Criteria expression for the destination segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `ID of the destination segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `Name of the destination segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"direction": schema.StringAttribute{
 							Computed: true,
@@ -249,11 +254,12 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"domain": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `Domain name for HTTP/HTTPS paths.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -264,24 +270,27 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"dst_process": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `Destination process name.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 						},
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `The unique identifier of this template resource.`,
+							Computed:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 						},
 						"method": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `HTTP method for HTTP/HTTPS paths.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -292,11 +301,12 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"port_name": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `Friendly name for the port.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -307,7 +317,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"rule_hit_metrics": schema.SingleNestedAttribute{
 							Computed: true,
@@ -331,8 +341,9 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							Description: `Template rule hit metrics.`,
 						},
 						"source_asset_id": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `ID of the source asset for this path.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -350,7 +361,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
+									Description: `Whether this is an access policy template.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -358,10 +369,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Requires replacement if changed.`,
+									Description: `Whether this is an access policy template.`,
 								},
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"source_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -371,53 +382,59 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 							},
 							Attributes: map[string]schema.Attribute{
 								"criteria": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `Criteria expression for the source segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `ID of the source segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Computed: true,
-									Optional: true,
+									Description: `Name of the source segment.`,
+									Computed:    true,
+									Optional:    true,
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
 								},
 							},
-							Description: `Requires replacement if changed.`,
+							Description: `Whether this is an access policy template.`,
 						},
 						"src_ip": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `Source IP address or CIDR range.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 						},
 						"src_process": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `Source process name.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `URI path for HTTP/HTTPS paths.`,
+							Computed:    true,
+							Optional:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
 						},
 					},
 				},
-				Description: `Requires replacement if changed.`,
+				Description: `Whether this is an access policy template.`,
 			},
 			"template_ports": schema.ListNestedAttribute{
 				Computed: true,
@@ -435,7 +452,8 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 					},
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for this port entry.`,
+							Computed:    true,
 							PlanModifiers: []planmodifier.String{
 								speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 							},
@@ -491,7 +509,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 						},
 					},
 				},
-				Description: `Requires replacement if changed.`,
+				Description: `Whether this is an access policy template.`,
 			},
 			"template_type": schema.StringAttribute{
 				Computed: false,
@@ -810,56 +828,13 @@ func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	data.RefreshFromSharedTemplate(res.Template)
 
-	// Reorder ports to match the existing state order (preserve user's config order)
+	// Keep the order the practitioner wrote, so a plan does not show a reshuffle
+	// as a change.
 	if len(existingPorts) > 0 && len(data.TemplatePorts) > 0 {
-		portsByKey := make(map[string]tfTypes.MetadataPort)
-		for _, port := range data.TemplatePorts {
-			key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
-			portsByKey[key] = port
-		}
-
-		reorderedPorts := make([]tfTypes.MetadataPort, 0, len(data.TemplatePorts))
-		for _, existingPort := range existingPorts {
-			key := fmt.Sprintf("%s:%s", existingPort.ListenPort.ValueString(), existingPort.ListenPortProtocol.ValueString())
-			if apiPort, ok := portsByKey[key]; ok {
-				reorderedPorts = append(reorderedPorts, apiPort)
-				delete(portsByKey, key)
-			}
-		}
-		// Add any new ports from API that weren't in existing state
-		for _, port := range data.TemplatePorts {
-			key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
-			if _, ok := portsByKey[key]; ok {
-				reorderedPorts = append(reorderedPorts, port)
-			}
-		}
-		data.TemplatePorts = reorderedPorts
+		data.TemplatePorts = reorderToStateOrder(data.TemplatePorts, existingPorts, templatePortKey)
 	}
-
-	// Reorder paths to match the existing state order (preserve user's config order)
 	if len(existingPaths) > 0 && len(data.TemplatePaths) > 0 {
-		pathsByKey := make(map[string]tfTypes.MetadataPath)
-		for _, path := range data.TemplatePaths {
-			key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
-			pathsByKey[key] = path
-		}
-
-		reorderedPaths := make([]tfTypes.MetadataPath, 0, len(data.TemplatePaths))
-		for _, existingPath := range existingPaths {
-			key := fmt.Sprintf("%s:%s:%s", existingPath.Port.ValueString(), existingPath.Protocol.ValueString(), existingPath.Direction.ValueString())
-			if apiPath, ok := pathsByKey[key]; ok {
-				reorderedPaths = append(reorderedPaths, apiPath)
-				delete(pathsByKey, key)
-			}
-		}
-		// Add any new paths from API that weren't in existing state
-		for _, path := range data.TemplatePaths {
-			key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
-			if _, ok := pathsByKey[key]; ok {
-				reorderedPaths = append(reorderedPaths, path)
-			}
-		}
-		data.TemplatePaths = reorderedPaths
+		data.TemplatePaths = reorderToStateOrder(data.TemplatePaths, existingPaths, templatePathKey)
 	}
 
 	// Save updated data into Terraform state
@@ -908,7 +883,6 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	var removedPathIDs []string
 	var pathsToRemove []tfTypes.MetadataPath
 	var pathsToAdd []tfTypes.MetadataPath
-	var pathIDChanges map[string]string
 
 	// Check if any path attributes have changed
 	pathsChanged := false
@@ -924,14 +898,14 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	// First, create a map of state ports by listen_port and listen_port_protocol
 	statePortsByKey := make(map[string]tfTypes.MetadataPort)
 	for _, statePort := range stateData.TemplatePorts {
-		key := fmt.Sprintf("%s:%s", statePort.ListenPort.ValueString(), statePort.ListenPortProtocol.ValueString())
+		key := templatePortKey(statePort)
 		statePortsByKey[key] = statePort
 	}
 
 	// Then, create a map of plan ports by listen_port and listen_port_protocol
 	planPortsByKey := make(map[string]tfTypes.MetadataPort)
 	for _, planPort := range planData.TemplatePorts {
-		key := fmt.Sprintf("%s:%s", planPort.ListenPort.ValueString(), planPort.ListenPortProtocol.ValueString())
+		key := templatePortKey(planPort)
 		planPortsByKey[key] = planPort
 	}
 
@@ -996,14 +970,14 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	// First, create a map of state paths by port, protocol, and direction
 	statePathsByKey := make(map[string]tfTypes.MetadataPath)
 	for _, statePath := range stateData.TemplatePaths {
-		key := fmt.Sprintf("%s:%s:%s", statePath.Port.ValueString(), statePath.Protocol.ValueString(), statePath.Direction.ValueString())
+		key := templatePathKey(statePath)
 		statePathsByKey[key] = statePath
 	}
 
 	// Then, create a map of plan paths by port, protocol, and direction
 	planPathsByKey := make(map[string]tfTypes.MetadataPath)
 	for _, planPath := range planData.TemplatePaths {
-		key := fmt.Sprintf("%s:%s:%s", planPath.Port.ValueString(), planPath.Protocol.ValueString(), planPath.Direction.ValueString())
+		key := templatePathKey(planPath)
 		planPathsByKey[key] = planPath
 	}
 
@@ -1187,19 +1161,16 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			tflog.Info(ctx, pathsInfo)
 
 			// Call the API to delete the ports and paths
-			_, err := r.client.Templates.DeleteFromTemplate(ctx, deleteRequest)
-
-			// Handle the specific error for 202 status code
+			deleteRes, err := r.client.Templates.DeleteFromTemplate(ctx, deleteRequest)
 			if err != nil {
-				// Check if the error message contains "Status 202" or "Status 204"
-				// The API can return either 202 Accepted or 204 No Content
-				if strings.Contains(err.Error(), "Status 202") || strings.Contains(err.Error(), "Status 204") {
-					// This is actually a success, so we'll continue
-				} else {
-					// For any other error, report it
-					resp.Diagnostics.AddError("Failed to delete from template", err.Error())
-					return
-				}
+				resp.Diagnostics.AddError("Failed to delete from template", err.Error())
+				return
+			}
+			if deleteRes != nil && deleteRes.StatusCode != 202 && deleteRes.StatusCode != 204 {
+				resp.Diagnostics.AddError(
+					fmt.Sprintf("unexpected response from API. Got an unexpected response code %v", deleteRes.StatusCode),
+					debugResponse(deleteRes.RawResponse))
+				return
 			}
 
 			// Update our data with the removed ports and paths
@@ -1250,9 +1221,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				// Create a map of ports by attributes from the API response
 				apiPortsByKey := make(map[string]tfTypes.MetadataPort)
 				for _, port := range refreshedData.TemplatePorts {
-					key := fmt.Sprintf("%s:%s",
-						port.ListenPort.ValueString(),
-						port.ListenPortProtocol.ValueString())
+					key := templatePortKey(port)
 					apiPortsByKey[key] = port
 				}
 
@@ -1260,9 +1229,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				expectedIDsByKey := make(map[string]string)
 				for _, port := range planData.TemplatePorts {
 					if !port.ID.IsNull() && !port.ID.IsUnknown() {
-						key := fmt.Sprintf("%s:%s",
-							port.ListenPort.ValueString(),
-							port.ListenPortProtocol.ValueString())
+						key := templatePortKey(port)
 						expectedIDsByKey[key] = port.ID.ValueString()
 					}
 				}
@@ -1272,9 +1239,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 
 				// For each port in the API response, use the ID from the plan if available
 				for _, apiPort := range refreshedData.TemplatePorts {
-					key := fmt.Sprintf("%s:%s",
-						apiPort.ListenPort.ValueString(),
-						apiPort.ListenPortProtocol.ValueString())
+					key := templatePortKey(apiPort)
 
 					// Create a copy of the API port
 					portCopy := apiPort
@@ -1360,10 +1325,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				// Create a map of paths by attributes from the API response
 				apiPathsByKey := make(map[string]tfTypes.MetadataPath)
 				for _, path := range refreshedData.TemplatePaths {
-					key := fmt.Sprintf("%s:%s:%s",
-						path.Port.ValueString(),
-						path.Protocol.ValueString(),
-						path.Direction.ValueString())
+					key := templatePathKey(path)
 					apiPathsByKey[key] = path
 				}
 
@@ -1371,10 +1333,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				expectedIDsByKey := make(map[string]string)
 				for _, path := range planData.TemplatePaths {
 					if !path.ID.IsNull() && !path.ID.IsUnknown() {
-						key := fmt.Sprintf("%s:%s:%s",
-							path.Port.ValueString(),
-							path.Protocol.ValueString(),
-							path.Direction.ValueString())
+						key := templatePathKey(path)
 						expectedIDsByKey[key] = path.ID.ValueString()
 					}
 				}
@@ -1384,10 +1343,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 
 				// For each path in the API response, use the ID from the plan if available
 				for _, apiPath := range refreshedData.TemplatePaths {
-					key := fmt.Sprintf("%s:%s:%s",
-						apiPath.Port.ValueString(),
-						apiPath.Protocol.ValueString(),
-						apiPath.Direction.ValueString())
+					key := templatePathKey(apiPath)
 
 					// Create a copy of the API path
 					pathCopy := apiPath
@@ -1450,12 +1406,22 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 					portState = &state
 				}
 
+				// Process names are part of the rule, not something the API derives.
+				// Sending nil made an edit to listen_process_names register as a
+				// change and then get discarded, so the value never took effect.
+				processNames := make([]string, 0, len(port.ListenProcessNames))
+				for _, name := range port.ListenProcessNames {
+					if !name.IsNull() && !name.IsUnknown() {
+						processNames = append(processNames, name.ValueString())
+					}
+				}
+
 				sharedPorts = append(sharedPorts, shared.MetadataPort{
 					ListenPort:         port.ListenPort.ValueStringPointer(),
 					ListenPortName:     port.ListenPortName.ValueStringPointer(),
 					ListenPortProtocol: port.ListenPortProtocol.ValueStringPointer(),
 					ListenPortReviewed: portState,
-					ListenProcessNames: nil, // This will be filled by the API
+					ListenProcessNames: processNames,
 				})
 			}
 
@@ -1668,10 +1634,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			for _, path := range refreshedData.TemplatePaths {
 				if !path.ID.IsNull() && !path.ID.IsUnknown() {
 					// Create a composite key using port, protocol, and direction
-					key := fmt.Sprintf("%s:%s:%s",
-						path.Port.ValueString(),
-						path.Protocol.ValueString(),
-						path.Direction.ValueString())
+					key := templatePathKey(path)
 					apiPathsByKey[key] = path
 				}
 			}
@@ -1695,7 +1658,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			// Create a map of ports by key from the API response
 			apiPortsByListenKey := make(map[string]tfTypes.MetadataPort)
 			for _, port := range refreshedData.TemplatePorts {
-				key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+				key := templatePortKey(port)
 				apiPortsByListenKey[key] = port
 			}
 
@@ -1705,82 +1668,27 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			// Create a deep copy of the plan data for ports
 			finalPorts := make([]tfTypes.MetadataPort, 0)
 
-			// Use the ports from the API response, but preserve the original IDs from the plan
+			// Use the ports the API returned, in plan order.
+			//
+			// Port ids are content hashes too, so the id always comes from the API
+			// read that follows the append, never from the plan or from a rule that
+			// was just removed.
 			if len(refreshedData.TemplatePorts) > 0 {
-				tflog.Info(ctx, "Using ports from API response but preserving original IDs")
-
-				// Create a map to track port ID changes (old ID -> new ID)
-				portIDChanges := make(map[string]string)
-				// When we have exactly one port being removed and one being added, preserve the ID
-				// This handles changes to any key field (listen_port, listen_port_protocol)
-				if len(portsToRemove) == 1 && len(portsToAdd) == 1 {
-					portToRemove := portsToRemove[0]
-					portToAdd := portsToAdd[0]
-					oldID := portToRemove.ID.ValueString()
-					newKey := fmt.Sprintf("%s:%s", portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString())
-					tflog.Info(ctx, fmt.Sprintf("Detected port key field change: %s:%s -> %s:%s, preserving ID %s",
-						portToRemove.ListenPort.ValueString(), portToRemove.ListenPortProtocol.ValueString(),
-						portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString(),
-						oldID))
-					portIDChanges[newKey] = oldID
-				}
-
-				// Track path ID changes when key fields are modified
-				pathIDChanges = make(map[string]string)
-				if len(pathsToRemove) == 1 && len(pathsToAdd) == 1 {
-					pathToRemove := pathsToRemove[0]
-					pathToAdd := pathsToAdd[0]
-					oldID := pathToRemove.ID.ValueString()
-					newKey := fmt.Sprintf("%s:%s:%s", pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString())
-					tflog.Info(ctx, fmt.Sprintf("Detected path key field change: %s:%s:%s -> %s:%s:%s, preserving ID %s",
-						pathToRemove.Port.ValueString(), pathToRemove.Protocol.ValueString(), pathToRemove.Direction.ValueString(),
-						pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString(),
-						oldID))
-					pathIDChanges[newKey] = oldID
-				}
-
-				// Iterate over plan ports to preserve order, and look up matching API ports
 				for i, planPort := range planData.TemplatePorts {
-					// Look up the API port by key
-					key := fmt.Sprintf("%s:%s", planPort.ListenPort.ValueString(), planPort.ListenPortProtocol.ValueString())
+					key := templatePortKey(planPort)
 					apiPort, hasAPIPort := apiPortsByListenKey[key]
-
 					if !hasAPIPort {
-						// Port not found in API response, skip it
-						tflog.Info(ctx, fmt.Sprintf("Warning: Port %s not found in API response", key))
+						tflog.Warn(ctx, fmt.Sprintf("port %s is absent from the template after update", key))
 						continue
 					}
 
-					var portToAdd tfTypes.MetadataPort
-
-					// Check if this port was originally new (using the newPortIndices map created earlier)
-					// This is important because planPort.ID might have been set in the first section
+					portToAdd := apiPort
 					if newPortIndices[i] {
-						// NEW PORT: Start with ORIGINAL plan port (only user-specified fields)
-						// Then add the ID from API (computed field)
+						// A port added in this apply keeps the fields the practitioner
+						// wrote and takes only its id from the API.
 						portToAdd = originalPlanPorts[i]
 						portToAdd.ID = apiPort.ID
-						tflog.Info(ctx, fmt.Sprintf("New port %s at index %d: using ORIGINAL plan fields + API ID %s",
-							key, i, apiPort.ID.ValueString()))
-					} else {
-						// EXISTING PORT: Start with API port (to get all current fields)
-						// Then preserve the original ID from plan
-						portToAdd = apiPort
-
-						// Check if this is a port that had its number/protocol changed (preserve original ID)
-						if oldID, ok := portIDChanges[key]; ok {
-							tflog.Info(ctx, fmt.Sprintf("Using preserved ID %s for port with changed key %s instead of API ID %s",
-								oldID, key, apiPort.ID.ValueString()))
-							portToAdd.ID = types.StringValue(oldID)
-						} else {
-							tflog.Info(ctx, fmt.Sprintf("Using original ID %s for port %s at index %d instead of API ID %s",
-								planPort.ID.ValueString(), key, i, apiPort.ID.ValueString()))
-							portToAdd.ID = planPort.ID
-						}
 					}
-
-					tflog.Info(ctx, fmt.Sprintf("Adding port: ID=%s, ListenPort=%s, ListenPortProtocol=%s",
-						portToAdd.ID.ValueString(), portToAdd.ListenPort.ValueString(), portToAdd.ListenPortProtocol.ValueString()))
 					finalPorts = append(finalPorts, portToAdd)
 				}
 			} else {
@@ -1792,7 +1700,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 					finalPorts[i] = port
 
 					// For all ports, check if we have an ID from the API
-					key := fmt.Sprintf("%s:%s", port.ListenPort.ValueString(), port.ListenPortProtocol.ValueString())
+					key := templatePortKey(port)
 					if apiPort, ok := apiPortsByListenKey[key]; ok {
 						// Update the ID with the one from the API
 						tflog.Info(ctx, fmt.Sprintf("Port %s: Updating ID from %s to %s from API",
@@ -1810,45 +1718,25 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			// Create a map of paths by key from the API response
 			apiPathsByPathKey := make(map[string]tfTypes.MetadataPath)
 			for _, path := range refreshedData.TemplatePaths {
-				key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+				key := templatePathKey(path)
 				apiPathsByPathKey[key] = path
 			}
 
-			// Use the paths from the API response, but preserve the plan order
+			// Use the paths the API returned, in plan order.
+			//
+			// A path id is a hash of the rule's own content, so editing a rule gives
+			// it a new id. Carrying the previous id forward left state naming a rule
+			// that no longer existed, and the next deduct then sent that stale hash
+			// and removed nothing.
 			if len(refreshedData.TemplatePaths) > 0 {
-				tflog.Info(ctx, fmt.Sprintf("Number of paths in API response: %d", len(refreshedData.TemplatePaths)))
-				tflog.Info(ctx, "Using paths from API response but preserving plan order and original IDs")
-
-				// Iterate over plan paths to preserve order, and look up matching API paths
 				for _, planPath := range planData.TemplatePaths {
-					// Look up the API path by key
-					key := fmt.Sprintf("%s:%s:%s", planPath.Port.ValueString(), planPath.Protocol.ValueString(), planPath.Direction.ValueString())
+					key := templatePathKey(planPath)
 					apiPath, hasAPIPath := apiPathsByPathKey[key]
-
 					if !hasAPIPath {
-						// Path not found in API response, skip it
-						tflog.Info(ctx, fmt.Sprintf("Warning: Path %s not found in API response", key))
+						tflog.Warn(ctx, fmt.Sprintf("path %s is absent from the template after update", key))
 						continue
 					}
-
-					// Start with the API path to get all current fields
-					pathToAdd := apiPath
-
-					// Check if this is a path that had its key fields changed (preserve original ID)
-					if oldID, ok := pathIDChanges[key]; ok {
-						tflog.Info(ctx, fmt.Sprintf("Using preserved ID %s for path with changed key %s instead of API ID %s",
-							oldID, key, apiPath.ID.ValueString()))
-						pathToAdd.ID = types.StringValue(oldID)
-					} else if !planPath.ID.IsNull() && !planPath.ID.IsUnknown() {
-						// For existing paths, preserve the ID from plan
-						tflog.Info(ctx, fmt.Sprintf("Using original ID %s for path %s instead of API ID %s",
-							planPath.ID.ValueString(), key, apiPath.ID.ValueString()))
-						pathToAdd.ID = planPath.ID
-					}
-
-					tflog.Info(ctx, fmt.Sprintf("Adding path: ID=%s, Port=%s, Protocol=%s, Direction=%s",
-						pathToAdd.ID.ValueString(), pathToAdd.Port.ValueString(), pathToAdd.Protocol.ValueString(), pathToAdd.Direction.ValueString()))
-					finalPaths = append(finalPaths, pathToAdd)
+					finalPaths = append(finalPaths, apiPath)
 				}
 			} else {
 				tflog.Info(ctx, "No paths in API response, using plan data")
@@ -1859,7 +1747,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 					finalPaths[i] = path
 
 					// For all paths, check if we have an ID from the API
-					key := fmt.Sprintf("%s:%s:%s", path.Port.ValueString(), path.Protocol.ValueString(), path.Direction.ValueString())
+					key := templatePathKey(path)
 					if apiPath, ok := apiPathsByPathKey[key]; ok {
 						// Update the ID with the one from the API
 						tflog.Info(ctx, fmt.Sprintf("Path %s: Updating ID from %s to %s from API",
@@ -1926,72 +1814,15 @@ func (r *TemplateResource) Delete(ctx context.Context, req resource.DeleteReques
 
 }
 
-// Helper to check if a string is a UUID
-func isTemplateUUID(s string) bool {
-	// Simple UUID format check (not comprehensive)
-	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
-	return matched
-}
-
 func (r *TemplateResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Check if the import ID is a UUID (existing behavior) or a name
-	if isTemplateUUID(req.ID) {
-		// Existing behavior - direct ID import
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-		return
-	}
-
-	// If not a UUID, assume it's a name and look up the template
-	// Create a search criteria that filters by the template name
-	searchCriteria := fmt.Sprintf("templateName = '%s'", req.ID)
-	listReq := operations.ListTemplatesRequest{
-		SearchInput: shared.SearchInput{
-			Criteria: searchCriteria,
-		},
-	}
-
-	// Add debug logging
-	tflog.Info(ctx, "Importing template by name", map[string]interface{}{
-		"name":            req.ID,
-		"search_criteria": listReq.SearchInput.Criteria,
-	})
-
-	// Try to get the templates
-	templates, err := r.client.Templates.ListTemplates(ctx, listReq)
-
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error retrieving templates",
-			fmt.Sprintf("Could not list templates to find by name: %s", err),
-		)
-		return
-	}
-
-	// Process the JSON response
-	if templates.Templates != nil && len(templates.Templates.Items) > 0 {
-		// Find the template with the matching name
-		var foundID string
-		for _, template := range templates.Templates.Items {
-			if template.TemplateName != nil && *template.TemplateName == req.ID {
-				if template.TemplateID != nil {
-					foundID = *template.TemplateID
-					break
-				}
-			}
-		}
-
-		if foundID != "" {
-			tflog.Info(ctx, "Found template", map[string]interface{}{
-				"id":   foundID,
-				"name": req.ID,
-			})
-			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+	id := req.ID
+	if !isXshieldUUID(id) {
+		found, err := findTemplateIDByName(ctx, r.client, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot import template by name", err.Error())
 			return
 		}
+		id = found
 	}
-
-	resp.Diagnostics.AddError(
-		"Template not found",
-		fmt.Sprintf("No template found with name: %s", req.ID),
-	)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }

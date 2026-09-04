@@ -1,179 +1,133 @@
-# xshield-sdk
+# terraform-provider-xshield
 
-<div align="left">
-    <a href="https://speakeasyapi.dev/"><img src="https://custom-icon-badges.demolab.com/badge/-Built%20By%20Speakeasy-212015?style=for-the-badge&logoColor=FBE331&logo=speakeasy&labelColor=545454" /></a>
-</div>
+Terraform provider for ColorTokens Xshield: micro-segmentation policy as code.
 
-<no value>
-<!-- Start SDK <no value> -->
-To install this provider, copy and paste this code into your Terraform configuration. Then, run `terraform init`.
+Segments select assets by their tags, templates describe the ports and paths those assets may use, and
+a deployment puts that policy on the firewall. This provider covers all three, and the lookups needed
+to write policy without opening the portal.
 
-```hcl
-terraform {
-  required_providers {
-    xshield-sdk = {
-      source  = "colortokens/xshield"
-      version = "0.0.1"
-    }
-  }
-}
-
-provider "xshield" {
-  # Configuration options
-}
-```
-<!-- End SDK <no value> -->
-
-<no value>
-<!-- Start SDK <no value> -->
-### Testing the provider locally
-
-Should you want to validate a change locally, the `--debug` flag allows you to execute the provider against a terraform instance locally.
-
-This also allows for debuggers (e.g. delve) to be attached to the provider.
-
-### Example
-
-```sh
-go run main.go --debug
-# Copy the TF_REATTACH_PROVIDERS env var
-# In a new terminal
-cd examples/your-example
-TF_REATTACH_PROVIDERS=... terraform init
-TF_REATTACH_PROVIDERS=... terraform apply
-```
-<!-- End SDK <no value> -->
-
-<no value>
-<!-- Start SDK <no value> -->
-
-<!-- End SDK <no value> -->
-
-<!-- Start Summary [summary] -->
-## Summary
-
-ColorTokens Core API: API for managing lifecycle of core micro-segmentation resources (tags, assets & groups)
-<!-- End Summary [summary] -->
-
-<!-- Start Table of Contents [toc] -->
-## Table of Contents
-<!-- $toc-max-depth=2 -->
-* [xshield-sdk](#xshield-sdk)
-  * [Installation](#installation)
-  * [Testing the provider locally](#testing-the-provider-locally)
-  * [Available Resources and Data Sources](#available-resources-and-data-sources)
-
-<!-- End Table of Contents [toc] -->
-
-<!-- Start Installation [installation] -->
 ## Installation
-
-To install this provider, copy and paste this code into your Terraform configuration. Then, run `terraform init`.
 
 ```hcl
 terraform {
   required_providers {
     xshield = {
       source  = "colortokens/xshield"
-      version = "0.3.8"
+      version = "0.4.0"
     }
   }
 }
 
 provider "xshield" {
-  # Configuration options
+  tenancy_id       = var.tenancy_id
+  user_id          = var.user_id
+  fingerprint      = var.fingerprint
+  private_key_path = "/path/to/colortokens_api_key.pem"
+  server_url       = "https://my-company.colortokens.com/"
 }
 ```
-<!-- End Installation [installation] -->
 
-<!-- Start Testing the provider locally [usage] -->
-## Testing the provider locally
+The published version comes from the release tag, which the goreleaser workflow builds on any tag
+matching `v*`. Keep the version above and `examples/provider/provider.tf` in step with it.
 
-#### Local Provider
+## Getting started
 
-Should you want to validate a change locally, the `--debug` flag allows you to execute the provider against a terraform instance locally.
+Policy reaches a firewall in four steps, and each has a resource.
 
-This also allows for debuggers (e.g. delve) to be attached to the provider.
+1. **Tag the assets.** `xshield_tag_rule` applies core tags; segment criteria select on those tags.
+2. **Describe the policy.** `xshield_template` holds the port and path rules, `xshield_named_network`
+   the reusable address sets.
+3. **Attach it.** `xshield_segment` selects assets by criteria and attaches templates to them.
+4. **Deploy it.** `xshield_asset` turns enforcement on, then `xshield_policy_deployment` pushes the
+   reviewed policy out. Nothing reaches a firewall until this step runs.
+
+Two things surprise people, and both are documented on the resources concerned. A deployment does
+nothing on an asset whose enforcement is off. And a segment criteria is stored with a `managedby`
+clause the backend appends, which the provider applies during plan so no spurious diff appears.
+
+## Resources
+
+| Resource | What it manages |
+| --- | --- |
+| [`xshield_asset`](docs/resources/asset.md) | An existing asset's tags and its enforcement state. Assets are imported, not created. |
+| [`xshield_named_network`](docs/resources/named_network.md) | A reusable set of addresses that policy rules refer to. |
+| [`xshield_policy_deployment`](docs/resources/policy_deployment.md) | Pushes reviewed policy to the assets a criteria selects. |
+| [`xshield_segment`](docs/resources/segment.md) | A set of assets selected by criteria, with the policy attached to them. |
+| [`xshield_tag_rule`](docs/resources/tag_rule.md) | Applies core tags to the assets a criteria matches. |
+| [`xshield_template`](docs/resources/template.md) | Port and path rules that a segment applies to its members. |
+
+## Data sources
+
+Looking up one object, by id or by name:
+
+| Data source | Returns |
+| --- | --- |
+| [`xshield_asset`](docs/data-sources/asset.md) | One asset, with its full enforcement state. |
+| [`xshield_named_network`](docs/data-sources/named_network.md) | One named network and its ranges. |
+| [`xshield_segment`](docs/data-sources/segment.md) | One segment, its criteria and its attachments. |
+| [`xshield_tag_rule`](docs/data-sources/tag_rule.md) | One tag rule and the tags it applies. |
+| [`xshield_template`](docs/data-sources/template.md) | One template with its ports and paths. |
+
+Selecting many objects by criteria:
+
+| Data source | Returns |
+| --- | --- |
+| [`xshield_assets`](docs/data-sources/assets.md) | Assets matching a criteria, with enforcement state and ids. |
+| [`xshield_named_networks`](docs/data-sources/named_networks.md) | Named networks and their ranges. |
+| [`xshield_segments`](docs/data-sources/segments.md) | Segments, their membership counts and automation settings. |
+| [`xshield_tag_rules`](docs/data-sources/tag_rules.md) | Tag rules and the tags they apply. |
+| [`xshield_templates`](docs/data-sources/templates.md) | Templates and how widely each is assigned. |
+
+Understanding the tenant, so policy can be written without the portal:
+
+| Data source | Answers |
+| --- | --- |
+| [`xshield_criteria`](docs/data-sources/criteria.md) | Is this criteria valid, and how much does it select? |
+| [`xshield_fields`](docs/data-sources/fields.md) | Which tag keys exist, and which may a segment use? |
+| [`xshield_field_values`](docs/data-sources/field_values.md) | What values does this tag actually take? |
+| [`xshield_open_ports`](docs/data-sources/open_ports.md) | What do these assets listen on, and what is enforced? |
+| [`xshield_paths`](docs/data-sources/paths.md) | Which peers actually connect to them? |
+| [`xshield_policy_changes`](docs/data-sources/policy_changes.md) | What would a deployment change, and on how many assets? |
+| [`xshield_deployment_simulation`](docs/data-sources/deployment_simulation.md) | What firewall rules would one asset end up running? |
+| [`xshield_work_request`](docs/data-sources/work_request.md) | Did that asynchronous change finish? |
+
+## Running the provider locally
+
+With a local build, through `dev_overrides`:
+
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/colortokens/xshield" = "<PATH>"
+  }
+  direct {}
+}
+```
+
+Put that in `~/.terraformrc`, run `go build` in this directory, and set `<PATH>` to the result of
+`go env GOBIN`, or `$HOME/go/bin` if that is empty.
+
+To attach a debugger instead:
 
 ```sh
 go run main.go --debug
-# Copy the TF_REATTACH_PROVIDERS env var
-# In a new terminal
+# copy the TF_REATTACH_PROVIDERS value it prints, then in another terminal
 cd examples/your-example
 TF_REATTACH_PROVIDERS=... terraform init
 TF_REATTACH_PROVIDERS=... terraform apply
 ```
 
-#### Compiled Provider
+## Contributing
 
-Terraform allows you to use local provider builds by setting a `dev_overrides` block in a configuration file called `.terraformrc`. This block overrides all other configured installation methods.
+The code under `internal/` is maintained by hand, so your edits will not be overwritten. Many files
+still carry a `Code generated by ... DO NOT EDIT.` header from an earlier build process; treat it as
+history rather than instruction.
 
-1. Execute `go build` to construct a binary called `terraform-provider-xshield`
-2. Ensure that the `.terraformrc` file is configured with a `dev_overrides` section such that your local copy of terraform can see the provider binary
+Before changing `internal/sdk`, read [scripts/README.md](scripts/README.md). It covers how to keep
+the OpenAPI document in step with the platform API, how to add or remove an operation, and the
+places where the document has been wrong before.
 
-Terraform searches for the `.terraformrc` file in your home directory and applies any configuration settings you set.
+Attribute documentation lives in the schema, not in `docs/`. Edit the `Description` on the attribute
+and regenerate; editing `docs/*.md` directly means the next regeneration deletes your change.
 
-```
-provider_installation {
-
-  dev_overrides {
-      "registry.terraform.io/colortokens/xshield" = "<PATH>"
-  }
-
-  # For all other providers, install them directly from their origin provider
-  # registries as normal. If you omit this, Terraform will _only_ use
-  # the dev_overrides block, and so no other providers will be available.
-  direct {}
-}
-```
-<!-- End Testing the provider locally [usage] -->
-
-<!-- Start Available Resources and Data Sources [operations] -->
-## Available Resources and Data Sources
-
-### Resources
-
-* [xshield_asset](docs/resources/asset.md)
-* [xshield_named_network](docs/resources/named_network.md)
-* [xshield_segment](docs/resources/segment.md)
-* [xshield_tag_rule](docs/resources/tag_rule.md)
-* [xshield_template](docs/resources/template.md)
-### Data Sources
-
-* [xshield_asset](docs/data-sources/asset.md)
-* [xshield_named_network](docs/data-sources/named_network.md)
-* [xshield_segment](docs/data-sources/segment.md)
-* [xshield_tag_rule](docs/data-sources/tag_rule.md)
-* [xshield_template](docs/data-sources/template.md)
-<!-- End Available Resources and Data Sources [operations] -->
-
-<!-- Placeholder for Future Speakeasy SDK Sections -->
-
-Terraform allows you to use local provider builds by setting a `dev_overrides` block in a configuration file called `.terraformrc`. This block overrides all other configured installation methods.
-
-Terraform searches for the `.terraformrc` file in your home directory and applies any configuration settings you set.
-
-```
-provider_installation {
-
-  dev_overrides {
-      "registry.terraform.io/speakeasy/xshield-sdk" = "<PATH>"
-  }
-
-  # For all other providers, install them directly from their origin provider
-  # registries as normal. If you omit this, Terraform will _only_ use
-  # the dev_overrides block, and so no other providers will be available.
-  direct {}
-}
-```
-
-Your `<PATH>` may vary depending on how your Go environment variables are configured. Execute `go env GOBIN` to set it, then set the `<PATH>` to the value returned. If nothing is returned, set it to the default location, `$HOME/go/bin`.
-
-Note: To use the dev_overrides, please ensure you run `go build` in this folder. You must have a binary available for terraform to find.
-
-### Contributions
-
-While we value open-source contributions to this SDK, this library is generated programmatically. Any manual changes added to internal files will be overwritten on the next generation. 
-We look forward to hearing your feedback. Feel free to open a PR or an issue with a proof of concept and we'll do our best to include it in a future release. 
-
-### SDK Created by [Speakeasy](https://docs.speakeasyapi.dev/docs/using-speakeasy/client-sdks)
+Run `go build ./... && go vet ./... && go test ./internal/...` before opening a pull request.

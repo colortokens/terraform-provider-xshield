@@ -14,11 +14,6 @@ TagRule DataSource
 
 ```terraform
 data "xshield_tag_rule" "my_tagrule" {
-  # You can look up a tag rule by ID
-  id = "12345678-1234-1234-1234-123456789012"
-  
-  # Or by name if you know it
-  # rule_name = "production-tags"
 }
 ```
 
@@ -27,8 +22,8 @@ data "xshield_tag_rule" "my_tagrule" {
 
 ### Optional
 
-- `id` (String) ID of the tag rule to look up
-- `rule_name` (String) Name of the tag rule to look up
+- `id` (String) ID of the tag rule. Either id or rule_name must be provided.
+- `rule_name` (String) Name of the tag rule to look up. Either id or rule_name must be provided.
 
 ### Read-Only
 

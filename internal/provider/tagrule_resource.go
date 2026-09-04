@@ -31,7 +31,6 @@ type TagRuleResource struct {
 // TagRuleResourceModel describes the resource data model.
 type TagRuleResourceModel struct {
 	ID              types.String            `tfsdk:"id"`
-	MatchingAssets  types.Int64             `tfsdk:"matching_assets"`
 	OnMatch         map[string]types.String `tfsdk:"on_match"`
 	RuleCriteria    types.String            `tfsdk:"rule_criteria"`
 	RuleDescription types.String            `tfsdk:"rule_description"`
@@ -45,33 +44,43 @@ func (r *TagRuleResource) Metadata(ctx context.Context, req resource.MetadataReq
 
 func (r *TagRuleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "TagRule Resource",
+		MarkdownDescription: "A tag rule: a criteria that, when it matches an asset, applies the tags " +
+			"in `on_match` to it. Tag rules are how assets acquire the tags that segment criteria " +
+			"then select on.\n\n" +
+			"How many assets a rule currently matches is a live property of the tenant, recomputed as " +
+			"assets are created, changed and deleted, so it is not part of this resource. Read it from " +
+			"the `xshield_tag_rule` data source for one rule or `xshield_tag_rules` for all of them. " +
+			"To size a criteria before writing a rule, use `xshield_criteria`, which also warns when " +
+			"the criteria selects nothing and returns sample asset names.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
-			},
-			"matching_assets": schema.Int64Attribute{
-				Computed: true,
+				Description: `The unique identifier of this tag rule resource.`,
+				Computed:    true,
 			},
 			"on_match": schema.MapAttribute{
+				Description: `Key-value pairs to apply as tags when the rule criteria matches an asset. Keys represent tag names and values represent tag values.`,
 				Computed:    true,
 				Optional:    true,
 				ElementType: types.StringType,
 			},
 			"rule_criteria": schema.StringAttribute{
-				Required: true,
+				Description: `Criteria expression that defines when this tag rule should be applied. Uses the same expression language as segments.`,
+				Required:    true,
 			},
 			"rule_description": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `Description of the tag rule explaining its purpose and function.`,
+				Computed:    true,
+				Optional:    true,
 			},
 			"rule_enabled": schema.BoolAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `Whether the tag rule is currently active and being evaluated against assets. Default is true.`,
+				Computed:    true,
+				Optional:    true,
 			},
 			"rule_name": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `Name of the tag rule for identification and display purposes.`,
+				Computed:    true,
+				Optional:    true,
 			},
 		},
 	}
@@ -287,5 +296,14 @@ func (r *TagRuleResource) Delete(ctx context.Context, req resource.DeleteRequest
 }
 
 func (r *TagRuleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	id := req.ID
+	if !isXshieldUUID(id) {
+		found, err := findTagRuleIDByName(ctx, r.client, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot import tag rule by name", err.Error())
+			return
+		}
+		id = found
+	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }

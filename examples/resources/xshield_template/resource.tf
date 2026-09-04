@@ -1,52 +1,54 @@
-resource "xshield_template" "my_template" {
-  template_category    = "...my_template_category..."
-  template_description = "...my_template_description..."
-  template_name        = "...my_template_name..."
-  template_paths = [
-    {
-      destination_asset_id = "...my_destination_asset_id..."
-      destination_named_network = {
-        named_network_id   = "...my_named_network_id..."
-        named_network_name = "...my_named_network_name..."
-      }
-      destination_tag_based_policy = {
-        criteria              = "...my_criteria..."
-        tag_based_policy_id   = "...my_tag_based_policy_id..."
-        tag_based_policy_name = "...my_tag_based_policy_name..."
-      }
-      direction       = "...my_direction..."
-      domain          = "...my_domain..."
-      dst_ip          = "...my_dst_ip..."
-      dst_process     = "...my_dst_process..."
-      method          = "...my_method..."
-      port            = "...my_port..."
-      port_name       = "...my_port_name..."
-      protocol        = "...my_protocol..."
-      source_asset_id = "...my_source_asset_id..."
-      source_named_network = {
-        named_network_id   = "...my_named_network_id..."
-        named_network_name = "...my_named_network_name..."
-      }
-      source_tag_based_policy = {
-        criteria              = "...my_criteria..."
-        tag_based_policy_id   = "...my_tag_based_policy_id..."
-        tag_based_policy_name = "...my_tag_based_policy_name..."
-      }
-      src_ip      = "...my_src_ip..."
-      src_process = "...my_src_process..."
-      uri         = "...my_uri..."
-    }
-  ]
+# A template is a set of rules. Attaching it to a segment applies those rules to
+# every asset in the segment.
+
+# See what the assets actually listen on before deciding what to allow.
+data "xshield_open_ports" "payroll_db" {
+  criteria = "application = 'payroll' AND role = 'db'"
+}
+
+resource "xshield_template" "payroll_db" {
+  template_name        = "payroll-db"
+  template_description = "Inbound access to the payroll databases"
+  template_type        = "application-template"
+  template_category    = "Applications"
+
+  # A port rule decides how traffic to a listening port is treated.
+  #   denied          block it
+  #   allow-intranet  allow from the intranet only
+  #   allow-any       allow from anywhere, including the internet
+  #   path-restricted allow only from the peers named in template_paths below
   template_ports = [
     {
-      listen_port          = "...my_listen_port..."
-      listen_port_name     = "...my_listen_port_name..."
-      listen_port_protocol = "...my_listen_port_protocol..."
-      listen_port_reviewed = "allow-any"
-      listen_process_names = [
-        "..."
-      ]
-    }
+      listen_port          = "5432"
+      listen_port_protocol = "TCP"
+      listen_port_reviewed = "path-restricted"
+      listen_process_names = ["postgres"]
+    },
+    {
+      listen_port          = "22"
+      listen_port_protocol = "TCP"
+      listen_port_reviewed = "allow-intranet"
+    },
   ]
-  template_type = "application-template"
+
+  # A path rule names one peer. An inbound path sets exactly one source, and an
+  # outbound path exactly one destination.
+  template_paths = [
+    {
+      direction = "inbound"
+      port      = "5432"
+      protocol  = "TCP"
+      source_tag_based_policy = {
+        tag_based_policy_name = "payroll-app"
+      }
+    },
+    {
+      direction = "inbound"
+      port      = "5432"
+      protocol  = "TCP"
+      source_named_network = {
+        named_network_name = "corp-networks"
+      }
+    },
+  ]
 }
