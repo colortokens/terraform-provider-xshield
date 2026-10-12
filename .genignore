@@ -1,7 +1,0 @@
-# Files to be ignored by SDK generator
-internal/provider/provider.go
-internal/provider/asset_data_source.go
-internal/provider/asset_resource.go
-internal/provider/tagrule_resource.go
-internal/sdk/xshield.go
-

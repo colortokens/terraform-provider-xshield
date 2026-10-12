@@ -62,10 +62,10 @@ jobs:
       - name: Run unit tests
         run: go test -v -race -cover ./...
 
-  # NOTE: there is deliberately no docs-freshness gate here. docs/ is currently
-  # maintained by hand and has diverged from the schemas, so running
-  # "go generate" would discard the curated descriptions. Reconcile the two
-  # before adding that check.
+  # NOTE: docs/ is now generated in full from the schemas, so a docs-freshness
+  # gate would be safe to add here: every attribute description lives on its
+  # schema and "go generate ./..." discards nothing. It is left out only because
+  # it needs a Terraform CLI on PATH to avoid tfplugindocs downloading one.
 
   # Acceptance tests need credentials for a live tenant, which pull requests
   # from forks cannot read. They run in full on the nightly workflow; here they

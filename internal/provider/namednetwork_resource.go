@@ -5,7 +5,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
@@ -64,17 +63,21 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 		MarkdownDescription: "NamedNetwork Resource",
 		Attributes: map[string]schema.Attribute{
 			"assigned_by_tag_based_policy": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this named network is assigned by a tag-based policy`,
+				Computed:    true,
 			},
 			"colortokens_managed": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this named network is managed by ColorTokens`,
+				Computed:    true,
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Description: `The ID of this resource`,
+				Computed:    true,
 			},
 			"ip_ranges": schema.ListNestedAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `List of IP ranges to include in this named network`,
+				Computed:    true,
+				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Validators: []validator.Object{
 						speakeasy_objectvalidators.NotNull(),
@@ -82,20 +85,24 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 					},
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for this IP range`,
+							Computed:    true,
 						},
 						"ip_count": schema.Int64Attribute{
-							Computed: true,
+							Description: `Count of IP addresses in this range`,
+							Computed:    true,
 						},
 						"ip_range": schema.StringAttribute{
-							Computed: true,
-							Optional: true,
+							Description: `CIDR notation of the IP range (e.g., "192.168.1.0/24")`,
+							Computed:    true,
+							Optional:    true,
 						},
 					},
 				},
 			},
 			"named_network_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of assets assigned to this named network`,
+				Computed:    true,
 			},
 			"named_network_description": schema.StringAttribute{
 				Computed: true,
@@ -115,30 +122,38 @@ func (r *NamedNetworkResource) Schema(ctx context.Context, req resource.SchemaRe
 				Description: `Named network name. Maximum length is 256 characters. Required.`,
 			},
 			"namednetwork_tag_based_policy_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of tag-based policies that reference this named network`,
+				Computed:    true,
 			},
 			"program_as_internet": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether programs are treated as internet traffic`,
+				Computed:    true,
 			},
 			"program_as_intranet": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether to treat programs as intranet traffic`,
+				Computed:    true,
 			},
 			"region": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `Region associated with this named network`,
+				Computed:    true,
+				Optional:    true,
 			},
 			"service": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				Description: `Service associated with this named network`,
+				Computed:    true,
+				Optional:    true,
 			},
 			"total_comments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Total number of comments on this named network`,
+				Computed:    true,
 			},
 			"total_count": schema.Int64Attribute{
-				Computed: true,
+				Description: `Total count of IP addresses in this named network`,
+				Computed:    true,
 			},
 			"usergroup_named_network_assignments": schema.Int64Attribute{
-				Computed: true,
+				Description: `Count of user groups assigned to this named network`,
+				Computed:    true,
 			},
 		},
 	}
@@ -590,71 +605,16 @@ func (r *NamedNetworkResource) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *NamedNetworkResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Check if the import ID is a UUID (existing behavior) or a name
-	if isUUID(req.ID) {
-		// Existing behavior - direct ID import
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-		return
-	}
-
-	// If not a UUID, assume it's a name and look up the named network
-	// Create a search criteria that filters by the named network name
-	searchCriteria := fmt.Sprintf("namedNetworkName = '%s'", req.ID)
-	listReq := operations.ListNamedNetworksRequest{
-		SearchInput: shared.SearchInput{
-			Criteria: searchCriteria,
-		},
-	}
-
-	// Add debug logging
-	tflog.Info(ctx, "Importing named network by name", map[string]interface{}{
-		"name":            req.ID,
-		"search_criteria": listReq.SearchInput.Criteria,
-	})
-
-	// Try to get the named networks
-	networks, err := r.client.Namednetworks.ListNamedNetworks(ctx, listReq)
-
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error retrieving named networks",
-			fmt.Sprintf("Could not list named networks to find by name: %s", err),
-		)
-		return
-	}
-
-	// Process the JSON response
-	if networks.NamedNetworks != nil && len(networks.NamedNetworks.Items) > 0 {
-		// Find the named network with the matching name
-		var foundID string
-		for _, network := range networks.NamedNetworks.Items {
-			if network.NamedNetworkName != nil && *network.NamedNetworkName == req.ID {
-				if network.ID != nil {
-					foundID = *network.ID
-					break
-				}
-			}
-		}
-
-		if foundID != "" {
-			tflog.Info(ctx, "Found named network", map[string]interface{}{
-				"id":   foundID,
-				"name": req.ID,
-			})
-			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+	id := req.ID
+	if !isXshieldUUID(id) {
+		found, err := findNamedNetworkIDByName(ctx, r.client, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot import named network by name", err.Error())
 			return
 		}
+		id = found
 	}
-
-	resp.Diagnostics.AddError(
-		"Named network not found",
-		fmt.Sprintf("No named network found with name: %s", req.ID),
-	)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }
 
 // Helper to check if a string is a UUID
-func isUUID(s string) bool {
-	// Simple UUID format check (not comprehensive)
-	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
-	return matched
-}

@@ -13,64 +13,58 @@ Template Resource
 ## Example Usage
 
 ```terraform
-resource "xshield_template" "my_template" {
-  # Required fields
-  template_name = "...my_template_name..."
-  
-  # Optional fields
-  template_breach_levels = ["...my_breach_level..."] 
-  template_category     = "...my_template_category..."
-  template_description  = "...my_template_description..."
-  template_type         = "application-template" # or "block-template"
-  
-  # Network paths configuration
-  template_paths = [
-    {
-      destination_asset_id = "...my_destination_asset_id..."
-      destination_named_network = {
-        named_network_id   = "...my_named_network_id..."
-        named_network_name = "...my_named_network_name..."
-      }
-      destination_tag_based_policy = {
-        criteria              = "...my_criteria..."
-        tag_based_policy_id   = "...my_tag_based_policy_id..."
-        tag_based_policy_name = "...my_tag_based_policy_name..."
-      }
-      direction       = "...my_direction..."
-      domain          = "...my_domain..."
-      dst_ip          = "...my_dst_ip..."
-      dst_process     = "...my_dst_process..."
-      method          = "...my_method..."
-      port            = "...my_port..."
-      port_name       = "...my_port_name..."
-      protocol        = "...my_protocol..."
-      source_asset_id = "...my_source_asset_id..."
-      source_named_network = {
-        named_network_id   = "...my_named_network_id..."
-        named_network_name = "...my_named_network_name..."
-      }
-      source_tag_based_policy = {
-        criteria              = "...my_criteria..."
-        tag_based_policy_id   = "...my_tag_based_policy_id..."
-        tag_based_policy_name = "...my_tag_based_policy_name..."
-      }
-      src_ip      = "...my_src_ip..."
-      src_process = "...my_src_process..."
-      uri         = "...my_uri..."
-    }
-  ]
-  
-  # Port configuration
+# A template is a set of rules. Attaching it to a segment applies those rules to
+# every asset in the segment.
+
+# See what the assets actually listen on before deciding what to allow.
+data "xshield_open_ports" "payroll_db" {
+  criteria = "application = 'payroll' AND role = 'db'"
+}
+
+resource "xshield_template" "payroll_db" {
+  template_name        = "payroll-db"
+  template_description = "Inbound access to the payroll databases"
+  template_type        = "application-template"
+  template_category    = "Applications"
+
+  # A port rule decides how traffic to a listening port is treated.
+  #   denied          block it
+  #   allow-intranet  allow from the intranet only
+  #   allow-any       allow from anywhere, including the internet
+  #   path-restricted allow only from the peers named in template_paths below
   template_ports = [
     {
-      listen_port          = "...my_listen_port..."
-      listen_port_name     = "...my_listen_port_name..."
-      listen_port_protocol = "...my_listen_port_protocol..."
-      listen_port_reviewed = "allow-any" # Options: "denied", "allow-intranet", "allow-any", "path-restricted"
-      listen_process_names = [
-        "...my_process_name..."
-      ]
-    }
+      listen_port          = "5432"
+      listen_port_protocol = "TCP"
+      listen_port_reviewed = "path-restricted"
+      listen_process_names = ["postgres"]
+    },
+    {
+      listen_port          = "22"
+      listen_port_protocol = "TCP"
+      listen_port_reviewed = "allow-intranet"
+    },
+  ]
+
+  # A path rule names one peer. An inbound path sets exactly one source, and an
+  # outbound path exactly one destination.
+  template_paths = [
+    {
+      direction = "inbound"
+      port      = "5432"
+      protocol  = "TCP"
+      source_tag_based_policy = {
+        tag_based_policy_name = "payroll-app"
+      }
+    },
+    {
+      direction = "inbound"
+      port      = "5432"
+      protocol  = "TCP"
+      source_named_network = {
+        named_network_name = "corp-networks"
+      }
+    },
   ]
 }
 ```
@@ -81,15 +75,15 @@ resource "xshield_template" "my_template" {
 ### Required
 
 - `template_name` (String) Template name. Maximum length is 256 characters.
+- `template_type` (String) must be one of ["application-template", "block-template"]; Requires replacement if changed.
 
 ### Optional
 
 - `template_breach_levels` (List of String) Template breach levels.
 - `template_category` (String) Template category.
 - `template_description` (String) Template description. Maximum length is 1000 characters.
-- `template_paths` (Attributes List) List of network paths defined in this template (see [below for nested schema](#nestedatt--template_paths))
-- `template_ports` (Attributes List) List of ports defined in this template (see [below for nested schema](#nestedatt--template_ports))
-- `template_type` (String) Type of template. Must be one of ["application-template", "block-template"].
+- `template_paths` (Attributes List) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths))
+- `template_ports` (Attributes List) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_ports))
 
 ### Read-Only
 
@@ -106,34 +100,35 @@ resource "xshield_template" "my_template" {
 Optional:
 
 - `destination_asset_id` (String) ID of the destination asset for this path.
-- `destination_named_network` (Attributes) Destination named network for this path (see [below for nested schema](#nestedatt--template_paths--destination_named_network))
-- `destination_tag_based_policy` (Attributes) Destination segment for this path (see [below for nested schema](#nestedatt--template_paths--destination_tag_based_policy))
-- `direction` (String) Direction of the path (inbound, outbound).
+- `destination_named_network` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--destination_named_network))
+- `destination_tag_based_policy` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--destination_tag_based_policy))
+- `direction` (String) Whether this is an access policy template.
 - `domain` (String) Domain name for HTTP/HTTPS paths.
-- `dst_ip` (String) Destination IP address or CIDR range.
+- `dst_ip` (String) Whether this is an access policy template.
 - `dst_process` (String) Destination process name.
 - `method` (String) HTTP method for HTTP/HTTPS paths.
-- `port` (String) Port number or range (e.g., "80", "443", "8000-8100").
+- `port` (String) Whether this is an access policy template.
 - `port_name` (String) Friendly name for the port.
-- `protocol` (String) Network protocol (e.g., TCP, UDP, HTTP).
+- `protocol` (String) Whether this is an access policy template.
 - `source_asset_id` (String) ID of the source asset for this path.
-- `source_named_network` (Attributes) Source named network for this path (see [below for nested schema](#nestedatt--template_paths--source_named_network))
-- `source_tag_based_policy` (Attributes) Source segment for this path (see [below for nested schema](#nestedatt--template_paths--source_tag_based_policy))
+- `source_named_network` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--source_named_network))
+- `source_tag_based_policy` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--source_tag_based_policy))
 - `src_ip` (String) Source IP address or CIDR range.
 - `src_process` (String) Source process name.
 - `uri` (String) URI path for HTTP/HTTPS paths.
 
 Read-Only:
 
-- `id` (String)
+- `id` (String) The unique identifier of this template resource.
+- `rule_hit_metrics` (Attributes) Template rule hit metrics. (see [below for nested schema](#nestedatt--template_paths--rule_hit_metrics))
 
 <a id="nestedatt--template_paths--destination_named_network"></a>
 ### Nested Schema for `template_paths.destination_named_network`
 
 Optional:
 
-- `named_network_id` (String) ID of the destination named network.
-- `named_network_name` (String) Name of the destination named network.
+- `named_network_id` (String) Whether this is an access policy template.
+- `named_network_name` (String) Whether this is an access policy template.
 
 
 <a id="nestedatt--template_paths--destination_tag_based_policy"></a>
@@ -151,8 +146,8 @@ Optional:
 
 Optional:
 
-- `named_network_id` (String) ID of the source named network.
-- `named_network_name` (String) Name of the source named network.
+- `named_network_id` (String) Whether this is an access policy template.
+- `named_network_name` (String) Whether this is an access policy template.
 
 
 <a id="nestedatt--template_paths--source_tag_based_policy"></a>
@@ -165,17 +160,26 @@ Optional:
 - `tag_based_policy_name` (String) Name of the source segment.
 
 
+<a id="nestedatt--template_paths--rule_hit_metrics"></a>
+### Nested Schema for `template_paths.rule_hit_metrics`
+
+Read-Only:
+
+- `last_evaluated` (String)
+- `total_hits` (String)
+
+
 
 <a id="nestedatt--template_ports"></a>
 ### Nested Schema for `template_ports`
 
 Optional:
 
-- `listen_port` (String) Port number or range (e.g., "80", "443", "8000-8100").
-- `listen_port_name` (String) Friendly name for the port.
-- `listen_port_protocol` (String) Protocol for the port (e.g., TCP, UDP).
-- `listen_port_reviewed` (String) Review status of the port. Must be one of ["denied", "allow-intranet", "allow-any", "path-restricted"].
-- `listen_process_names` (List of String) List of process names that are allowed to listen on this port.
+- `listen_port` (String) Port number.
+- `listen_port_name` (String) Port name.
+- `listen_port_protocol` (String) Port protocol.
+- `listen_port_reviewed` (String) must be one of ["denied", "allow-intranet", "allow-any", "path-restricted"]
+- `listen_process_names` (List of String) Process names that listen on this port.
 
 Read-Only:
 
@@ -185,6 +189,13 @@ Read-Only:
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
-terraform import xshield_template.my_xshield_template ""
+# Import by id.
+terraform import xshield_template.my_template "12345678-1234-1234-1234-123456789012"
+
+# Or by name. The name must be unique; an ambiguous name is reported as an
+# error rather than resolved to an arbitrary object.
+terraform import xshield_template.my_template "payroll-web"
 ```

@@ -118,11 +118,32 @@ func TestTypeNamesArePrefixed(t *testing.T) {
 // accepts as a lookup key. Each must be settable in configuration, otherwise
 // the read requests the empty identifier no matter what the practitioner wrote.
 var dataSourceLookupAttributes = map[string][]string{
+	// Single-object lookups: either key identifies one record.
 	"xshield_asset":         {"id", "asset_name"},
 	"xshield_named_network": {"id", "named_network_name"},
 	"xshield_segment":       {"id", "tag_based_policy_name"},
 	"xshield_tag_rule":      {"id", "rule_name"},
 	"xshield_template":      {"id", "template_name"},
+	"xshield_work_request":  {"id"},
+
+	// Searches: the criteria is what selects the rows. max_results bounds the
+	// page and is deliberately not a lookup key.
+	"xshield_assets":         {"criteria"},
+	"xshield_named_networks": {"criteria"},
+	"xshield_segments":       {"criteria"},
+	"xshield_tag_rules":      {"criteria"},
+	"xshield_templates":      {"criteria"},
+	"xshield_open_ports":     {"criteria"},
+	"xshield_paths":          {"criteria"},
+
+	// Scoped metadata reads.
+	"xshield_fields":       {"scope"},
+	"xshield_field_values": {"scope", "field"},
+
+	// Deployment inspection: the target is a criteria or an asset plus direction.
+	"xshield_criteria":              {"criteria"},
+	"xshield_policy_changes":        {"criteria", "direction"},
+	"xshield_deployment_simulation": {"asset_id", "direction"},
 }
 
 func TestDataSourceLookupKeysAreConfigurable(t *testing.T) {
@@ -222,6 +243,15 @@ func TestResourcesAreConfigurable(t *testing.T) {
 	}
 }
 
+// resourcesWithoutDataSource records the resources that deliberately have no
+// same-named data source, with the reason. Anything not listed here still fails,
+// so a genuinely dropped registration is still caught.
+var resourcesWithoutDataSource = map[string]string{
+	"xshield_policy_deployment": "a deployment is an action, not a stored object: " +
+		"the API has no read-by-id for one. xshield_policy_changes and " +
+		"xshield_deployment_simulation are its read-only counterparts.",
+}
+
 // TestEveryResourceHasADataSource keeps the two registrations in step; a
 // resource without its read-only counterpart is the usual sign a registration
 // was dropped.
@@ -231,8 +261,30 @@ func TestEveryResourceHasADataSource(t *testing.T) {
 	dataSources := dataSourceSchemas(t)
 
 	for typeName := range resourceSchemas(t) {
-		if _, ok := dataSources[typeName]; !ok {
-			t.Errorf("resource %s has no matching data source", typeName)
+		if _, ok := dataSources[typeName]; ok {
+			continue
+		}
+		if _, exempt := resourcesWithoutDataSource[typeName]; exempt {
+			continue
+		}
+		t.Errorf("resource %s has no matching data source", typeName)
+	}
+}
+
+// TestExemptionsFromTheDataSourceRuleStillApply stops the list above outliving
+// the resources it excuses, or excusing one that has since grown a data source.
+func TestExemptionsFromTheDataSourceRuleStillApply(t *testing.T) {
+	t.Parallel()
+
+	resources := resourceSchemas(t)
+	dataSources := dataSourceSchemas(t)
+
+	for typeName := range resourcesWithoutDataSource {
+		if _, ok := resources[typeName]; !ok {
+			t.Errorf("%s is exempted but is no longer a registered resource", typeName)
+		}
+		if _, ok := dataSources[typeName]; ok {
+			t.Errorf("%s now has a data source, so its exemption should be removed", typeName)
 		}
 	}
 }

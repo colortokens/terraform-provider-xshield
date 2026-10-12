@@ -10,6 +10,9 @@ import (
 type ListTemplatesRequest struct {
 	// file download
 	Download *string `queryParam:"style=form,explode=true,name=download"`
+	// Ask the endpoint to report the total number of matches. Some routes read
+	// this as a boolean and others only check that it is present, so send "true".
+	ComputeTotal *string `queryParam:"style=form,explode=true,name=computeTotal"`
 	// search details
 	SearchInput shared.SearchInput `request:"mediaType=application/json"`
 }
@@ -19,6 +22,13 @@ func (o *ListTemplatesRequest) GetDownload() *string {
 		return nil
 	}
 	return o.Download
+}
+
+func (o *ListTemplatesRequest) GetComputeTotal() *string {
+	if o == nil {
+		return nil
+	}
+	return o.ComputeTotal
 }
 
 func (o *ListTemplatesRequest) GetSearchInput() shared.SearchInput {

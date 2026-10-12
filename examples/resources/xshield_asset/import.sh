@@ -1,1 +1,6 @@
-terraform import xshield_asset.my_xshield_asset ""
+# Import by id.
+terraform import xshield_asset.my_asset "12345678-1234-1234-1234-123456789012"
+
+# Or by name. The name must be unique; an ambiguous name is reported as an
+# error rather than resolved to an arbitrary object.
+terraform import xshield_asset.my_asset "web-server-01"

@@ -2348,6 +2348,8 @@ func (s *Templates) DeleteFromTemplate(ctx context.Context, request operations.D
 	}
 
 	switch {
+	case httpRes.StatusCode == 202:
+		fallthrough
 	case httpRes.StatusCode == 204:
 	case httpRes.StatusCode == 400:
 		fallthrough

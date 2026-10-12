@@ -54,10 +54,12 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 
 		Attributes: map[string]schema.Attribute{
 			"access_policy_template": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this is an access policy template`,
+				Computed:    true,
 			},
 			"colortokens_managed": schema.BoolAttribute{
-				Computed: true,
+				Description: `Whether this template is managed by ColorTokens`,
+				Computed:    true,
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -65,10 +67,12 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Description: "ID of the template. Either id or template_name must be provided.",
 			},
 			"template_category": schema.StringAttribute{
-				Computed: true,
+				Description: `Template category`,
+				Computed:    true,
 			},
 			"template_description": schema.StringAttribute{
-				Computed: true,
+				Description: `Template description. Maximum length is 1000 characters.`,
+				Computed:    true,
 			},
 			"template_name": schema.StringAttribute{
 				Computed:    true,
@@ -76,100 +80,129 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Description: "Name of the template to look up. Either id or template_name must be provided.",
 			},
 			"template_paths": schema.ListNestedAttribute{
-				Computed: true,
+				Description: `List of network paths defined in this template`,
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"destination_asset_id": schema.StringAttribute{
-							Computed: true,
+							Description: `ID of the destination asset for this path`,
+							Computed:    true,
 						},
 						"destination_named_network": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: `Destination named network for this path`,
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"named_network_id": schema.StringAttribute{
-									Computed: true,
+									Description: `ID of the destination named network`,
+									Computed:    true,
 								},
 								"named_network_name": schema.StringAttribute{
-									Computed: true,
+									Description: `Name of the destination named network`,
+									Computed:    true,
 								},
 							},
 						},
 						"destination_tag_based_policy": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: `Destination segment for this path`,
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"criteria": schema.StringAttribute{
-									Computed: true,
+									Description: `Criteria expression for the destination segment`,
+									Computed:    true,
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Computed: true,
+									Description: `ID of the destination segment`,
+									Computed:    true,
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Computed: true,
+									Description: `Name of the destination segment`,
+									Computed:    true,
 								},
 							},
 						},
 						"direction": schema.StringAttribute{
-							Computed: true,
+							Description: `Direction of the path (inbound, outbound)`,
+							Computed:    true,
 						},
 						"domain": schema.StringAttribute{
-							Computed: true,
+							Description: `Domain name for HTTP/HTTPS paths`,
+							Computed:    true,
 						},
 						"dst_ip": schema.StringAttribute{
-							Computed: true,
+							Description: `Destination IP address or CIDR range`,
+							Computed:    true,
 						},
 						"dst_process": schema.StringAttribute{
-							Computed: true,
+							Description: `Destination process name`,
+							Computed:    true,
 						},
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for this path`,
+							Computed:    true,
 						},
 						"method": schema.StringAttribute{
-							Computed: true,
+							Description: `HTTP method for HTTP/HTTPS paths`,
+							Computed:    true,
 						},
 						"port": schema.StringAttribute{
-							Computed: true,
+							Description: `Port number or range (e.g., "80", "443", "8000-8100")`,
+							Computed:    true,
 						},
 						"port_name": schema.StringAttribute{
-							Computed: true,
+							Description: `Friendly name for the port`,
+							Computed:    true,
 						},
 						"protocol": schema.StringAttribute{
-							Computed: true,
+							Description: `Network protocol (e.g., TCP, UDP, HTTP)`,
+							Computed:    true,
 						},
 						"source_asset_id": schema.StringAttribute{
-							Computed: true,
+							Description: `ID of the source asset for this path`,
+							Computed:    true,
 						},
 						"source_named_network": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: `Source named network for this path`,
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"named_network_id": schema.StringAttribute{
-									Computed: true,
+									Description: `ID of the source named network`,
+									Computed:    true,
 								},
 								"named_network_name": schema.StringAttribute{
-									Computed: true,
+									Description: `Name of the source named network`,
+									Computed:    true,
 								},
 							},
 						},
 						"source_tag_based_policy": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: `Source segment for this path`,
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"criteria": schema.StringAttribute{
-									Computed: true,
+									Description: `Criteria expression for the source segment`,
+									Computed:    true,
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Computed: true,
+									Description: `ID of the source segment`,
+									Computed:    true,
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Computed: true,
+									Description: `Name of the source segment`,
+									Computed:    true,
 								},
 							},
 						},
 						"src_ip": schema.StringAttribute{
-							Computed: true,
+							Description: `Source IP address or CIDR range`,
+							Computed:    true,
 						},
 						"src_process": schema.StringAttribute{
-							Computed: true,
+							Description: `Source process name`,
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: `URI path for HTTP/HTTPS paths`,
+							Computed:    true,
 						},
 						"rule_hit_metrics": schema.SingleNestedAttribute{
 							Computed: true,
@@ -186,25 +219,32 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				},
 			},
 			"template_ports": schema.ListNestedAttribute{
-				Computed: true,
+				Description: `List of ports defined in this template`,
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: `Unique identifier for this port entry`,
+							Computed:    true,
 						},
 						"listen_port": schema.StringAttribute{
-							Computed: true,
+							Description: `Port number or range (e.g., "80", "443", "8000-8100")`,
+							Computed:    true,
 						},
 						"listen_port_name": schema.StringAttribute{
-							Computed: true,
+							Description: `Friendly name for the port`,
+							Computed:    true,
 						},
 						"listen_port_protocol": schema.StringAttribute{
-							Computed: true,
+							Description: `Protocol for the port (e.g., TCP, UDP)`,
+							Computed:    true,
 						},
 						"listen_port_reviewed": schema.StringAttribute{
-							Computed: true,
+							Description: `Review status of the port ("denied", "allow-intranet", "allow-any", "path-restricted")`,
+							Computed:    true,
 						},
 						"listen_process_names": schema.ListAttribute{
+							Description: `List of process names that are allowed to listen on this port`,
 							Computed:    true,
 							ElementType: types.StringType,
 						},
@@ -212,7 +252,8 @@ func (r *TemplateDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				},
 			},
 			"template_type": schema.StringAttribute{
-				Computed: true,
+				Description: `Type of template to filter by ("application-template" or "block-template")`,
+				Computed:    true,
 			},
 		},
 	}

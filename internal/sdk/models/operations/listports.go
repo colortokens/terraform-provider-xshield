@@ -10,6 +10,9 @@ import (
 type ListPortsRequest struct {
 	// file download
 	Download *string `queryParam:"style=form,explode=true,name=download"`
+	// Ask the endpoint to report the total number of matches. Some routes read
+	// this as a boolean and others only check that it is present, so send "true".
+	ComputeTotal *string `queryParam:"style=form,explode=true,name=computeTotal"`
 	// search criteria for filtering open ports
 	PathSearchInput shared.PathSearchInput `request:"mediaType=application/json"`
 }
@@ -19,6 +22,13 @@ func (o *ListPortsRequest) GetDownload() *string {
 		return nil
 	}
 	return o.Download
+}
+
+func (o *ListPortsRequest) GetComputeTotal() *string {
+	if o == nil {
+		return nil
+	}
+	return o.ComputeTotal
 }
 
 func (o *ListPortsRequest) GetPathSearchInput() shared.PathSearchInput {

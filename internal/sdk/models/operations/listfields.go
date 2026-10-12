@@ -3,51 +3,16 @@
 package operations
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"net/http"
 )
 
-// Scope - scope
-type Scope string
-
-const (
-	ScopeAsset Scope = "asset"
-	ScopePath  Scope = "path"
-	ScopePort  Scope = "port"
-	ScopeAgent Scope = "agent"
-)
-
-func (e Scope) ToPointer() *Scope {
-	return &e
-}
-func (e *Scope) UnmarshalJSON(data []byte) error {
-	var v string
-	if err := json.Unmarshal(data, &v); err != nil {
-		return err
-	}
-	switch v {
-	case "asset":
-		fallthrough
-	case "path":
-		fallthrough
-	case "port":
-		fallthrough
-	case "agent":
-		*e = Scope(v)
-		return nil
-	default:
-		return fmt.Errorf("invalid value for Scope: %v", v)
-	}
-}
-
 type ListFieldsRequest struct {
 	// scope
-	Scope *Scope `queryParam:"style=form,explode=true,name=scope"`
+	Scope *string `queryParam:"style=form,explode=true,name=scope"`
 }
 
-func (o *ListFieldsRequest) GetScope() *Scope {
+func (o *ListFieldsRequest) GetScope() *string {
 	if o == nil {
 		return nil
 	}
@@ -62,7 +27,7 @@ type ListFieldsResponse struct {
 	// Raw HTTP response; suitable for custom response parsing
 	RawResponse *http.Response
 	// OK
-	TypeaheadSuggestions *shared.TypeaheadSuggestions
+	MetadataResponse *shared.MetadataResponse
 	// Bad Request
 	ErrorResponse *shared.ErrorResponse
 }
@@ -88,11 +53,11 @@ func (o *ListFieldsResponse) GetRawResponse() *http.Response {
 	return o.RawResponse
 }
 
-func (o *ListFieldsResponse) GetTypeaheadSuggestions() *shared.TypeaheadSuggestions {
+func (o *ListFieldsResponse) GetMetadataResponse() *shared.MetadataResponse {
 	if o == nil {
 		return nil
 	}
-	return o.TypeaheadSuggestions
+	return o.MetadataResponse
 }
 
 func (o *ListFieldsResponse) GetErrorResponse() *shared.ErrorResponse {

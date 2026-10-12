@@ -5,21 +5,14 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
 
-	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -37,117 +30,15 @@ type AssetResource struct {
 
 // AssetResourceModel describes the resource data model.
 type AssetResourceModel struct {
-	ActiveBreachModeTemplatesAssigned     types.Int64                             `tfsdk:"active_breach_mode_templates_assigned"`
-	AgentID                               types.String                            `tfsdk:"agent_id"`
-	AgentLastCheckInTime                  types.String                            `tfsdk:"agent_last_check_in_time"`
-	AgentName                             types.String                            `tfsdk:"agent_name"`
-	AgentStatus                           types.String                            `tfsdk:"agent_status"`
-	AgentVersion                          types.String                            `tfsdk:"agent_version"`
-	AllowTemplatesAssigned                types.Int64                             `tfsdk:"allow_templates_assigned"`
-	AssetAvailability                     types.String                            `tfsdk:"asset_availability"`
-	AssetInternetFacing                   types.Bool                              `tfsdk:"asset_internet_facing"`
-	AssetName                             types.String                            `tfsdk:"asset_name"`
-	AssetProgressiveLastRefreshed         types.String                            `tfsdk:"asset_progressive_last_refreshed"`
-	AssetProgressiveOutboundLastRefreshed types.String                            `tfsdk:"asset_progressive_outbound_last_refreshed"`
-	AssetRisk                             types.String                            `tfsdk:"asset_risk"`
-	AttackSurface                         types.String                            `tfsdk:"attack_surface"`
-	AttackSurfacePendingChanges           *tfTypes.PendingChanges                 `tfsdk:"attack_surface_pending_changes"`
-	AutoSynchronizeEnabled                types.Bool                              `tfsdk:"auto_synchronize_enabled"`
-	BlastRadius                           types.String                            `tfsdk:"blast_radius"`
-	BlastRadiusPendingChanges             *tfTypes.PendingChanges                 `tfsdk:"blast_radius_pending_changes"`
-	BlockMaliciousIPs                     types.String                            `tfsdk:"block_malicious_ips"`
-	BlockTemplatesAssigned                types.Int64                             `tfsdk:"block_templates_assigned"`
-	BreachResponseLevel                   types.String                            `tfsdk:"breach_response_level"`
-	BreachResponseModeSynced              types.String                            `tfsdk:"breach_response_mode_synced"`
-	BusinessValue                         types.String                            `tfsdk:"business_value"`
-	CloudTags                             []tfTypes.Tag                           `tfsdk:"cloud_tags"`
-	ClusterIdentifier                     types.String                            `tfsdk:"cluster_identifier"`
-	ContainerNamespace                    types.String                            `tfsdk:"container_namespace"`
-	CoreTags                              map[string]types.String                 `tfsdk:"core_tags"`
-	CPUCoreCount                          types.Int64                             `tfsdk:"cpu_core_count"`
-	CPUName                               types.String                            `tfsdk:"cpu_name"`
-	CurrentTrafficConfiguration           types.String                            `tfsdk:"current_traffic_configuration"`
-	DeterministicID                       types.String                            `tfsdk:"deterministic_id"`
-	DiskCapacityInGB                      types.Int64                             `tfsdk:"disk_capacity_in_gb"`
-	FwCoexistenceCfgStatus                types.String                            `tfsdk:"fw_coexistence_cfg_status"`
-	HostName                              types.String                            `tfsdk:"host_name"`
-	ID                                    types.String                            `tfsdk:"id"`
-	InboundAssetDeploymentState           types.String                            `tfsdk:"inbound_asset_deployment_state"`
-	InboundAssetPolicyMode                types.String                            `tfsdk:"inbound_asset_policy_mode"`
-	InboundAssetPolicyUpdatedAt           types.String                            `tfsdk:"inbound_asset_policy_updated_at"`
-	InboundAssetStatus                    types.String                            `tfsdk:"inbound_asset_status"`
-	InboundAutoSyncDeploymentMode         types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
-	InboundAutoSyncIncludeViolations      types.Bool                              `tfsdk:"inbound_auto_sync_include_violations"`
-	InboundAutoSyncIntervalMinutes        types.Int64                             `tfsdk:"inbound_auto_sync_interval_minutes"`
-	InboundAutoSyncViolationThreshold     types.Int64                             `tfsdk:"inbound_auto_sync_violation_threshold"`
-	InboundInternetPaths                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_paths"`
-	InboundInternetPorts                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_internet_ports"`
-	InboundIntranetPaths                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_paths"`
-	InboundIntranetPorts                  *tfTypes.ReviewCoverage                 `tfsdk:"inbound_intranet_ports"`
-	Interfaces                            []tfTypes.NetworkInterface              `tfsdk:"interfaces"`
-	KernelArchitecture                    types.String                            `tfsdk:"kernel_architecture"`
-	KernelVersion                         types.String                            `tfsdk:"kernel_version"`
-	LanInterfaceName                      types.String                            `tfsdk:"lan_interface_name"`
-	LastPolicyDeploymentTriggeredAt       types.String                            `tfsdk:"last_policy_deployment_triggered_at"`
-	LateralMovementAttacks                types.Int64                             `tfsdk:"lateral_movement_attacks"`
-	LateralMovementTechniques             types.Int64                             `tfsdk:"lateral_movement_techniques"`
-	LowestInboundAssetStatus              types.String                            `tfsdk:"lowest_inbound_asset_status"`
-	LowestOutboundAssetStatus             types.String                            `tfsdk:"lowest_outbound_asset_status"`
-	LowestProgressiveInboundAssetStatus   types.String                            `tfsdk:"lowest_progressive_inbound_asset_status"`
-	LowestProgressiveOutboundAssetStatus  types.String                            `tfsdk:"lowest_progressive_outbound_asset_status"`
-	ManagedBy                             types.String                            `tfsdk:"managed_by"`
-	MicroDeploymentEnabled                types.Bool                              `tfsdk:"micro_deployment_enabled"`
-	MostRecentNewPath                     types.String                            `tfsdk:"most_recent_new_path"`
-	NamedNetworkChanges                   []tfTypes.MetadataNamedNetworkReference `tfsdk:"named_network_changes"`
-	NamednetworksAssigned                 types.Int64                             `tfsdk:"namednetworks_assigned"`
-	NewPathProcessingStopped              types.Bool                              `tfsdk:"new_path_processing_stopped"`
-	OsName                                types.String                            `tfsdk:"os_name"`
-	OutboundAssetDeploymentState          types.String                            `tfsdk:"outbound_asset_deployment_state"`
-	OutboundAssetPolicyMode               types.String                            `tfsdk:"outbound_asset_policy_mode"`
-	OutboundAssetPolicyUpdatedAt          types.String                            `tfsdk:"outbound_asset_policy_updated_at"`
-	OutboundAssetStatus                   types.String                            `tfsdk:"outbound_asset_status"`
-	OutboundAutoSyncDeploymentMode        types.String                            `tfsdk:"outbound_auto_sync_deployment_mode"`
-	OutboundAutoSyncIncludeViolations     types.Bool                              `tfsdk:"outbound_auto_sync_include_violations"`
-	OutboundAutoSyncIntervalMinutes       types.Int64                             `tfsdk:"outbound_auto_sync_interval_minutes"`
-	OutboundAutoSyncViolationThreshold    types.Int64                             `tfsdk:"outbound_auto_sync_violation_threshold"`
-	OutboundInternetPaths                 *tfTypes.ReviewCoverage                 `tfsdk:"outbound_internet_paths"`
-	OutboundIntranetPaths                 *tfTypes.ReviewCoverage                 `tfsdk:"outbound_intranet_paths"`
-	PendingAttackSurfaceChanges           types.Bool                              `tfsdk:"pending_attack_surface_changes"`
-	PendingBlastRadiusChanges             types.Bool                              `tfsdk:"pending_blast_radius_changes"`
-	PendingFWCoexistenceUpdateChanges     types.Bool                              `tfsdk:"pending_fw_coexistence_update_changes"`
-	Platform                              types.String                            `tfsdk:"platform"`
-	PoliciesAssigned                      types.Int64                             `tfsdk:"policies_assigned"`
-	PolicyStatus                          types.String                            `tfsdk:"policy_status"`
-	Programs                              []tfTypes.Program                       `tfsdk:"programs"`
-	ProgressiveInboundAssetStatus         types.String                            `tfsdk:"progressive_inbound_asset_status"`
-	ProgressiveOutboundAssetStatus        types.String                            `tfsdk:"progressive_outbound_asset_status"`
-	RAMCapacityInMB                       types.Int64                             `tfsdk:"ram_capacity_in_mb"`
-	RuleSynchronizeStatus                 types.String                            `tfsdk:"rule_synchronize_status"`
-	SecurityPatches                       types.Int64                             `tfsdk:"security_patches"`
-	SerialNumber                          types.String                            `tfsdk:"serial_number"`
-	Tags                                  []tfTypes.Tag                           `tfsdk:"tags"`
-	TemplateChanges                       []tfTypes.TemplateReference             `tfsdk:"template_changes"`
-	TemplatesAssigned                     types.Int64                             `tfsdk:"templates_assigned"`
-	TotalBreachResponseComments           types.Int64                             `tfsdk:"total_breach_response_comments"`
-	TotalComments                         types.Int64                             `tfsdk:"total_comments"`
-	TotalInboundComments                  types.Int64                             `tfsdk:"total_inbound_comments"`
-	TotalOutboundComments                 types.Int64                             `tfsdk:"total_outbound_comments"`
-	TotalPaths                            types.Int64                             `tfsdk:"total_paths"`
-	TotalPorts                            types.Int64                             `tfsdk:"total_ports"`
-	TotalPortsPathRestricted              types.Int64                             `tfsdk:"total_ports_path_restricted"`
-	Type                                  types.String                            `tfsdk:"type"`
-	UnreviewedPaths                       types.Int64                             `tfsdk:"unreviewed_paths"`
-	UnreviewedPorts                       types.Int64                             `tfsdk:"unreviewed_ports"`
-	UsergroupMostRecentNewPath            types.String                            `tfsdk:"usergroup_most_recent_new_path"`
-	UsergroupOutboundInternetPaths        *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_internet_paths"`
-	UsergroupOutboundIntranetPaths        *tfTypes.ReviewCoverage                 `tfsdk:"usergroup_outbound_intranet_paths"`
-	UsergroupTotalPaths                   types.Int64                             `tfsdk:"usergroup_total_paths"`
-	UsergroupUnreviewedPaths              types.Int64                             `tfsdk:"usergroup_unreviewed_paths"`
-	Usergroups                            []tfTypes.AssetGroup                    `tfsdk:"usergroups"`
-	Users                                 []tfTypes.AssetUser                     `tfsdk:"users"`
-	VendorInfo                            types.String                            `tfsdk:"vendor_info"`
-	VirtualizationSystem                  types.String                            `tfsdk:"virtualization_system"`
-	Vulnerabilities                       types.Int64                             `tfsdk:"vulnerabilities"`
+	AgentID             types.String            `tfsdk:"agent_id"`
+	ID                  types.String            `tfsdk:"id"`
+	AssetName           types.String            `tfsdk:"asset_name"`
+	CoreTags            map[string]types.String `tfsdk:"core_tags"`
+	DeterministicID     types.String            `tfsdk:"deterministic_id"`
+	Type                types.String            `tfsdk:"type"`
+	VendorInfo          types.String            `tfsdk:"vendor_info"`
+	InboundEnforcement  types.Bool              `tfsdk:"inbound_enforcement"`
+	OutboundEnforcement types.Bool              `tfsdk:"outbound_enforcement"`
 }
 
 func (r *AssetResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -156,705 +47,52 @@ func (r *AssetResource) Metadata(ctx context.Context, req resource.MetadataReque
 
 func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Asset Resource. **Note: Assets cannot be created through Terraform. You must import existing assets using 'terraform import'.**",
+		MarkdownDescription: "An asset under management: its name, type, core tags, and whether " +
+			"policy is enforced in each direction.\n\n" +
+			"**Assets cannot be created through Terraform.** They are registered by the agent. " +
+			"Import one with `terraform import xshield_asset.example \"<asset name or id>\"`, then " +
+			"manage it here.\n\n" +
+			"This resource deliberately holds only what Terraform manages. Everything else the " +
+			"platform knows about an asset, including its policy status, deployment states, risk " +
+			"scores, open ports and paths, agent details, hardware inventory and derived tags, is " +
+			"read through the `xshield_asset` data source, or `xshield_assets` to search across the " +
+			"tenant. Those values change on their own as the agent checks in and the backend " +
+			"recomputes, so keeping them out of resource state is what stops every plan from " +
+			"reporting drift that no configuration change can resolve.",
 		Attributes: map[string]schema.Attribute{
-			"active_breach_mode_templates_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
 			"agent_id": schema.StringAttribute{
 				Computed: true,
 			},
-			"agent_last_check_in_time": schema.StringAttribute{
-				Computed: true,
-			},
-			"agent_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"agent_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"agent_version": schema.StringAttribute{
-				Computed: true,
-			},
-			"allow_templates_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
-			"asset_availability": schema.StringAttribute{
-				Computed: true,
-			},
-			"asset_internet_facing": schema.BoolAttribute{
-				Computed: true,
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: `The asset's UUID, assigned by the platform. Either this or the asset's name works as the terraform import identifier.`,
 			},
 			"asset_name": schema.StringAttribute{
-				Required: true,
-			},
-			"asset_progressive_last_refreshed": schema.StringAttribute{
-				Computed: true,
-			},
-			"asset_progressive_outbound_last_refreshed": schema.StringAttribute{
-				Computed: true,
-			},
-			"asset_risk": schema.StringAttribute{
-				Computed: true,
-			},
-			"attack_surface": schema.StringAttribute{
-				Computed: true,
-			},
-			"attack_surface_pending_changes": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allow_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"block_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"fw_coexistence_cfg_update_pending": schema.BoolAttribute{
-						Computed: true,
-					},
-					"internet_paths": schema.Int64Attribute{
-						Computed: true,
-					},
-					"internet_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"intranet_change": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"intranet_paths": schema.Int64Attribute{
-						Computed: true,
-					},
-					"intranet_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"namednetwork_change": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"peer_change": schema.BoolAttribute{
-						Computed: true,
-					},
-					"progressive_sync_pending": schema.BoolAttribute{
-						Computed: true,
-					},
-					"unassigned_allow_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"unassigned_block_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-				},
-			},
-			"auto_synchronize_enabled": schema.BoolAttribute{
-				Computed: true,
-			},
-			"blast_radius": schema.StringAttribute{
-				Computed: true,
-			},
-			"blast_radius_pending_changes": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allow_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"block_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"fw_coexistence_cfg_update_pending": schema.BoolAttribute{
-						Computed: true,
-					},
-					"internet_paths": schema.Int64Attribute{
-						Computed: true,
-					},
-					"internet_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"intranet_change": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"intranet_paths": schema.Int64Attribute{
-						Computed: true,
-					},
-					"intranet_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"namednetwork_change": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"peer_change": schema.BoolAttribute{
-						Computed: true,
-					},
-					"progressive_sync_pending": schema.BoolAttribute{
-						Computed: true,
-					},
-					"unassigned_allow_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-					"unassigned_block_templates": schema.ListAttribute{
-						Computed:    true,
-						ElementType: types.StringType,
-					},
-				},
-			},
-			"block_malicious_ips": schema.StringAttribute{
-				Computed: true,
-			},
-			"block_templates_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
-			"breach_response_level": schema.StringAttribute{
-				Computed: true,
-			},
-			"breach_response_mode_synced": schema.StringAttribute{
-				Computed: true,
-			},
-			"business_value": schema.StringAttribute{
-				Computed: true,
-			},
-			"cloud_tags": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"id": schema.StringAttribute{
-							Computed:    true,
-							Description: `Unique identifier for this tag instance. Should be provided to any other endpoints accepting tagId to reference this particular tag definition.`,
-						},
-						"is_cloud_tag": schema.BoolAttribute{
-							Computed:    true,
-							Description: `Set to true if tag is mirror of cloud provider resource tag (AWS / AZURE / GCP / OCI)`,
-						},
-						"key": schema.StringAttribute{
-							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
-						},
-						"value": schema.StringAttribute{
-							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
-						},
-					},
-				},
-			},
-			"cluster_identifier": schema.StringAttribute{
-				Computed: true,
-			},
-			"container_namespace": schema.StringAttribute{
-				Computed: true,
+				Required:    true,
+				Description: `The asset's name.`,
 			},
 			"core_tags": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 			},
-			"cpu_core_count": schema.Int64Attribute{
-				Computed: true,
-			},
-			"cpu_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"current_traffic_configuration": schema.StringAttribute{
-				Computed:    true,
-				Description: `must be one of ["disabled", "enable-all", "enable-inbound-only", "enable-outbound-only"]`,
-				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"disabled",
-						"enable-all",
-						"enable-inbound-only",
-						"enable-outbound-only",
-					),
-				},
-			},
 			"deterministic_id": schema.StringAttribute{
-				Computed: true,
-			},
-			"disk_capacity_in_gb": schema.Int64Attribute{
-				Computed: true,
-			},
-			"fw_coexistence_cfg_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"host_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"id": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_asset_deployment_state": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_asset_policy_mode": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_asset_policy_updated_at": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_auto_sync_deployment_mode": schema.StringAttribute{
-				Computed: true,
-			},
-			"inbound_auto_sync_include_violations": schema.BoolAttribute{
-				Computed: true,
-			},
-			"inbound_auto_sync_interval_minutes": schema.Int64Attribute{
-				Computed: true,
-			},
-			"inbound_auto_sync_violation_threshold": schema.Int64Attribute{
-				Computed: true,
-			},
-			"inbound_internet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"inbound_internet_ports": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"inbound_intranet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"inbound_intranet_ports": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"interfaces": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"flags": schema.ListAttribute{
-							Computed:    true,
-							ElementType: types.StringType,
-						},
-						"ipaddresses": schema.ListAttribute{
-							Computed:    true,
-							ElementType: types.StringType,
-						},
-						"macaddress": schema.StringAttribute{
-							Computed: true,
-						},
-						"name": schema.StringAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
-			"kernel_architecture": schema.StringAttribute{
-				Computed: true,
-			},
-			"kernel_version": schema.StringAttribute{
-				Computed: true,
-			},
-			"lan_interface_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"last_policy_deployment_triggered_at": schema.StringAttribute{
-				Computed: true,
-			},
-			"lateral_movement_attacks": schema.Int64Attribute{
-				Computed: true,
-			},
-			"lateral_movement_techniques": schema.Int64Attribute{
-				Computed: true,
-			},
-			"lowest_inbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"lowest_outbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"lowest_progressive_inbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"lowest_progressive_outbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"managed_by": schema.StringAttribute{
-				Computed: true,
-			},
-			"micro_deployment_enabled": schema.BoolAttribute{
-				Computed: true,
-			},
-			"most_recent_new_path": schema.StringAttribute{
-				Computed: true,
-			},
-			"named_network_changes": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"named_network_id": schema.StringAttribute{
-							Computed: true,
-						},
-						"named_network_name": schema.StringAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
-			"namednetworks_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
-			"new_path_processing_stopped": schema.BoolAttribute{
-				Computed: true,
-			},
-			"os_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_asset_deployment_state": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_asset_policy_mode": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_asset_policy_updated_at": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_auto_sync_deployment_mode": schema.StringAttribute{
-				Computed: true,
-			},
-			"outbound_auto_sync_include_violations": schema.BoolAttribute{
-				Computed: true,
-			},
-			"outbound_auto_sync_interval_minutes": schema.Int64Attribute{
-				Computed: true,
-			},
-			"outbound_auto_sync_violation_threshold": schema.Int64Attribute{
-				Computed: true,
-			},
-			"outbound_internet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"outbound_intranet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"pending_attack_surface_changes": schema.BoolAttribute{
-				Computed: true,
-			},
-			"pending_blast_radius_changes": schema.BoolAttribute{
-				Computed: true,
-			},
-			"pending_fw_coexistence_update_changes": schema.BoolAttribute{
-				Computed: true,
-			},
-			"platform": schema.StringAttribute{
-				Computed: true,
-			},
-			"policies_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
-			"policy_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"programs": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"image": schema.StringAttribute{
-							Computed: true,
-						},
-						"name": schema.StringAttribute{
-							Computed: true,
-						},
-						"path": schema.StringAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
-			"progressive_inbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"progressive_outbound_asset_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"ram_capacity_in_mb": schema.Int64Attribute{
-				Computed: true,
-			},
-			"rule_synchronize_status": schema.StringAttribute{
-				Computed: true,
-			},
-			"security_patches": schema.Int64Attribute{
-				Computed: true,
-			},
-			"serial_number": schema.StringAttribute{
-				Computed: true,
-			},
-			"tags": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"id": schema.StringAttribute{
-							Computed:    true,
-							Description: `Unique identifier for this tag instance. Should be provided to any other endpoints accepting tagId to reference this particular tag definition.`,
-						},
-						"is_cloud_tag": schema.BoolAttribute{
-							Computed:    true,
-							Description: `Set to true if tag is mirror of cloud provider resource tag (AWS / AZURE / GCP / OCI)`,
-						},
-						"key": schema.StringAttribute{
-							Computed:    true,
-							Description: `Tag Name, human readable name for this tag e.g Environment. Maximum length is 256 characters.`,
-						},
-						"value": schema.StringAttribute{
-							Computed:    true,
-							Description: `Tag Value, human readable value for this tag e.g Development. Maximum length is 256 characters.`,
-						},
-					},
-				},
-			},
-			"template_changes": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"template_id": schema.StringAttribute{
-							Computed: true,
-						},
-						"template_name": schema.StringAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
-			"templates_assigned": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_breach_response_comments": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_comments": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_inbound_comments": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_outbound_comments": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_paths": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_ports": schema.Int64Attribute{
-				Computed: true,
-			},
-			"total_ports_path_restricted": schema.Int64Attribute{
 				Computed: true,
 			},
 			"type": schema.StringAttribute{
 				Required: true,
 			},
-			"unreviewed_paths": schema.Int64Attribute{
-				Computed: true,
-			},
-			"unreviewed_ports": schema.Int64Attribute{
-				Computed: true,
-			},
-			"usergroup_most_recent_new_path": schema.StringAttribute{
-				Computed: true,
-			},
-			"usergroup_outbound_internet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"usergroup_outbound_intranet_paths": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"allowed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"allowed_ports": schema.Int64Attribute{
-						Computed: true,
-					},
-					"reviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-					"total": schema.Int64Attribute{
-						Computed: true,
-					},
-					"unreviewed": schema.Int64Attribute{
-						Computed: true,
-					},
-				},
-			},
-			"usergroup_total_paths": schema.Int64Attribute{
-				Computed: true,
-			},
-			"usergroup_unreviewed_paths": schema.Int64Attribute{
-				Computed: true,
-			},
-			"usergroups": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"groupid": schema.StringAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
-			"users": schema.ListNestedAttribute{
-				Computed: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"assetid": schema.StringAttribute{
-							Computed: true,
-						},
-						"domainname": schema.StringAttribute{
-							Computed:    true,
-							Description: `Domain Name the user belongs to`,
-						},
-						"email": schema.StringAttribute{
-							Computed: true,
-						},
-						"logincount": schema.Int64Attribute{
-							Computed: true,
-						},
-						"name": schema.StringAttribute{
-							Computed:    true,
-							Description: `Unique identifier for this user instance. Should be provided to any other endpoints accepting user to reference this particular user details.`,
-						},
-						"scimuserid": schema.StringAttribute{
-							Computed: true,
-						},
-						"signedin": schema.BoolAttribute{
-							Computed: true,
-						},
-					},
-				},
-			},
 			"vendor_info": schema.StringAttribute{
 				Computed: true,
 			},
-			"virtualization_system": schema.StringAttribute{
-				Computed: true,
+			"inbound_enforcement": schema.BoolAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: `Whether inbound policy is enforced on this asset. Setting it calls the zero-trust endpoint; the deployed rules themselves come from templates and a deployment. Leave unset to leave the current state alone. Reported back from inbound_asset_deployment_state.`,
 			},
-			"vulnerabilities": schema.Int64Attribute{
-				Computed: true,
+			"outbound_enforcement": schema.BoolAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: `Whether outbound policy is enforced on this asset. Setting it calls the zero-trust endpoint; the deployed rules themselves come from templates and a deployment. Leave unset to leave the current state alone. Reported back from outbound_asset_deployment_state.`,
 			},
 		},
 	}
@@ -967,12 +205,25 @@ func (r *AssetResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	var priorState *AssetResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &priorState)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	merge(ctx, req, resp, &data)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	assetID := data.ID.ValueString()
+
+	// Enforcement is a separate endpoint from the asset's own attributes, and it
+	// has to run before the read-back so the state reflects the change.
+	applyAssetEnforcement(ctx, r.client, assetID, data, priorState, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	createAssetDetails := *data.ToSharedCreateAssetDetails()
 	request := operations.UpdateAssetRequest{
@@ -1028,72 +279,16 @@ func (r *AssetResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 }
 
 func (r *AssetResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// Check if the import ID is a UUID (existing behavior) or a name
-	if isAssetUUID(req.ID) {
-		// Existing behavior - direct ID import
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
-		return
-	}
-
-	// If not a UUID, assume it's a name and look up the asset
-	// Create a search criteria that filters by the asset name
-	searchCriteria := fmt.Sprintf("assetName = '%s'", req.ID)
-	listReq := operations.ListAssetsRequest{
-		SearchInput: shared.SearchInput{
-			Criteria: searchCriteria,
-		},
-	}
-
-	// Add debug logging
-	tflog.Info(ctx, "Importing asset by name", map[string]interface{}{
-		"name":            req.ID,
-		"search_criteria": listReq.SearchInput.Criteria,
-	})
-
-	// Try to get the assets - explicitly request JSON format
-	jsonAccept := operations.WithAcceptHeaderOverride(operations.AcceptHeaderEnumApplicationJson)
-	assets, err := r.client.Assets.ListAssets(ctx, listReq, jsonAccept)
-
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error retrieving assets",
-			fmt.Sprintf("Could not list assets to find by name: %s", err),
-		)
-		return
-	}
-
-	// Process the JSON response
-	if assets.AssetSearchResults != nil && len(assets.AssetSearchResults.Items) > 0 {
-		// Find the asset with the matching name
-		var foundID string
-		for _, asset := range assets.AssetSearchResults.Items {
-			if asset.AssetName == req.ID {
-				if asset.AssetID != nil {
-					foundID = *asset.AssetID
-					break
-				}
-			}
-		}
-
-		if foundID != "" {
-			tflog.Info(ctx, "Found asset", map[string]interface{}{
-				"id":   foundID,
-				"name": req.ID,
-			})
-			resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), foundID)...)
+	id := req.ID
+	if !isXshieldUUID(id) {
+		found, err := findAssetIDByName(ctx, r.client, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot import asset by name", err.Error())
 			return
 		}
+		id = found
 	}
-
-	resp.Diagnostics.AddError(
-		"Asset not found",
-		fmt.Sprintf("No asset found with name: %s", req.ID),
-	)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }
 
 // Helper to check if a string is a UUID
-func isAssetUUID(s string) bool {
-	// Simple UUID format check (not comprehensive)
-	matched, _ := regexp.MatchString(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, strings.ToLower(s))
-	return matched
-}
