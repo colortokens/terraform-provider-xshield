@@ -65,12 +65,13 @@ believing the document.
 
 - **`edrInfo` is deliberately absent** from `AssetDetails`. The API returns it; the provider drops it
   rather than modelling the nested EDR host-import rules. Unknown JSON fields decode harmlessly.
-- **Documentation generation needs a newer toolchain.** `go generate ./...` runs `tfplugindocs`,
-  which downloads a Terraform CLI and fails signature verification with `openpgp: key expired`. Only
-  `terraform-plugin-docs` v0.25.0 fixes it, and that version raises the module's `go` directive to
-  1.25.8. The docs in this tree were produced by bumping to v0.25.0, generating, and reverting the
-  dependency, so no toolchain bump has landed. Either bump it deliberately or put a Terraform CLI on
-  `PATH`, which `tfplugindocs` prefers over downloading one.
+- **Attribute prose belongs on the schema, never in `docs/`.** `go generate ./...` runs
+  `tfplugindocs` and rewrites every page from the schema, so an edit to `docs/*.md` is deleted by the
+  next regeneration. Change the attribute's `Description` instead. Example blocks come from
+  `examples/resources/<name>/resource.tf` and `examples/data-sources/<name>/data-source.tf`, and the
+  import blocks from `import.sh`.
 
-  Every attribute description lives on its schema, so a regeneration loses nothing. Keep it that
-  way: edit the `Description` on the attribute, never `docs/*.md`.
+  Older versions of `terraform-plugin-docs` failed here with `openpgp: key expired`, because they
+  downloaded a Terraform CLI whose signature they could not verify. v0.25.0 is a direct dependency
+  now, so `go generate ./...` works without any dependency juggling. A real Terraform CLI on `PATH`
+  avoids the download entirely, which `tfplugindocs` prefers.

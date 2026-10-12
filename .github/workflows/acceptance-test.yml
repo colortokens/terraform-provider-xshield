@@ -1,0 +1,73 @@
+name: Nightly acceptance tests
+
+on:
+  schedule:
+    # 03:00 UTC daily.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      terraform_version:
+        description: Run against a single Terraform version instead of the matrix
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Acceptance tests share one tenant, so only one run may be in flight.
+  group: acceptance-tests
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: Terraform ${{ matrix.terraform }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform:
+          - "1.12.*"
+          - "1.13.*"
+          - "1.14.*"
+          - "1.15.*"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ github.event.inputs.terraform_version || matrix.terraform }}
+          terraform_wrapper: false
+
+      - name: Write the API signing key
+        env:
+          XSHIELD_PRIVATE_KEY: ${{ secrets.XSHIELD_PRIVATE_KEY }}
+        run: |
+          if [ -z "$XSHIELD_PRIVATE_KEY" ]; then
+            echo "XSHIELD_PRIVATE_KEY secret is not configured"
+            exit 1
+          fi
+          install -m 600 /dev/null "$RUNNER_TEMP/xshield_key.pem"
+          printf '%s' "$XSHIELD_PRIVATE_KEY" > "$RUNNER_TEMP/xshield_key.pem"
+
+      - name: Run acceptance tests
+        env:
+          TF_ACC: "1"
+          XSHIELD_TENANCY_ID: ${{ secrets.XSHIELD_TENANCY_ID }}
+          XSHIELD_USER_ID: ${{ secrets.XSHIELD_USER_ID }}
+          XSHIELD_FINGERPRINT: ${{ secrets.XSHIELD_FINGERPRINT }}
+          XSHIELD_SERVER_URL: ${{ secrets.XSHIELD_SERVER_URL }}
+          XSHIELD_TEST_ASSET_ID: ${{ secrets.XSHIELD_TEST_ASSET_ID }}
+          XSHIELD_TEST_ASSET_NAME: ${{ secrets.XSHIELD_TEST_ASSET_NAME }}
+        run: |
+          export XSHIELD_PRIVATE_KEY_PATH="$RUNNER_TEMP/xshield_key.pem"
+          go test -v -timeout 45m ./internal/provider/
+
+      - name: Remove the API signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xshield_key.pem"

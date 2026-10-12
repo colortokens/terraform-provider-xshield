@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
@@ -56,6 +58,9 @@ func (r *TagRuleResource) Schema(ctx context.Context, req resource.SchemaRequest
 			"id": schema.StringAttribute{
 				Description: `The unique identifier of this tag rule resource.`,
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"on_match": schema.MapAttribute{
 				Description: `Key-value pairs to apply as tags when the rule criteria matches an asset. Keys represent tag names and values represent tag values.`,

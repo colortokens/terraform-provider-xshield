@@ -197,7 +197,11 @@ RESOURCE_DESCRIPTIONS = {
 
 def schema_attr(name, cat, detail, mode, descriptions):
     """mode: 'computed', 'required', 'optional'."""
-    header = {"computed": "Computed: true,", "required": "Required: true,", "optional": "Optional:    true,"}[mode]
+    header = {"computed": "Computed: true,", "required": "Required: true,", "optional": "Optional:    true,",
+              # A lookup argument the practitioner may set, which the API also
+              # fills in: give it asset_name and id comes back populated, and
+              # vice versa. Optional alone would leave the other one null.
+              "computed_optional": "Computed:    true,\n\tOptional:    true,"}[mode]
     if name in descriptions and cat in ("string_ptr", "string_val"):
         return '"%s": schema.StringAttribute{\n\t%s\n\tDescription: `%s`,\n},' % (
             name, header, descriptions[name])
@@ -311,7 +315,7 @@ FIELDS = parse_fields()
 RESOURCE_MODES = {"assetName": "required", "type": "required", "coreTags": "optional"}
 # Either identifies the asset. Requiring the id would mean needing the portal to
 # find a UUID before Terraform could read anything, which defeats the point.
-DATASOURCE_MODES = {"assetId": "optional", "assetName": "optional"}
+DATASOURCE_MODES = {"assetId": "computed_optional", "assetName": "computed_optional"}
 
 # The asset resource is import-only: Create is refused outright, and Update sends
 # exactly these seven fields plus the enforcement toggles. Every other field in

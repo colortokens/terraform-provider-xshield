@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
@@ -23,6 +24,7 @@ import (
 var _ resource.Resource = &PolicyDeploymentResource{}
 var _ resource.ResourceWithConfigure = &PolicyDeploymentResource{}
 var _ resource.ResourceWithValidateConfig = &PolicyDeploymentResource{}
+var _ resource.ResourceWithImportState = &PolicyDeploymentResource{}
 
 func NewPolicyDeploymentResource() resource.Resource { return &PolicyDeploymentResource{} }
 
@@ -421,4 +423,31 @@ func (r *PolicyDeploymentResource) Delete(ctx context.Context, req resource.Dele
 	if _, err := r.deploy(ctx, input); err != nil {
 		resp.Diagnostics.AddError("Cannot withdraw the deployed policy", err.Error())
 	}
+}
+
+// ImportState adopts an existing deployment target. The id is the one
+// deploymentID builds, "<direction>|<criteria>", so the criteria and direction
+// are recovered from it rather than read back from the API, which has no
+// endpoint that returns a deployment by id.
+func (r *PolicyDeploymentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	direction, criteria, found := strings.Cut(req.ID, "|")
+	if !found || strings.TrimSpace(direction) == "" || strings.TrimSpace(criteria) == "" {
+		resp.Diagnostics.AddError(
+			"Unrecognised deployment import id",
+			fmt.Sprintf("Expected %q, for example \"inbound|application = 'payroll'\", but got %q.",
+				"<direction>|<criteria>", req.ID),
+		)
+		return
+	}
+	if direction != "inbound" && direction != "outbound" {
+		resp.Diagnostics.AddError(
+			"Unrecognised deployment direction",
+			fmt.Sprintf("Direction must be inbound or outbound, but the id carried %q.", direction),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("direction"), direction)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("criteria"), criteria)...)
 }

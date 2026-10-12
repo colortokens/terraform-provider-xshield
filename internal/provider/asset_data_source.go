@@ -251,6 +251,7 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
+				Computed:    true,
 				Optional:    true,
 				Description: `The asset's UUID. Set this or asset_name, not both.`,
 			},
@@ -258,6 +259,7 @@ func (r *AssetDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 				Computed: true,
 			},
 			"asset_name": schema.StringAttribute{
+				Computed:    true,
 				Optional:    true,
 				Description: `The asset's name. Set this or id, not both. Resolving by name avoids needing a UUID from the portal, and fails if the name is not unique.`,
 			},

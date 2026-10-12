@@ -55,9 +55,12 @@ data "xshield_segment" "my_segment" {
 
 Read-Only:
 
+- `completed_at` (String)
 - `completion_percentage` (Number) Percentage of completion for this milestone
 - `milestone_id` (Number) Unique identifier for the milestone
 - `name` (String) Name of the milestone
+- `started_at` (String)
+- `target_date` (String)
 
 
 <a id="nestedatt--namednetworks"></a>
