@@ -11,7 +11,7 @@ resource "xshield_enforcement_receipt" "this" {
 
   groups       = { for slug, sg in aws_security_group.group : slug => sg.id }
   markers      = { for slug, sg in aws_security_group.marker : slug => sg.id }
-  prefix_lists = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
+  address_sets = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
   rules = merge(
     { for key, r in aws_vpc_security_group_ingress_rule.ingress : key => r.security_group_rule_id },
     { for key, r in aws_vpc_security_group_egress_rule.egress : key => r.security_group_rule_id },

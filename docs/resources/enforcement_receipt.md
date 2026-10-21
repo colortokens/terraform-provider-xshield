@@ -35,7 +35,7 @@ resource "xshield_enforcement_receipt" "this" {
 
   groups       = { for slug, sg in aws_security_group.group : slug => sg.id }
   markers      = { for slug, sg in aws_security_group.marker : slug => sg.id }
-  prefix_lists = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
+  address_sets = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
   rules = merge(
     { for key, r in aws_vpc_security_group_ingress_rule.ingress : key => r.security_group_rule_id },
     { for key, r in aws_vpc_security_group_egress_rule.egress : key => r.security_group_rule_id },
@@ -50,7 +50,7 @@ resource "xshield_enforcement_receipt" "this" {
 
 - `cloud_account_id` (String) Cloud account the snapshot was applied to.
 - `content_hash` (String) Content hash of the snapshot that was applied, from `xshield_enforcement_snapshot`.
-- `groups` (Map of String) Security group ID created for each enforcement group, keyed by group slug.
+- `groups` (Map of String) Cloud ID created for each enforcement group, keyed by group slug.
 - `region` (String) Region the snapshot was applied to.
 - `rules` (Map of String) Rule ID created for each snapshot rule, keyed by the snapshot's rule key.
 - `snapshot_version` (Number) Version of the snapshot that was applied, from `xshield_enforcement_snapshot`.
@@ -59,8 +59,8 @@ resource "xshield_enforcement_receipt" "this" {
 
 ### Optional
 
-- `markers` (Map of String) Security group ID created for each marker, keyed by marker slug.
-- `prefix_lists` (Map of String) Prefix list ID created for each named network, keyed by prefix list slug.
+- `address_sets` (Map of String) Cloud ID created for each address set, keyed by address set slug.
+- `markers` (Map of String) Cloud ID created for each marker, keyed by marker slug.
 
 ### Read-Only
 

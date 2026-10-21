@@ -38,7 +38,7 @@ type EnforcementReceiptResourceModel struct {
 	VPCID           types.String `tfsdk:"vpc_id"`
 	Groups          types.Map    `tfsdk:"groups"`
 	Markers         types.Map    `tfsdk:"markers"`
-	PrefixLists     types.Map    `tfsdk:"prefix_lists"`
+	AddressSets     types.Map    `tfsdk:"address_sets"`
 	Rules           types.Map    `tfsdk:"rules"`
 	RunID           types.String `tfsdk:"run_id"`
 	AppliedAt       types.String `tfsdk:"applied_at"`
@@ -94,9 +94,9 @@ func (r *EnforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 				Required:    true,
 				Description: "Network the enforcement groups were rendered into.",
 			},
-			"groups":       idMap("Security group ID created for each enforcement group, keyed by group slug.", true),
-			"markers":      idMap("Security group ID created for each marker, keyed by marker slug.", false),
-			"prefix_lists": idMap("Prefix list ID created for each named network, keyed by prefix list slug.", false),
+			"groups":       idMap("Cloud ID created for each enforcement group, keyed by group slug.", true),
+			"markers":      idMap("Cloud ID created for each marker, keyed by marker slug.", false),
+			"address_sets": idMap("Cloud ID created for each address set, keyed by address set slug.", false),
 			"rules":        idMap("Rule ID created for each snapshot rule, keyed by the snapshot's rule key.", true),
 			"run_id": schema.StringAttribute{
 				Computed:      true,
@@ -128,7 +128,7 @@ type wireRenderedResources struct {
 	VPCID       string            `json:"vpcId"`
 	Groups      map[string]string `json:"groups"`
 	Markers     map[string]string `json:"markers"`
-	PrefixLists map[string]string `json:"prefixLists"`
+	AddressSets map[string]string `json:"addressSets"`
 	Rules       map[string]string `json:"rules"`
 }
 
@@ -165,7 +165,7 @@ func receiptRequest(ctx context.Context, data *EnforcementReceiptResourceModel, 
 			VPCID:       data.VPCID.ValueString(),
 			Groups:      ids(data.Groups),
 			Markers:     ids(data.Markers),
-			PrefixLists: ids(data.PrefixLists),
+			AddressSets: ids(data.AddressSets),
 			Rules:       ids(data.Rules),
 		},
 	}
@@ -275,7 +275,7 @@ func (r *EnforcementReceiptResource) adopt(ctx context.Context, data *Enforcemen
 	data.VPCID = types.StringValue(a.Resources.VPCID)
 	data.Groups = toMap(a.Resources.Groups)
 	data.Markers = toMap(a.Resources.Markers)
-	data.PrefixLists = toMap(a.Resources.PrefixLists)
+	data.AddressSets = toMap(a.Resources.AddressSets)
 	data.Rules = toMap(a.Resources.Rules)
 	data.RunID = types.StringValue(a.RunID)
 	data.AppliedAt = types.StringValue(a.AppliedAt)

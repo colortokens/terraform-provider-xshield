@@ -86,7 +86,8 @@ func (d *EnforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"pending_rules_added":   strList("Keys of rules the next enforcement run will add."),
 			"pending_rules_removed": strList("Keys of rules the next enforcement run will remove."),
 			"drift_evaluated": schema.BoolAttribute{Computed: true, Description: "Whether drift could be evaluated: it " +
-				"needs an applied receipt and at least one observation from the cloud connector."},
+				"needs an applied receipt and a cloud connector observation taken after it. An observation older than the " +
+				"latest apply describes resources that apply replaced, so it is not evaluated."},
 			"drift_observed_at": str("When the cloud connector's latest observation was taken."),
 			"drift_findings": schema.ListNestedAttribute{
 				Computed:    true,
@@ -138,8 +139,9 @@ type wireStatus struct {
 }
 
 type wireDrift struct {
-	ObservedAt string `json:"observedAt"`
-	Findings   []struct {
+	ObservedAt       string `json:"observedAt"`
+	ObservationStale bool   `json:"observationStale"`
+	Findings         []struct {
 		Kind        string `json:"kind"`
 		Severity    string `json:"severity"`
 		Restoration string `json:"restoration"`
@@ -195,7 +197,7 @@ func (d *EnforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 	err := d.api.get(ctx, d.api.endpoint(account, region, "drift"), &drift)
 	switch {
 	case err == nil:
-		data.DriftEvaluated = types.BoolValue(true)
+		data.DriftEvaluated = types.BoolValue(!drift.ObservationStale)
 		data.DriftObservedAt = optionalString(drift.ObservedAt)
 		for _, f := range drift.Findings {
 			data.DriftFindings = append(data.DriftFindings, driftFindingModel{

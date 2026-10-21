@@ -53,7 +53,7 @@ check "xshield_enforcement_health" {
 - `applied_at` (String) When the latest receipt was recorded.
 - `applied_content_hash` (String) Content hash in the latest apply receipt.
 - `applied_version` (Number) Version in the latest apply receipt. Null when nothing has been applied.
-- `drift_evaluated` (Boolean) Whether drift could be evaluated: it needs an applied receipt and at least one observation from the cloud connector.
+- `drift_evaluated` (Boolean) Whether drift could be evaluated: it needs an applied receipt and a cloud connector observation taken after it. An observation older than the latest apply describes resources that apply replaced, so it is not evaluated.
 - `drift_findings` (Attributes List) Differences between the cloud as observed and the snapshot as applied. (see [below for nested schema](#nestedatt--drift_findings))
 - `drift_observed_at` (String) When the cloud connector's latest observation was taken.
 - `expected_content_hash` (String) Content hash of the expected snapshot.

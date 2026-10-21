@@ -156,7 +156,7 @@ func TestReceiptRequestCarriesEveryRenderedID(t *testing.T) {
 		VPCID:           types.StringValue("vpc-1"),
 		Groups:          mapOf(map[string]string{"pci-db": "sg-1"}),
 		Markers:         types.MapNull(types.StringType),
-		PrefixLists:     mapOf(map[string]string{"saas-billing": "pl-1"}),
+		AddressSets:     mapOf(map[string]string{"saas-billing": "pl-1"}),
 		Rules:           mapOf(map[string]string{"pci-db|in|tcp|5432-5432|sg:pci-app": "sgr-1"}),
 	}
 	req, diags := receiptRequest(ctx, &data, "run-123")
@@ -164,7 +164,7 @@ func TestReceiptRequestCarriesEveryRenderedID(t *testing.T) {
 		t.Fatal(diags)
 	}
 	if req.Version != 43 || req.ContentHash != "sha256:abc" || req.RunID != "run-123" ||
-		req.Resources.Groups["pci-db"] != "sg-1" || req.Resources.PrefixLists["saas-billing"] != "pl-1" ||
+		req.Resources.Groups["pci-db"] != "sg-1" || req.Resources.AddressSets["saas-billing"] != "pl-1" ||
 		req.Resources.Rules["pci-db|in|tcp|5432-5432|sg:pci-app"] != "sgr-1" {
 		t.Errorf("receipt request lost a value: %+v", req)
 	}

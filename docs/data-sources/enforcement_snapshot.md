@@ -3,12 +3,12 @@
 page_title: "xshield_enforcement_snapshot Data Source - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, prefix lists and the tag-keyed workload directory for rendering.
+  Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, address sets and the tag-keyed workload directory. The snapshot is cloud-neutral: the configuration that renders it decides each cloud's constructs, names and limits.
 ---
 
 # xshield_enforcement_snapshot (Data Source)
 
-Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, prefix lists and the tag-keyed workload directory for rendering.
+Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, address sets and the tag-keyed workload directory. The snapshot is cloud-neutral: the configuration that renders it decides each cloud's constructs, names and limits.
 
 ## Example Usage
 
@@ -45,15 +45,25 @@ output "converging_to" {
 
 ### Read-Only
 
+- `address_sets` (Attributes List) Named sets of address ranges, one address family each, that rules reference as a peer. (see [below for nested schema](#nestedatt--address_sets))
 - `binding_keys` (List of String) Tag keys, in order, whose values form a directory path. Workloads resolve their group from these tags.
 - `content_hash` (String)
 - `directory` (Attributes List) (see [below for nested schema](#nestedatt--directory))
 - `enforcement_groups` (Attributes List) (see [below for nested schema](#nestedatt--enforcement_groups))
 - `markers` (Attributes List) (see [below for nested schema](#nestedatt--markers))
 - `payload_json` (String)
-- `prefix_lists` (Attributes List) (see [below for nested schema](#nestedatt--prefix_lists))
 - `quarantined_assets` (Number)
 - `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+
+<a id="nestedatt--address_sets"></a>
+### Nested Schema for `address_sets`
+
+Read-Only:
+
+- `address_family` (String)
+- `entries` (List of String)
+- `slug` (String)
+
 
 <a id="nestedatt--directory"></a>
 ### Nested Schema for `directory`
@@ -83,18 +93,7 @@ Read-Only:
 
 Read-Only:
 
-- `name` (String)
-- `slug` (String)
-
-
-<a id="nestedatt--prefix_lists"></a>
-### Nested Schema for `prefix_lists`
-
-Read-Only:
-
-- `address_family` (String)
-- `entries` (List of String)
-- `name` (String)
+- `display_name` (String)
 - `slug` (String)
 
 
@@ -110,6 +109,4 @@ Read-Only:
 - `peer_ref` (String)
 - `peer_type` (String)
 - `protocol` (String)
-- `provenance_segment` (String)
-- `provenance_template` (String)
 - `to_port` (Number)

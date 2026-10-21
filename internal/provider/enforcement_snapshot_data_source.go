@@ -35,8 +35,6 @@ type esRuleModel struct {
 	ToPort             types.Int64  `tfsdk:"to_port"`
 	PeerType           types.String `tfsdk:"peer_type"`
 	PeerRef            types.String `tfsdk:"peer_ref"`
-	ProvenanceSegment  types.String `tfsdk:"provenance_segment"`
-	ProvenanceTemplate types.String `tfsdk:"provenance_template"`
 }
 
 type esGroupModel struct {
@@ -49,13 +47,12 @@ type esGroupModel struct {
 }
 
 type esMarkerModel struct {
-	Slug types.String `tfsdk:"slug"`
-	Name types.String `tfsdk:"name"`
+	Slug        types.String `tfsdk:"slug"`
+	DisplayName types.String `tfsdk:"display_name"`
 }
 
-type esPrefixListModel struct {
+type esAddressSetModel struct {
 	Slug          types.String   `tfsdk:"slug"`
-	Name          types.String   `tfsdk:"name"`
 	AddressFamily types.String   `tfsdk:"address_family"`
 	Entries       []types.String `tfsdk:"entries"`
 }
@@ -76,7 +73,7 @@ type EnforcementSnapshotDataSourceModel struct {
 	EnforcementGroups []esGroupModel      `tfsdk:"enforcement_groups"`
 	Rules             []esRuleModel       `tfsdk:"rules"`
 	Markers           []esMarkerModel     `tfsdk:"markers"`
-	PrefixLists       []esPrefixListModel `tfsdk:"prefix_lists"`
+	AddressSets       []esAddressSetModel `tfsdk:"address_sets"`
 	Directory         []esDirectoryModel  `tfsdk:"directory"`
 	PayloadJSON       types.String        `tfsdk:"payload_json"`
 }
@@ -91,7 +88,7 @@ func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 		return schema.ListAttribute{Computed: true, ElementType: types.StringType}
 	}
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, prefix lists and the tag-keyed workload directory for rendering.",
+		MarkdownDescription: "Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, address sets and the tag-keyed workload directory. The snapshot is cloud-neutral: the configuration that renders it decides each cloud's constructs, names and limits.",
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id": schema.StringAttribute{Required: true},
 			"region":           schema.StringAttribute{Required: true},
@@ -130,22 +127,20 @@ func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 					"to_port":             schema.Int64Attribute{Computed: true},
 					"peer_type":           str(),
 					"peer_ref":            str(),
-					"provenance_segment":  str(),
-					"provenance_template": str(),
 				}},
 			},
 			"markers": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
-					"slug": str(),
-					"name": str(),
+					"slug":         str(),
+					"display_name": str(),
 				}},
 			},
-			"prefix_lists": schema.ListNestedAttribute{
-				Computed: true,
+			"address_sets": schema.ListNestedAttribute{
+				Computed:    true,
+				Description: "Named sets of address ranges, one address family each, that rules reference as a peer.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"slug":           str(),
-					"name":           str(),
 					"address_family": str(),
 					"entries":        strList(),
 				}},
@@ -196,22 +191,17 @@ type wireSnapshot struct {
 			Type       string `json:"type"`
 			Group      string `json:"group"`
 			Marker     string `json:"marker"`
-			PrefixList string `json:"prefixList"`
+			AddressSet string `json:"addressSet"`
 			CIDR       string `json:"cidr"`
 		} `json:"peer"`
-		Provenance struct {
-			Segment  string `json:"segment"`
-			Template string `json:"template"`
-		} `json:"provenance"`
 	} `json:"rules"`
 	Markers map[string]struct {
-		Name string `json:"name"`
+		DisplayName string `json:"displayName"`
 	} `json:"markers"`
-	PrefixLists map[string]struct {
-		Name          string   `json:"name"`
+	AddressSets map[string]struct {
 		AddressFamily string   `json:"addressFamily"`
 		Entries       []string `json:"entries"`
-	} `json:"prefixLists"`
+	} `json:"addressSets"`
 	Directory []struct {
 		Path      string   `json:"path"`
 		Group     string   `json:"group"`
@@ -267,7 +257,7 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	data.EnforcementGroups = []esGroupModel{}
 	data.Rules = []esRuleModel{}
 	data.Markers = []esMarkerModel{}
-	data.PrefixLists = []esPrefixListModel{}
+	data.AddressSets = []esAddressSetModel{}
 	data.Directory = []esDirectoryModel{}
 
 	for _, slug := range sortedKeys(snap.EnforcementGroups) {
@@ -282,7 +272,7 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 		})
 	}
 	for _, r := range snap.Rules {
-		pt, pr := peerTypeRef(r.Peer.Type, r.Peer.Group, r.Peer.Marker, r.Peer.PrefixList, r.Peer.CIDR)
+		pt, pr := peerTypeRef(r.Peer.Type, r.Peer.Group, r.Peer.Marker, r.Peer.AddressSet, r.Peer.CIDR)
 		data.Rules = append(data.Rules, esRuleModel{
 			Key:                types.StringValue(r.Key),
 			Group:              types.StringValue(r.Group),
@@ -292,21 +282,18 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 			ToPort:             types.Int64Value(int64(r.ToPort)),
 			PeerType:           types.StringValue(pt),
 			PeerRef:            types.StringValue(pr),
-			ProvenanceSegment:  types.StringValue(r.Provenance.Segment),
-			ProvenanceTemplate: types.StringValue(r.Provenance.Template),
 		})
 	}
 	for _, slug := range sortedKeys(snap.Markers) {
 		data.Markers = append(data.Markers, esMarkerModel{
-			Slug: types.StringValue(slug),
-			Name: types.StringValue(snap.Markers[slug].Name),
+			Slug:        types.StringValue(slug),
+			DisplayName: types.StringValue(snap.Markers[slug].DisplayName),
 		})
 	}
-	for _, slug := range sortedKeys(snap.PrefixLists) {
-		p := snap.PrefixLists[slug]
-		data.PrefixLists = append(data.PrefixLists, esPrefixListModel{
+	for _, slug := range sortedKeys(snap.AddressSets) {
+		p := snap.AddressSets[slug]
+		data.AddressSets = append(data.AddressSets, esAddressSetModel{
 			Slug:          types.StringValue(slug),
-			Name:          types.StringValue(p.Name),
 			AddressFamily: types.StringValue(p.AddressFamily),
 			Entries:       toStrList(p.Entries),
 		})
@@ -324,14 +311,14 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 
 // peerTypeRef passes an unrecognised peer type through verbatim rather than
 // coercing it to a CIDR, so the renderer can refuse what it cannot render.
-func peerTypeRef(t, group, marker, pl, cidr string) (string, string) {
+func peerTypeRef(t, group, marker, addressSet, cidr string) (string, string) {
 	switch t {
 	case "group":
 		return t, group
 	case "marker":
 		return t, marker
-	case "prefixList":
-		return t, pl
+	case "addressSet":
+		return t, addressSet
 	case "cidr":
 		return t, cidr
 	default:
