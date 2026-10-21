@@ -255,6 +255,7 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAssetResource,
+		NewEnforcementReceiptResource,
 		NewNamedNetworkResource,
 		NewPolicyDeploymentResource,
 		NewSegmentResource,
@@ -290,8 +291,10 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		NewPolicyChangesDataSource,
 		NewWorkRequestDataSource,
 
-		// Compiled policy that a pipeline renders into native cloud constructs.
+		// Compiled policy that a pipeline renders into native cloud constructs,
+		// and whether that pipeline has converged on it.
 		NewEnforcementSnapshotDataSource,
+		NewEnforcementStatusDataSource,
 	}
 }
 

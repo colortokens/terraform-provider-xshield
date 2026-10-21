@@ -2,22 +2,12 @@ package provider
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"sort"
-	"strings"
-	"time"
+	"strconv"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -30,12 +20,10 @@ func NewEnforcementSnapshotDataSource() datasource.DataSource {
 	return &EnforcementSnapshotDataSource{}
 }
 
-// EnforcementSnapshotDataSource resolves an account x region's expected
-// enforcement snapshot (or a pinned version for break-glass) and exposes it as
-// typed, render-ready attributes. It creates nothing — that is the compliance
-// posture: the customer's own pipeline performs every write.
+// EnforcementSnapshotDataSource only reads: the customer's pipeline performs
+// every cloud write from what it returns.
 type EnforcementSnapshotDataSource struct {
-	client *sdk.Xshield
+	api cloudSnapshotAPI
 }
 
 type esRuleModel struct {
@@ -84,6 +72,7 @@ type EnforcementSnapshotDataSourceModel struct {
 	Version           types.Int64         `tfsdk:"version"`
 	ContentHash       types.String        `tfsdk:"content_hash"`
 	QuarantinedAssets types.Int64         `tfsdk:"quarantined_assets"`
+	BindingKeys       []types.String      `tfsdk:"binding_keys"`
 	EnforcementGroups []esGroupModel      `tfsdk:"enforcement_groups"`
 	Rules             []esRuleModel       `tfsdk:"rules"`
 	Markers           []esMarkerModel     `tfsdk:"markers"`
@@ -98,26 +87,34 @@ func (d *EnforcementSnapshotDataSource) Metadata(ctx context.Context, req dataso
 
 func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	str := func() schema.StringAttribute { return schema.StringAttribute{Computed: true} }
+	strList := func() schema.ListAttribute {
+		return schema.ListAttribute{Computed: true, ElementType: types.StringType}
+	}
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Resolves the expected (or a pinned) cloud enforcement snapshot for an account/region and exposes its enforcement groups, composed rules, markers, prefix lists and the tag-keyed workload directory for rendering.",
+		MarkdownDescription: "Resolves the expected (or a pinned) cloud enforcement snapshot for an account and region, and exposes its enforcement groups, composed rules, markers, prefix lists and the tag-keyed workload directory for rendering.",
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id": schema.StringAttribute{Required: true},
 			"region":           schema.StringAttribute{Required: true},
 			"version": schema.Int64Attribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Optional pinned version (break-glass/forensics). When omitted, the server-side expected version is resolved.",
+				MarkdownDescription: "Pins a version for break-glass or forensics. When omitted, the server-side expected version is resolved, which is what lets the configuration stay static while policy changes.",
 			},
 			"content_hash":       str(),
 			"quarantined_assets": schema.Int64Attribute{Computed: true},
-			"payload_json":       str(),
+			"binding_keys": schema.ListAttribute{
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "Tag keys, in order, whose values form a directory path. Workloads resolve their group from these tags.",
+			},
+			"payload_json": str(),
 			"enforcement_groups": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"slug":          str(),
 					"display_name":  str(),
-					"vpc_ids":       schema.ListAttribute{Computed: true, ElementType: types.StringType},
-					"marker_slugs":  schema.ListAttribute{Computed: true, ElementType: types.StringType},
+					"vpc_ids":       strList(),
+					"marker_slugs":  strList(),
 					"ingress_count": schema.Int64Attribute{Computed: true},
 					"egress_count":  schema.Int64Attribute{Computed: true},
 				}},
@@ -150,7 +147,7 @@ func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 					"slug":           str(),
 					"name":           str(),
 					"address_family": str(),
-					"entries":        schema.ListAttribute{Computed: true, ElementType: types.StringType},
+					"entries":        strList(),
 				}},
 			},
 			"directory": schema.ListNestedAttribute{
@@ -158,7 +155,7 @@ func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"path":        str(),
 					"group":       str(),
-					"sg_ref_keys": schema.ListAttribute{Computed: true, ElementType: types.StringType},
+					"sg_ref_keys": strList(),
 				}},
 			},
 		},
@@ -174,14 +171,13 @@ func (d *EnforcementSnapshotDataSource) Configure(ctx context.Context, req datas
 		resp.Diagnostics.AddError("unexpected data source configure type", fmt.Sprintf("expected *sdk.Xshield, got %T", req.ProviderData))
 		return
 	}
-	d.client = client
+	d.api = cloudSnapshotAPI{client: client}
 }
 
-// --- wire types (mirror the snapshot API document) ---------------------------
-
 type wireSnapshot struct {
-	Version           int    `json:"version"`
-	ContentHash       string `json:"contentHash"`
+	Version           int      `json:"version"`
+	ContentHash       string   `json:"contentHash"`
+	BindingKeys       []string `json:"bindingKeys"`
 	EnforcementGroups map[string]struct {
 		Slug        string         `json:"slug"`
 		DisplayName string         `json:"displayName"`
@@ -237,23 +233,16 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	if d.client == nil {
-		resp.Diagnostics.AddError("provider not configured",
-			"the xshield provider block was not configured before this data source was read")
+	if d.api.client == nil {
+		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
 
-	base := strings.TrimRight(d.client.ServerURL(), "/")
-	acct := url.PathEscape(data.CloudAccountID.ValueString())
-	region := url.PathEscape(data.Region.ValueString())
-	prefix := fmt.Sprintf("%s/api/policy-generator/cloud-snapshots/%s/%s", base, acct, region)
-
-	// Resolve version: explicit pin, else the server-side expected version.
+	account, region := data.CloudAccountID.ValueString(), data.Region.ValueString()
 	version := data.Version.ValueInt64()
 	if data.Version.IsNull() || data.Version.IsUnknown() {
 		var exp wireExpected
-		if err := d.signedGetJSON(ctx, prefix+"/expected", &exp); err != nil {
+		if err := d.api.get(ctx, d.api.endpoint(account, region, "expected"), &exp); err != nil {
 			resp.Diagnostics.AddError("failed to resolve expected snapshot version", err.Error())
 			return
 		}
@@ -261,7 +250,7 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	}
 
 	var snap wireSnapshot
-	if err := d.signedGetJSON(ctx, fmt.Sprintf("%s/versions/%d", prefix, version), &snap); err != nil {
+	if err := d.api.get(ctx, d.api.endpoint(account, region, "versions", strconv.FormatInt(version, 10)), &snap); err != nil {
 		resp.Diagnostics.AddError("failed to fetch enforcement snapshot", err.Error())
 		return
 	}
@@ -271,10 +260,10 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	data.Version = types.Int64Value(int64(snap.Version))
 	data.ContentHash = types.StringValue(snap.ContentHash)
 	data.QuarantinedAssets = types.Int64Value(int64(snap.Conformance.QuarantinedAssets))
+	data.BindingKeys = toStrList(snap.BindingKeys)
 
-	// Always non-nil so length()/for over an empty snapshot behaves, and ALWAYS
-	// sorted: Go map iteration order is random, and nondeterministic list order
-	// in state would manufacture perpetual spurious diffs.
+	// Lists are always non-nil and always sorted: map iteration order is random,
+	// and an unstable order in state would show as a diff on every plan.
 	data.EnforcementGroups = []esGroupModel{}
 	data.Rules = []esRuleModel{}
 	data.Markers = []esMarkerModel{}
@@ -333,8 +322,8 @@ func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// peerTypeRef surfaces an unrecognised peer type verbatim rather than coercing
-// it to a CIDR — the renderer must fail loudly on something it cannot render.
+// peerTypeRef passes an unrecognised peer type through verbatim rather than
+// coercing it to a CIDR, so the renderer can refuse what it cannot render.
 func peerTypeRef(t, group, marker, pl, cidr string) (string, string) {
 	switch t {
 	case "group":
@@ -365,109 +354,4 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// snapshotHTTPClient bounds every call: an unreachable Xshield must fail the
-// plan promptly with a clear error, never hang it.
-var snapshotHTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-const maxResponseBytes = 32 << 20 // 32 MiB snapshot ceiling
-
-// signedGetJSON issues a GET signed with the same RSA-PSS scheme as the SDK's
-// authentication hook, retrying transient failures (connection errors, 429,
-// 5xx) with short backoff. Each attempt is re-signed so the `date` header stays
-// inside the server's acceptance window.
-func (d *EnforcementSnapshotDataSource) signedGetJSON(ctx context.Context, reqURL string, out interface{}) error {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Duration(attempt) * 2 * time.Second):
-			}
-		}
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		if err != nil {
-			return err
-		}
-		if err := d.sign(ctx, httpReq); err != nil {
-			return fmt.Errorf("signing request: %w", err)
-		}
-		res, err := snapshotHTTPClient.Do(httpReq)
-		if err != nil {
-			lastErr = fmt.Errorf("GET %s: %w", reqURL, err)
-			continue
-		}
-		body, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes))
-		res.Body.Close()
-		if readErr != nil {
-			lastErr = fmt.Errorf("GET %s: reading response: %w", reqURL, readErr)
-			continue
-		}
-		if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
-			lastErr = fmt.Errorf("GET %s -> %d: %s", reqURL, res.StatusCode, truncate(string(body), 512))
-			continue
-		}
-		if res.StatusCode != http.StatusOK {
-			return fmt.Errorf("GET %s -> %d: %s", reqURL, res.StatusCode, truncate(string(body), 512))
-		}
-		return json.Unmarshal(body, out)
-	}
-	return fmt.Errorf("after 3 attempts: %w", lastErr)
-}
-
-func truncate(s string, n int) string {
-	s = strings.TrimSpace(s)
-	if len(s) > n {
-		return s[:n] + "…"
-	}
-	return s
-}
-
-func (d *EnforcementSnapshotDataSource) sign(ctx context.Context, req *http.Request) error {
-	srcFn := d.client.SecuritySource()
-	if srcFn == nil {
-		return fmt.Errorf("no security source configured")
-	}
-	secAny, err := srcFn(ctx)
-	if err != nil {
-		return err
-	}
-	cfg, ok := secAny.(shared.ConfigurationProvider)
-	if !ok {
-		return fmt.Errorf("security source is not a ConfigurationProvider (%T)", secAny)
-	}
-	key, err := cfg.KeyLoader().LoadKey()
-	if err != nil {
-		return fmt.Errorf("loading signing key: %w", err)
-	}
-
-	// x-content-sha256 over an empty body == sha256(base64("nil")), matching the
-	// generated authentication hook.
-	h := sha256.New()
-	h.Write([]byte(base64.StdEncoding.EncodeToString([]byte("nil"))))
-	bodyHash := base64.StdEncoding.EncodeToString(h.Sum(nil))
-	req.Header.Set("x-content-sha256", bodyHash)
-
-	date := time.Now().UTC().Format(http.TimeFormat)
-	material := []string{
-		fmt.Sprintf("(request-target): %s %s", strings.ToLower(req.Method), req.URL.RequestURI()),
-		fmt.Sprintf("date: %s", date),
-		fmt.Sprintf("host: %s", req.Host),
-		fmt.Sprintf("x-content-sha256: %s", bodyHash),
-	}
-	digest := sha256.Sum256([]byte(strings.Join(material, "\n")))
-	sig, err := rsa.SignPSS(rand.Reader, key, crypto.SHA256, digest[:], nil)
-	if err != nil {
-		return err
-	}
-	headers := "(request-target) date host x-content-sha256"
-	req.Header.Set("Authorization", fmt.Sprintf(`Signature version="1",keyId="%s::%s::%s",algorithm="rsa-sha256",headers="%s",signature="%s"`,
-		cfg.TenancyId(), cfg.PrincipalId(), cfg.FingerPrint(), headers, base64.RawStdEncoding.EncodeToString(sig)))
-	req.Header.Set("date", date)
-	if req.Host != "" {
-		req.Header.Set("host", req.Host)
-	}
-	return nil
 }

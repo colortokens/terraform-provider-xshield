@@ -149,6 +149,7 @@ var dataSourceLookupAttributes = map[string][]string{
 	// an optional pin and deliberately not a lookup key, since omitting it is
 	// what makes the read converge on the expected version.
 	"xshield_enforcement_snapshot": {"cloud_account_id", "region"},
+	"xshield_enforcement_status":   {"cloud_account_id", "region"},
 }
 
 func TestDataSourceLookupKeysAreConfigurable(t *testing.T) {
@@ -255,6 +256,8 @@ var resourcesWithoutDataSource = map[string]string{
 	"xshield_policy_deployment": "a deployment is an action, not a stored object: " +
 		"the API has no read-by-id for one. xshield_policy_changes and " +
 		"xshield_deployment_simulation are its read-only counterparts.",
+	"xshield_enforcement_receipt": "a receipt reports an apply rather than storing an " +
+		"object Terraform reads back. xshield_enforcement_status is its read-only counterpart.",
 }
 
 // TestEveryResourceHasADataSource keeps the two registrations in step; a
