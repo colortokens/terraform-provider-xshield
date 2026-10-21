@@ -7,13 +7,17 @@
 #   3. renders marker groups (membership tokens) and managed prefix lists
 #   4. renders one rule per composed rule, keyed by a STABLE content-derived key
 #   5. publishes the tag -> security group "workload directory" to SSM
+#   6. reports the applied snapshot and every created resource ID to Xshield
 #
 # Application workspaces consume the directory by tag (see ../modules/
 # ct-workload-lookup) and never reference an Xshield name, version, or credential.
 #
-# ForceNew hygiene throughout: nothing user-editable in Xshield (display names,
-# versions) may feed a security-group attribute that forces replacement.
-# Mutable metadata goes to tags, which update in place.
+# Two rules keep plans reviewable:
+#   * ForceNew hygiene - nothing user-editable in Xshield (display names,
+#     versions) feeds an attribute that forces replacement.
+#   * No per-version stamps - the snapshot version and hash live only on the
+#     receipt, so a one-rule policy change plans as one rule, not as a tag
+#     update on every resource in the account.
 # =============================================================================
 
 data "xshield_enforcement_snapshot" "this" {
@@ -26,9 +30,11 @@ data "xshield_enforcement_snapshot" "this" {
 locals {
   snap = data.xshield_enforcement_snapshot.this
 
+  workspace_name = coalesce(var.enforcement_workspace_name, "ct-enforcement-${var.cloud_account_id}-${var.region}")
+
   groups       = { for g in local.snap.enforcement_groups : g.slug => g }
   markers      = { for m in local.snap.markers : m.slug => m }
-  prefix_lists = { for p in local.snap.prefix_lists : p.slug => p }
+  address_sets = { for a in local.snap.address_sets : a.slug => a }
 
   # Stable, content-derived for_each keys come straight from the snapshot, so a
   # cosmetic reordering upstream never churns resource addresses.
@@ -37,21 +43,22 @@ locals {
   ingress_rules = { for k, r in local.rules_by_key : k => r if r.direction == "ingress" }
   egress_rules  = { for k, r in local.rules_by_key : k => r if r.direction == "egress" }
 
-  ct_tags = merge({
-    "colortokens:managed"          = "true"
-    "colortokens:snapshot-version" = tostring(local.snap.version)
-  }, var.tags)
+  ct_tags = merge({ "colortokens:managed" = "true" }, var.tags)
 
-  # Peer types this module knows how to render. Anything else must fail loudly
-  # rather than silently degrade (a mis-rendered peer is a security event).
-  known_peer_types = ["group", "marker", "prefixList", "cidr"]
-  unknown_peers    = [for k, r in local.rules_by_key : k if !contains(local.known_peer_types, r.peer_type)]
+  # Peer types this configuration knows how to render. Anything else fails the
+  # plan: a rule rendered without its peer is a security event, not a warning.
+  known_peer_types = ["group", "marker", "addressSet", "cidr"]
+  ported_protocols = ["tcp", "udp", "icmp", "icmpv6"]
 
-  # World-open ingress is legal policy but must never pass unnoticed.
   world_open_ingress = [
     for k, r in local.ingress_rules : k
     if r.peer_type == "cidr" && contains(["0.0.0.0/0", "::/0"], r.peer_ref)
   ]
+
+  rendered_rule_ids = merge(
+    { for k, r in aws_vpc_security_group_ingress_rule.ingress : k => r.security_group_rule_id },
+    { for k, r in aws_vpc_security_group_egress_rule.egress : k => r.security_group_rule_id },
+  )
 }
 
 # ---- 1. composed security group per enforcement group ------------------------
@@ -69,14 +76,20 @@ resource "aws_security_group" "group" {
   vpc_id      = var.vpc_id
 
   tags = merge(local.ct_tags, {
-    "Name"                      = "ct-seg-${each.value.slug}"
-    "colortokens:group"         = each.value.slug
-    "colortokens:display-name"  = each.value.display_name
-    "colortokens:snapshot-hash" = local.snap.content_hash
+    "Name"                     = "ct-seg-${each.value.slug}"
+    "colortokens:group"        = each.value.slug
+    "colortokens:display-name" = each.value.display_name
   })
 
   lifecycle {
     create_before_destroy = true
+
+    # AWS limits rules per security group per direction (60 by default), and a
+    # referenced prefix list counts as its max_entries, not as one rule.
+    precondition {
+      condition     = each.value.ingress_count <= var.max_rules_per_security_group && each.value.egress_count <= var.max_rules_per_security_group
+      error_message = "Enforcement group '${each.value.slug}' needs ${each.value.ingress_count} ingress and ${each.value.egress_count} egress rules; this account allows ${var.max_rules_per_security_group} per direction. Raise the account quota and max_rules_per_security_group together, or split the segment."
+    }
 
     precondition {
       condition     = length(each.value.vpc_ids) <= 1
@@ -89,23 +102,24 @@ resource "aws_security_group" "group" {
 resource "aws_security_group" "marker" {
   for_each = local.markers
 
-  name_prefix = "${each.value.name}-"
+  name_prefix = "ct-ref-${each.value.slug}-"
   description = "ColorTokens marker (membership token) for segment ${each.value.slug}"
   vpc_id      = var.vpc_id
 
   tags = merge(local.ct_tags, {
-    "Name"               = each.value.name
-    "colortokens:marker" = each.value.slug
+    "Name"                     = "ct-ref-${each.value.slug}"
+    "colortokens:marker"       = each.value.slug
+    "colortokens:display-name" = each.value.display_name
   })
 
   lifecycle { create_before_destroy = true }
 }
 
-# ---- 3. managed prefix lists (off-cloud peers; ranges, scale-invariant) ------
+# ---- 3. address sets as managed prefix lists (ranges, scale-invariant) -------
 resource "aws_ec2_managed_prefix_list" "pl" {
-  for_each = local.prefix_lists
+  for_each = local.address_sets
 
-  name           = each.value.name
+  name           = "ct-pl-${each.value.slug}"
   address_family = each.value.address_family
 
   # Headroom so routine range additions update entries in place instead of
@@ -120,12 +134,15 @@ resource "aws_ec2_managed_prefix_list" "pl" {
     }
   }
 
-  tags = merge(local.ct_tags, { "Name" = each.value.name })
+  tags = merge(local.ct_tags, {
+    "Name"                    = "ct-pl-${each.value.slug}"
+    "colortokens:address-set" = each.value.slug
+  })
 
   lifecycle {
     precondition {
       condition     = contains(["IPv4", "IPv6"], each.value.address_family)
-      error_message = "Prefix list '${each.value.slug}' has address_family '${each.value.address_family}'; AWS accepts only 'IPv4' or 'IPv6'."
+      error_message = "Address set '${each.value.slug}' has address_family '${each.value.address_family}'; AWS accepts only 'IPv4' or 'IPv6'."
     }
   }
 }
@@ -135,12 +152,12 @@ resource "aws_vpc_security_group_ingress_rule" "ingress" {
   for_each = local.ingress_rules
 
   security_group_id = aws_security_group.group[each.value.group].id
-  ip_protocol       = each.value.protocol
+  ip_protocol       = each.value.protocol == "all" ? "-1" : each.value.protocol
 
-  # Ports apply to tcp/udp only. "-1" (all protocols) must omit ports entirely;
-  # icmp/icmpv6 use from/to as type/code and are passed through unchanged.
-  from_port = contains(["tcp", "udp"], each.value.protocol) ? each.value.from_port : null
-  to_port   = contains(["tcp", "udp"], each.value.protocol) ? each.value.to_port : null
+  # tcp/udp carry a port range and icmp/icmpv6 carry type/code (-1 = all) in
+  # the same fields; AWS requires all-protocol and other-protocol rules to omit them.
+  from_port = contains(local.ported_protocols, each.value.protocol) ? each.value.from_port : null
+  to_port   = contains(local.ported_protocols, each.value.protocol) ? each.value.to_port : null
 
   # Peers always resolve to a fabric construct or a range - never a member IP.
   # This is what makes the rendered rules invariant under autoscaling.
@@ -149,48 +166,59 @@ resource "aws_vpc_security_group_ingress_rule" "ingress" {
     each.value.peer_type == "marker" ? aws_security_group.marker[each.value.peer_ref].id :
     null
   )
-  prefix_list_id = each.value.peer_type == "prefixList" ? aws_ec2_managed_prefix_list.pl[each.value.peer_ref].id : null
+  prefix_list_id = each.value.peer_type == "addressSet" ? aws_ec2_managed_prefix_list.pl[each.value.peer_ref].id : null
   cidr_ipv4      = each.value.peer_type == "cidr" && !strcontains(each.value.peer_ref, ":") ? each.value.peer_ref : null
   cidr_ipv6      = each.value.peer_type == "cidr" && strcontains(each.value.peer_ref, ":") ? each.value.peer_ref : null
 
-  description = "ct:${each.value.provenance_template}"
+  # Security group rule descriptions forbid "|", so the exact key lives in the tag.
+  description = "ct:${replace(each.value.key, "|", " ")}"
 
   tags = merge(local.ct_tags, {
-    "colortokens:rule-key"      = each.value.key
-    "colortokens:provenance"    = each.value.provenance_segment
-    "colortokens:snapshot-hash" = local.snap.content_hash
+    "colortokens:rule-key" = each.value.key
   })
 
-  # Content-keyed rules must never leave an enforcement gap mid-apply.
-  lifecycle { create_before_destroy = true }
+  lifecycle {
+    # Content-keyed rules must never leave an enforcement gap mid-apply.
+    create_before_destroy = true
+
+    precondition {
+      condition     = contains(local.known_peer_types, each.value.peer_type) && each.value.peer_ref != ""
+      error_message = "Snapshot rule ${each.value.key} has peer type '${each.value.peer_type}', which this configuration cannot render; applying it would create a rule with no source. Upgrade the rendering configuration before applying this snapshot."
+    }
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "egress" {
   for_each = local.egress_rules
 
   security_group_id = aws_security_group.group[each.value.group].id
-  ip_protocol       = each.value.protocol
-  from_port         = contains(["tcp", "udp"], each.value.protocol) ? each.value.from_port : null
-  to_port           = contains(["tcp", "udp"], each.value.protocol) ? each.value.to_port : null
+  ip_protocol       = each.value.protocol == "all" ? "-1" : each.value.protocol
+  from_port         = contains(local.ported_protocols, each.value.protocol) ? each.value.from_port : null
+  to_port           = contains(local.ported_protocols, each.value.protocol) ? each.value.to_port : null
 
   referenced_security_group_id = (
     each.value.peer_type == "group" ? aws_security_group.group[each.value.peer_ref].id :
     each.value.peer_type == "marker" ? aws_security_group.marker[each.value.peer_ref].id :
     null
   )
-  prefix_list_id = each.value.peer_type == "prefixList" ? aws_ec2_managed_prefix_list.pl[each.value.peer_ref].id : null
+  prefix_list_id = each.value.peer_type == "addressSet" ? aws_ec2_managed_prefix_list.pl[each.value.peer_ref].id : null
   cidr_ipv4      = each.value.peer_type == "cidr" && !strcontains(each.value.peer_ref, ":") ? each.value.peer_ref : null
   cidr_ipv6      = each.value.peer_type == "cidr" && strcontains(each.value.peer_ref, ":") ? each.value.peer_ref : null
 
-  description = "ct:${each.value.provenance_template}"
+  description = "ct:${replace(each.value.key, "|", " ")}"
 
   tags = merge(local.ct_tags, {
-    "colortokens:rule-key"      = each.value.key
-    "colortokens:provenance"    = each.value.provenance_segment
-    "colortokens:snapshot-hash" = local.snap.content_hash
+    "colortokens:rule-key" = each.value.key
   })
 
-  lifecycle { create_before_destroy = true }
+  lifecycle {
+    create_before_destroy = true
+
+    precondition {
+      condition     = contains(local.known_peer_types, each.value.peer_type) && each.value.peer_ref != ""
+      error_message = "Snapshot rule ${each.value.key} has peer type '${each.value.peer_type}', which this configuration cannot render; applying it would create a rule with no source. Upgrade the rendering configuration before applying this snapshot."
+    }
+  }
 }
 
 # ---- 5. publish the tag -> security group workload directory -----------------
@@ -199,6 +227,9 @@ resource "aws_vpc_security_group_egress_rule" "egress" {
 # name. WRITE ACCESS TO THIS NAMESPACE MUST BE RESTRICTED TO THIS WORKSPACE'S
 # ROLE - see iam-guardrails.md; a principal that can rewrite these parameters can
 # redirect which security groups future workloads attach.
+#
+# The value changes only when a security group ID changes, so application
+# workspaces reading it see no churn from routine policy versions.
 resource "aws_ssm_parameter" "directory" {
   for_each = { for e in local.snap.directory : e.path => e }
 
@@ -212,28 +243,40 @@ resource "aws_ssm_parameter" "directory" {
     sg_ids        = [aws_security_group.group[each.value.group].id]
     marker_sg_ids = [for s in local.groups[each.value.group].marker_slugs : aws_security_group.marker[s].id]
     vpc_id        = var.vpc_id
-    snapshot      = local.snap.version
-    content_hash  = local.snap.content_hash
   })
 
   tags = merge(local.ct_tags, { "colortokens:group" = each.value.group })
 }
 
-# ---- 6. plan-time assertions -------------------------------------------------
-# Quarantined assets are excluded from rendering (fail-secure), but divergence
-# must never be silent. `check` emits a warning on every plan; the HARD gate
-# belongs in Sentinel (ct-conformance-watch) so it cannot be argued away locally.
+# ---- 6. report convergence and the resource map back to Xshield --------------
+# Sent only once every rendered resource exists, and only when the version or a
+# resource ID changes. Xshield rejects a receipt that omits or adds to the
+# snapshot's resources, so a partial render is never recorded as converged.
+resource "xshield_enforcement_receipt" "this" {
+  cloud_account_id = var.cloud_account_id
+  region           = var.region
+  workspace        = local.workspace_name
+  snapshot_version = local.snap.version
+  content_hash     = local.snap.content_hash
+  vpc_id           = var.vpc_id
+
+  groups       = { for slug, sg in aws_security_group.group : slug => sg.id }
+  markers      = { for slug, sg in aws_security_group.marker : slug => sg.id }
+  address_sets = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
+  rules        = local.rendered_rule_ids
+
+  depends_on = [aws_ssm_parameter.directory]
+}
+
+# ---- 7. plan-time assertions (warnings; the hard gates are preconditions above
+#         and the Sentinel policy set) ---------------------------------------
+# Only checks that read nothing new belong here. A check with its own data
+# source is re-read at apply, so every plan would show as having changes and no
+# run would ever report "No changes". Drift checks live in ../monitor-workspace.
 check "quarantine" {
   assert {
     condition     = local.snap.quarantined_assets <= var.max_quarantined_assets
     error_message = "Snapshot has ${local.snap.quarantined_assets} quarantined asset(s) (limit ${var.max_quarantined_assets}). Their policy is NOT rendered. Resolve with exception segments in Xshield, or raise max_quarantined_assets deliberately."
-  }
-}
-
-check "renderable_peers" {
-  assert {
-    condition     = length(local.unknown_peers) == 0
-    error_message = "Snapshot contains rule(s) with an unrenderable peer type: ${join(", ", local.unknown_peers)}. Upgrade the module/provider rather than applying a partial policy."
   }
 }
 

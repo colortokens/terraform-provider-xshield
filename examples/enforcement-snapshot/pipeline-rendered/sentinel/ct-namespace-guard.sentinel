@@ -5,7 +5,8 @@
 #
 # It makes the ColorTokens namespace a one-writer namespace: nothing outside the
 # designated enforcement workspace may create, modify, or delete ColorTokens
-# security groups, rules, prefix lists, or workload-directory parameters.
+# security groups, rules, prefix lists, workload-directory parameters, or apply
+# receipts.
 #
 # Why it matters: the directory decides which security groups every future
 # workload attaches. A principal able to rewrite it can silently redirect
@@ -16,6 +17,7 @@
 import "tfplan/v2" as tfplan
 import "tfrun"
 import "strings"
+import "ct-common" as ct
 
 param enforcement_workspace_pattern default "ct-enforcement-"
 param directory_prefix default "/colortokens/"
@@ -28,17 +30,23 @@ ct_tagged_resources = filter tfplan.resource_changes as _, rc {
 			rc.change.actions contains "update" or
 			rc.change.actions contains "delete") and
 		rc.change.after is not null and
-		(rc.change.after.tags else {}) contains "colortokens:managed"
+		ct.tags_of(rc.change.after) contains "colortokens:managed"
 }
 
 ct_directory_params = filter tfplan.resource_changes as _, rc {
 	rc.type is "aws_ssm_parameter" and
 		rc.mode is "managed" and
 		rc.change.after is not null and
-		strings.has_prefix(rc.change.after.name else "", directory_prefix)
+		strings.has_prefix(ct.value(rc.change.after.name, ""), directory_prefix)
 }
 
-violations = keys(ct_tagged_resources) + keys(ct_directory_params)
+# Only the enforcement workspace may report an apply: a receipt from anywhere
+# else would bind snapshot constructs to resources it never created.
+ct_receipts = filter tfplan.resource_changes as _, rc {
+	rc.mode is "managed" and rc.type is "xshield_enforcement_receipt"
+}
+
+violations = keys(ct_tagged_resources) + keys(ct_directory_params) + keys(ct_receipts)
 
 print_violations = func() {
 	for violations as addr {

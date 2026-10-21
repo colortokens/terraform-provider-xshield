@@ -87,3 +87,23 @@ variable "demo_mode" {
   type        = bool
   default     = false
 }
+
+# ---- Reporting ---------------------------------------------------------------
+
+variable "enforcement_workspace_name" {
+  description = "Name reported to Xshield on apply receipts. Defaults to ct-enforcement-<account>-<region>, the pattern the Sentinel ct-namespace-guard policy recognises."
+  type        = string
+  default     = null
+}
+
+variable "ct_teardown_approved" {
+  description = "Set true only for a deliberate, separately approved teardown. Read by the Sentinel ct-mass-delete-guard policy; it changes nothing Terraform does."
+  type        = bool
+  default     = false
+}
+
+variable "max_rules_per_security_group" {
+  description = "Rules per security group per direction this account allows (AWS default 60). Plans fail rather than apply a group AWS would reject."
+  type        = number
+  default     = 60
+}

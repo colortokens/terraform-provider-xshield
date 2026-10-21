@@ -29,7 +29,7 @@ For autoscaling, put the same `vpc_security_group_ids` on the **launch template*
 
 ## Outputs
 
-`security_group_ids` · `group` · `resolved_path` · `snapshot_version`
+`security_group_ids` · `group` · `resolved_path`
 
 ## Behaviour worth knowing
 

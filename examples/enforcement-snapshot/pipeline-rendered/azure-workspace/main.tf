@@ -10,7 +10,7 @@
 #   composed rule      -> azurerm_network_security_rule
 #   peer = group       -> ASG reference on the opposite side of the rule
 #   peer = marker      -> ASG reference on the opposite side of the rule
-#   peer = prefix list -> address prefixes (NSG rules take prefixes directly;
+#   peer = address set -> address prefixes (NSG rules take prefixes directly;
 #                         Azure IP Groups are an Azure Firewall construct)
 #   peer = cidr        -> address prefix
 #   workload directory -> azurerm_app_configuration_key
@@ -56,12 +56,15 @@ locals {
   snap         = data.xshield_enforcement_snapshot.this
   groups       = { for g in local.snap.enforcement_groups : g.slug => g }
   markers      = { for m in local.snap.markers : m.slug => m }
-  prefix_lists = { for p in local.snap.prefix_lists : p.slug => p }
+  address_sets = { for a in local.snap.address_sets : a.slug => a }
 
   rules_by_key = { for r in local.snap.rules : r.key => r }
 
   # Deterministic priorities from sorted rule keys: the same snapshot always
-  # yields the same priorities. Allows occupy 1000+, the deny floor sits at 4000.
+  # yields the same priorities. Allows occupy 1000+, the deny floors sit at 4000.
+  # KNOWN LIMITATION: a new rule shifts the priority of every rule sorted after
+  # it, so additions update those rules in place. Order among allows is
+  # irrelevant, so a stable per-rule ordinal from the snapshot removes the shift.
   ordered_rule_keys = sort(keys(local.rules_by_key))
   rule_priority     = { for idx, k in local.ordered_rule_keys : k => 1000 + idx }
 
@@ -98,8 +101,9 @@ resource "azurerm_application_security_group" "marker" {
   resource_group_name = azurerm_resource_group.ct.name
 
   tags = {
-    colortokens_managed = "true"
-    colortokens_marker  = each.key
+    colortokens_managed      = "true"
+    colortokens_marker       = each.key
+    colortokens_display_name = each.value.display_name
   }
 }
 
@@ -109,10 +113,9 @@ resource "azurerm_network_security_group" "ct" {
   location            = azurerm_resource_group.ct.location
   resource_group_name = azurerm_resource_group.ct.name
 
+  # Workloads associate their NIC with this NSG; its ID is in the directory.
   tags = {
-    colortokens_managed          = "true"
-    colortokens_snapshot_version = local.snap.version
-    colortokens_snapshot_hash    = local.snap.content_hash
+    colortokens_managed = "true"
   }
 }
 
@@ -130,7 +133,7 @@ resource "azurerm_network_security_rule" "rule" {
   direction   = each.value.direction == "ingress" ? "Inbound" : "Outbound"
   access      = "Allow"
   protocol    = lookup(local.protocol_map, each.value.protocol, "*")
-  description = "ct:${each.value.provenance_template}"
+  description = "ct:${replace(each.value.key, "|", " ")}"
 
   source_port_range = "*"
   destination_port_range = (
@@ -157,8 +160,8 @@ resource "azurerm_network_security_rule" "rule" {
     ? each.value.peer_ref : null
   )
   source_address_prefixes = (
-    each.value.direction == "ingress" && each.value.peer_type == "prefixList"
-    ? local.prefix_lists[each.value.peer_ref].entries : null
+    each.value.direction == "ingress" && each.value.peer_type == "addressSet"
+    ? local.address_sets[each.value.peer_ref].entries : null
   )
 
   # --- DESTINATION ----------------------------------------------------------
@@ -177,25 +180,41 @@ resource "azurerm_network_security_rule" "rule" {
     ? each.value.peer_ref : null
   )
   destination_address_prefixes = (
-    each.value.direction == "egress" && each.value.peer_type == "prefixList"
-    ? local.prefix_lists[each.value.peer_ref].entries : null
+    each.value.direction == "egress" && each.value.peer_type == "addressSet"
+    ? local.address_sets[each.value.peer_ref].entries : null
   )
 
   lifecycle {
     precondition {
-      condition     = contains(["group", "marker", "prefixList", "cidr"], each.value.peer_type)
+      condition     = contains(["group", "marker", "addressSet", "cidr"], each.value.peer_type)
       error_message = "Rule ${each.value.key} has an unrenderable peer type '${each.value.peer_type}'."
     }
   }
 }
 
-# ---- 5. explicit default-deny floor -----------------------------------------
+# ---- 5. explicit default-deny floors ----------------------------------------
+# Azure's default rules allow VNet inbound and internet outbound, so both
+# directions need an explicit floor or approved policy is not the whole policy.
 resource "azurerm_network_security_rule" "deny_all_inbound" {
   name                        = "ct-deny-all-inbound"
   resource_group_name         = azurerm_resource_group.ct.name
   network_security_group_name = azurerm_network_security_group.ct.name
   priority                    = 4000
   direction                   = "Inbound"
+  access                      = "Deny"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+}
+
+resource "azurerm_network_security_rule" "deny_all_outbound" {
+  name                        = "ct-deny-all-outbound"
+  resource_group_name         = azurerm_resource_group.ct.name
+  network_security_group_name = azurerm_network_security_group.ct.name
+  priority                    = 4000
+  direction                   = "Outbound"
   access                      = "Deny"
   protocol                    = "*"
   source_port_range           = "*"
@@ -219,10 +238,13 @@ resource "azurerm_app_configuration_key" "directory" {
   configuration_store_id = azurerm_app_configuration.ct.id
   key                    = "/colortokens/v1/${each.value.path}"
 
+  # A workload joins its group ASG and every marker ASG, and its NIC must be
+  # associated with the NSG that carries the rules.
   value = jsonencode({
-    group    = each.value.group
-    asg_ids  = [azurerm_application_security_group.group[each.value.group].id]
-    snapshot = local.snap.version
+    group          = each.value.group
+    asg_ids        = [azurerm_application_security_group.group[each.value.group].id]
+    marker_asg_ids = [for m in local.groups[each.value.group].marker_slugs : azurerm_application_security_group.marker[m].id]
+    nsg_id         = azurerm_network_security_group.ct.id
   })
 }
 

@@ -23,8 +23,8 @@ output "marker_security_groups" {
   value       = { for slug, sg in aws_security_group.marker : slug => sg.id }
 }
 
-output "prefix_lists" {
-  description = "Managed prefix lists rendered for off-cloud peers."
+output "address_sets" {
+  description = "Managed prefix lists rendered for the snapshot's address sets."
   value       = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
 }
 
@@ -33,18 +33,7 @@ output "workload_directory_paths" {
   value       = [for e in data.xshield_enforcement_snapshot.this.directory : e.path]
 }
 
-# The rendered-resource map an apply receipt should report back to Xshield so
-# the platform can bind snapshot -> real AWS resource IDs.
-output "apply_receipt_resource_map" {
-  description = "Rendered resource identities for the apply receipt posted to Xshield."
-  value = {
-    version      = data.xshield_enforcement_snapshot.this.version
-    content_hash = data.xshield_enforcement_snapshot.this.content_hash
-    account_id   = var.cloud_account_id
-    region       = var.region
-    groups       = { for slug, sg in aws_security_group.group : slug => { (var.vpc_id) = sg.id } }
-    markers      = { for slug, sg in aws_security_group.marker : slug => sg.id }
-    prefix_lists = { for slug, pl in aws_ec2_managed_prefix_list.pl : slug => pl.id }
-    directory    = { for p, param in aws_ssm_parameter.directory : p => param.version }
-  }
+output "apply_receipt_id" {
+  description = "Receipt Xshield recorded for this apply, binding each snapshot construct to the resource created for it."
+  value       = xshield_enforcement_receipt.this.id
 }

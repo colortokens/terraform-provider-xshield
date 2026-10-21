@@ -1,0 +1,154 @@
+# ct-snapshot-integrity - SOFT-MANDATORY (enforcement workspaces)
+#
+# Proves the plan renders the snapshot it was built from, exactly:
+#
+#   * every ColorTokens rule carries a key that is a rule in the snapshot, and
+#     its direction, protocol, ports and peer match that rule
+#   * every snapshot rule is rendered - none silently dropped
+#   * no rule without a snapshot key is attached to a ColorTokens group
+#   * the configuration reports the apply back to Xshield
+#
+# This is a positive check on rule content, so it holds whether the rendering
+# lives in the root module or in a shared module, and it catches a fork or
+# local override that alters a port, protocol or peer.
+
+import "tfplan/v2" as tfplan
+import "tfconfig/v2" as tfconfig
+import "tfrun"
+import "ct-common" as ct
+
+param receipt_type default "xshield_enforcement_receipt"
+
+# When set, the workspace must be driven from this VCS repository.
+param approved_vcs_repo default ""
+
+snaps = ct.snapshots()
+
+snapshot_rules = func() {
+	out = {}
+	if length(snaps) is 1 {
+		for snaps[0].rules else [] as r {
+			out[r.key] = r
+		}
+	}
+	return out
+}
+
+want = snapshot_rules()
+
+aws_protocol = func(p) {
+	if p is "all" {
+		return "-1"
+	}
+	return p
+}
+
+peer_matches = func(rc, w) {
+	after = rc.change.after
+	cidr4 = ct.value(after.cidr_ipv4, null)
+	cidr6 = ct.value(after.cidr_ipv6, null)
+	if w.peer_type is "cidr" {
+		return cidr4 is w.peer_ref or cidr6 is w.peer_ref
+	}
+	if w.peer_type is "group" or w.peer_type is "marker" {
+		has_ref = ct.value(after.referenced_security_group_id, null) is not null or ct.is_unknown(rc, "referenced_security_group_id")
+		return has_ref and cidr4 is null and cidr6 is null
+	}
+	if w.peer_type is "addressSet" {
+		return ct.value(after.prefix_list_id, null) is not null or ct.is_unknown(rc, "prefix_list_id")
+	}
+	return false
+}
+
+ct_group_ids = func() {
+	ids = []
+	for ct.surviving("aws_security_group") as _, rc {
+		id = ct.value(rc.change.after.id, null)
+		if ct.value(ct.tags_of(rc.change.after)["colortokens:managed"], "") is "true" and id is not null {
+			append(ids, id)
+		}
+	}
+	return ids
+}
+
+violations = func() {
+	v = []
+	rendered = {}
+	ct_groups = ct_group_ids()
+	for ct.rule_types as type {
+		direction = "ingress"
+		if type is "aws_vpc_security_group_egress_rule" {
+			direction = "egress"
+		}
+		for ct.surviving(type) as addr, rc {
+			after = rc.change.after
+			key = ct.value(ct.tags_of(after)["colortokens:rule-key"], "")
+			if key is "" {
+				if ct.value(after.security_group_id, "") in ct_groups {
+					append(v, addr + " is attached to a ColorTokens group but is not a snapshot rule")
+				}
+				continue
+			}
+			w = want[key] else null
+			if w is null {
+				append(v, addr + " carries rule key " + key + ", which is not in the snapshot")
+				continue
+			}
+			rendered[key] = true
+			if ct.value(rc.index, "") is not key {
+				append(v, addr + " is rendered under a different address than its rule key " + key)
+			}
+			if w.direction is not direction {
+				append(v, addr + " is " + direction + " but snapshot rule " + key + " is " + w.direction)
+			}
+			protocol = ct.value(after.ip_protocol, "none")
+			if protocol is not aws_protocol(w.protocol) {
+				append(v, addr + " uses protocol " + protocol + ", snapshot says " + w.protocol)
+			}
+			if (w.protocol is "tcp" or w.protocol is "udp") and (ct.value(after.from_port, -2) is not w.from_port or ct.value(after.to_port, -2) is not w.to_port) {
+				append(v, addr + " opens ports that differ from snapshot rule " + key)
+			}
+			if not peer_matches(rc, w) {
+				append(v, addr + " has a peer that differs from snapshot rule " + key + " (" + w.peer_type + " " + w.peer_ref + ")")
+			}
+		}
+	}
+	for keys(want) as key {
+		if not (rendered[key] else false) {
+			append(v, "snapshot rule " + key + " is not rendered")
+		}
+	}
+	return v
+}
+
+found = violations()
+
+deny_all = func(messages) {
+	for messages as m {
+		print("DENIED:", m)
+	}
+	return false
+}
+
+has_one_snapshot = rule {
+	length(snaps) is 1 or
+		print("DENIED: expected exactly one", ct.snapshot_type, "read in this plan, found", length(snaps)) and false
+}
+
+rules_match_snapshot = rule when length(snaps) is 1 {
+	length(found) is 0 or deny_all(found)
+}
+
+reports_receipt = rule when length(snaps) is 1 {
+	length(filter tfconfig.resources as _, r { r.mode is "managed" and r.type is receipt_type }) > 0 or
+		print("DENIED: the configuration renders the snapshot but never reports the apply (", receipt_type, ")") and false
+}
+
+from_approved_repo = rule when approved_vcs_repo is not "" {
+	ct.value(ct.value(tfrun.workspace.vcs_repo, {}).identifier, "") is approved_vcs_repo or
+		print("DENIED: workspace is not driven from", approved_vcs_repo) and false
+}
+
+main = rule {
+	has_one_snapshot and rules_match_snapshot and reports_receipt and from_approved_repo
+}

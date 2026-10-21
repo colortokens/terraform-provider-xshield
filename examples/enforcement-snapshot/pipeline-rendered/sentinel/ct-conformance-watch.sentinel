@@ -8,19 +8,16 @@
 # Raise to soft-mandatory once an estate is steady-state and quarantine should
 # genuinely be zero.
 
-import "tfplan/v2" as tfplan
+import "ct-common" as ct
 
 param max_quarantined default 0
 
-snapshots = filter tfplan.resource_changes as _, rc {
-	rc.mode is "data" and rc.type is "xshield_enforcement_snapshot"
-}
+snaps = ct.snapshots()
 
 quarantined = func() {
 	total = 0
-	for snapshots as _, s {
-		after = s.change.after else {}
-		total = total + (after.quarantined_assets else 0)
+	for snaps as s {
+		total += ct.value(s.quarantined_assets, 0)
 	}
 	return total
 }
@@ -36,19 +33,19 @@ report_quarantine = func() {
 	return true
 }
 
-conformance_clean = rule {
-	q <= max_quarantined or report_quarantine()
-}
-
-# Also surface the snapshot version being applied, so the run log carries the
-# audit breadcrumb without anyone consulting the dashboard.
+# The run log carries the audit breadcrumb without anyone opening a console.
 announce = func() {
-	for snapshots as _, s {
-		after = s.change.after else {}
-		print("ColorTokens: converging to snapshot version",
-			after.version else "?", "hash", after.content_hash else "?")
+	if length(snaps) is 0 {
+		print("ColorTokens: no enforcement snapshot was read by this plan")
+	}
+	for snaps as s {
+		print("ColorTokens: converging to snapshot version", s.version, "hash", s.content_hash)
 	}
 	return true
+}
+
+conformance_clean = rule {
+	q <= max_quarantined or report_quarantine()
 }
 
 main = rule {

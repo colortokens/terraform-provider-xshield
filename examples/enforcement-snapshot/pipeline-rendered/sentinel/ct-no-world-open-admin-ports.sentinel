@@ -1,0 +1,65 @@
+# ct-no-world-open-admin-ports - HARD-MANDATORY, ORG-WIDE
+#
+# A customer-owned guardrail that holds regardless of what Xshield policy says.
+# Pipeline-Rendered Enforcement keeps the final veto with the customer: if an
+# approved snapshot ever opens an administrative or data port to the whole
+# internet, this policy stops the apply. It applies to every workspace and to
+# every ingress rule, not only ColorTokens ones.
+
+import "tfplan/v2" as tfplan
+import "ct-common" as ct
+
+param admin_ports default [22, 3389, 5432, 3306, 1433, 1521, 6379, 9200, 27017]
+
+world = ["0.0.0.0/0", "::/0"]
+
+covers_admin_port = func(after) {
+	proto = ct.value(after.ip_protocol, ct.value(after.protocol, ""))
+	if proto is "-1" or proto is "all" {
+		return true
+	}
+	if proto is not "tcp" and proto is not "6" {
+		return false
+	}
+	for admin_ports as p {
+		if ct.value(after.from_port, 0) <= p and p <= ct.value(after.to_port, 65535) {
+			return true
+		}
+	}
+	return false
+}
+
+world_open = func(after) {
+	if ct.value(after.cidr_ipv4, "") in world or ct.value(after.cidr_ipv6, "") in world {
+		return true
+	}
+	for ct.value(after.cidr_blocks, []) + ct.value(after.ipv6_cidr_blocks, []) as c {
+		if c in world {
+			return true
+		}
+	}
+	return false
+}
+
+offending = filter tfplan.resource_changes as _, rc {
+	rc.mode is "managed" and rc.change.after is not null and
+		not (length(rc.change.actions) is 1 and rc.change.actions[0] is "delete") and
+		(rc.type is "aws_vpc_security_group_ingress_rule" or
+			(rc.type is "aws_security_group_rule" and ct.value(rc.change.after.type, "") is "ingress")) and
+		world_open(rc.change.after) and covers_admin_port(rc.change.after)
+}
+
+report = func() {
+	for offending as addr, rc {
+		after = rc.change.after
+		print("DENIED:", addr, "opens", ct.value(after.ip_protocol, ct.value(after.protocol, "")),
+			ct.value(after.from_port, "all"), "-", ct.value(after.to_port, "all"),
+			"to the internet. Administrative and data ports are never world-open here,",
+			"whatever the upstream policy says.")
+	}
+	return false
+}
+
+main = rule {
+	length(offending) is 0 or report()
+}

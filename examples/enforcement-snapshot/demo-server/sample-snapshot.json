@@ -1,1 +1,208 @@
-{"schemaVersion":"2","version":42,"contentHash":"sha256:7289962d4669a1c73a0e0b6de4d063b5bfeaa6a65e4007ab341f91abad01bf62","tenant":"demo-tenant","cloudAccountId":"123456789012","region":"us-east-1","enforcementGroups":{"pci-app":{"slug":"pci-app","displayName":"PCI App Tier","signature":["seg-allprod","seg-pci","seg-pciapp"],"lineage":["All Production","PCI Zone"],"vpcIds":["vpc-1"],"markerSlugs":["all-prod","pci"],"ruleCounts":{"egress":1,"ingress":3}},"pci-db":{"slug":"pci-db","displayName":"PCI Database","signature":["seg-allprod","seg-pci","seg-pcidb"],"lineage":["All Production","PCI Zone"],"vpcIds":["vpc-1"],"markerSlugs":["all-prod","pci"],"ruleCounts":{"egress":1,"ingress":3}}},"rules":[{"key":"pci-app|in|tcp|443-443|cidr:0.0.0.0/0","group":"pci-app","direction":"ingress","protocol":"tcp","fromPort":443,"toPort":443,"peer":{"type":"cidr","cidr":"0.0.0.0/0"},"provenance":{"segment":"pci-app","template":"pci-app/https-ingress"}},{"key":"pci-app|in|tcp|8443-8443|sgref:pci","group":"pci-app","direction":"ingress","protocol":"tcp","fromPort":8443,"toPort":8443,"peer":{"type":"marker","marker":"pci"},"provenance":{"segment":"pci","template":"pci/intra-pci-tls"}},{"key":"pci-app|in|tcp|9100-9100|sgref:all-prod","group":"pci-app","direction":"ingress","protocol":"tcp","fromPort":9100,"toPort":9100,"peer":{"type":"marker","marker":"all-prod"},"provenance":{"segment":"all-prod","template":"all-prod/node-exporter"}},{"key":"pci-app|out|tcp|443-443|pl:saas-billing","group":"pci-app","direction":"egress","protocol":"tcp","fromPort":443,"toPort":443,"peer":{"type":"prefixList","prefixList":"saas-billing"},"provenance":{"segment":"all-prod","template":"all-prod/saas-egress"}},{"key":"pci-db|in|tcp|5432-5432|sg:pci-app","group":"pci-db","direction":"ingress","protocol":"tcp","fromPort":5432,"toPort":5432,"peer":{"type":"group","group":"pci-app"},"provenance":{"segment":"pci-db","template":"pci-db/postgres-from-app"}},{"key":"pci-db|in|tcp|8443-8443|sgref:pci","group":"pci-db","direction":"ingress","protocol":"tcp","fromPort":8443,"toPort":8443,"peer":{"type":"marker","marker":"pci"},"provenance":{"segment":"pci","template":"pci/intra-pci-tls"}},{"key":"pci-db|in|tcp|9100-9100|sgref:all-prod","group":"pci-db","direction":"ingress","protocol":"tcp","fromPort":9100,"toPort":9100,"peer":{"type":"marker","marker":"all-prod"},"provenance":{"segment":"all-prod","template":"all-prod/node-exporter"}},{"key":"pci-db|out|tcp|443-443|pl:saas-billing","group":"pci-db","direction":"egress","protocol":"tcp","fromPort":443,"toPort":443,"peer":{"type":"prefixList","prefixList":"saas-billing"},"provenance":{"segment":"all-prod","template":"all-prod/saas-egress"}}],"markers":{"all-prod":{"name":"ct-ref-all-prod"},"pci":{"name":"ct-ref-pci"}},"prefixLists":{"saas-billing":{"name":"ct-pl-saas-billing","addressFamily":"IPv4","entries":["52.10.0.0/16","52.20.0.0/16"]}},"directory":[{"path":"prod/pci/app","group":"pci-app","sgRefKeys":["sg:pci-app","marker:all-prod","marker:pci"]},{"path":"prod/pci/db","group":"pci-db","sgRefKeys":["sg:pci-db","marker:all-prod","marker:pci"]}],"conformance":{"certifiedAssets":3,"quarantinedAssets":1,"quarantine":[{"assetId":"a-db-rogue","group":"pci-db","reason":"asset-scoped policy (not expressible as a segment)","suggestedAction":"promote the divergence into a child segment"}]},"preflight":{"groupsOverRuleQuota":null,"autoscaledWorkloads":[{"group":"pci-app","scaleSetRef":"asg:pci-app-prod","action":"wire launch template (never ENI-attach)"}],"scaleVarianceViolations":null,"sgRuleSafeLimit":50}}
+{
+    "schemaVersion": "3",
+    "version": 42,
+    "contentHash": "sha256:92370afcf58866219bc471f709cda9f6022d675377698c7ea381d56b8e4447f5",
+    "sourcePolicyVersion": "sample",
+    "tenant": "demo-tenant",
+    "cloudAccountId": "123456789012",
+    "region": "us-east-1",
+    "bindingKeys": [
+        "environment",
+        "application",
+        "tier"
+    ],
+    "enforcementGroups": {
+        "pci-app": {
+            "slug": "pci-app",
+            "displayName": "PCI App Tier",
+            "segments": [
+                "seg-allprod",
+                "seg-pci",
+                "seg-pciapp"
+            ],
+            "vpcIds": [
+                "vpc-1"
+            ],
+            "markerSlugs": [
+                "all-prod",
+                "pci"
+            ],
+            "ruleCounts": {
+                "egress": 1,
+                "ingress": 3
+            }
+        },
+        "pci-db": {
+            "slug": "pci-db",
+            "displayName": "PCI Database",
+            "segments": [
+                "seg-allprod",
+                "seg-pci",
+                "seg-pcidb"
+            ],
+            "vpcIds": [
+                "vpc-1"
+            ],
+            "markerSlugs": [
+                "all-prod",
+                "pci"
+            ],
+            "ruleCounts": {
+                "egress": 1,
+                "ingress": 3
+            }
+        }
+    },
+    "rules": [
+        {
+            "key": "pci-app|in|tcp|443-443|cidr:0.0.0.0/0",
+            "group": "pci-app",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "peer": {
+                "type": "cidr",
+                "cidr": "0.0.0.0/0"
+            }
+        },
+        {
+            "key": "pci-app|in|tcp|8443-8443|marker:pci",
+            "group": "pci-app",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 8443,
+            "toPort": 8443,
+            "peer": {
+                "type": "marker",
+                "marker": "pci"
+            }
+        },
+        {
+            "key": "pci-app|in|tcp|9100-9100|marker:all-prod",
+            "group": "pci-app",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 9100,
+            "toPort": 9100,
+            "peer": {
+                "type": "marker",
+                "marker": "all-prod"
+            }
+        },
+        {
+            "key": "pci-app|out|tcp|443-443|set:saas-billing",
+            "group": "pci-app",
+            "direction": "egress",
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "peer": {
+                "type": "addressSet",
+                "addressSet": "saas-billing"
+            }
+        },
+        {
+            "key": "pci-db|in|tcp|5432-5432|group:pci-app",
+            "group": "pci-db",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 5432,
+            "toPort": 5432,
+            "peer": {
+                "type": "group",
+                "group": "pci-app"
+            }
+        },
+        {
+            "key": "pci-db|in|tcp|8443-8443|marker:pci",
+            "group": "pci-db",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 8443,
+            "toPort": 8443,
+            "peer": {
+                "type": "marker",
+                "marker": "pci"
+            }
+        },
+        {
+            "key": "pci-db|in|tcp|9100-9100|marker:all-prod",
+            "group": "pci-db",
+            "direction": "ingress",
+            "protocol": "tcp",
+            "fromPort": 9100,
+            "toPort": 9100,
+            "peer": {
+                "type": "marker",
+                "marker": "all-prod"
+            }
+        },
+        {
+            "key": "pci-db|out|tcp|443-443|set:saas-billing",
+            "group": "pci-db",
+            "direction": "egress",
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "peer": {
+                "type": "addressSet",
+                "addressSet": "saas-billing"
+            }
+        }
+    ],
+    "markers": {
+        "all-prod": {
+            "segment": "seg-allprod",
+            "displayName": "All Production"
+        },
+        "pci": {
+            "segment": "seg-pci",
+            "displayName": "PCI Zone"
+        }
+    },
+    "addressSets": {
+        "saas-billing": {
+            "addressFamily": "IPv4",
+            "entries": [
+                "52.10.0.0/16",
+                "52.20.0.0/16"
+            ]
+        }
+    },
+    "directory": [
+        {
+            "path": "prod/pci/app",
+            "group": "pci-app",
+            "sgRefKeys": [
+                "group:pci-app",
+                "marker:all-prod",
+                "marker:pci"
+            ]
+        },
+        {
+            "path": "prod/pci/db",
+            "group": "pci-db",
+            "sgRefKeys": [
+                "group:pci-db",
+                "marker:all-prod",
+                "marker:pci"
+            ]
+        }
+    ],
+    "conformance": {
+        "renderedAssets": 3,
+        "quarantinedAssets": 1,
+        "quarantine": [
+            {
+                "assetId": "a-db-rogue",
+                "group": "pci-db",
+                "reason": "policy differs from other workloads bound to prod/pci/db",
+                "suggestedAction": "promote the divergence into a child segment with its own binding"
+            }
+        ],
+        "unrenderedRules": [],
+        "testModeRules": 2,
+        "scaleVariantRules": []
+    }
+}

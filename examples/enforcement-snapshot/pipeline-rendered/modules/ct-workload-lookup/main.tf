@@ -35,11 +35,13 @@ data "aws_ssm_parameters_by_path" "directory" {
 }
 
 locals {
-  # Values are marked sensitive by the SSM data source; the directory holds
-  # security-group IDs, not secrets, so unwrap for use in resource arguments.
+  # The SSM data source marks the whole values list sensitive; the directory
+  # holds security-group IDs, not secrets. Unwrap the list itself: a for
+  # expression over a sensitive list yields a sensitive result whatever it does
+  # to each element.
   directory = zipmap(
     data.aws_ssm_parameters_by_path.directory.names,
-    [for v in data.aws_ssm_parameters_by_path.directory.values : nonsensitive(v)]
+    nonsensitive(data.aws_ssm_parameters_by_path.directory.values)
   )
 
   # Build the tag values in schema order, stopping at the first absent key.

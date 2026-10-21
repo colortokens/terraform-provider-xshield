@@ -1,0 +1,68 @@
+# ct-common - shared helpers for the ColorTokens policy set (a Sentinel module).
+#
+# A data source read while planning is recorded in the plan's prior state, NOT
+# in resource_changes; only a read deferred to apply appears there. Reading the
+# snapshot from resource_changes alone therefore finds nothing on a normal plan.
+
+import "tfplan/v2" as tfplan
+import "types"
+
+# The plan writes null for every unset attribute, and `else` replaces only
+# undefined, so an optional attribute read with `else` alone can still be null
+# and make the next operation a runtime error. Read optional values through this.
+value = func(v, fallback) {
+	r = v else fallback
+	if r is null {
+		return fallback
+	}
+	return r
+}
+
+tags_of = func(obj) {
+	return value(value(obj, {}).tags, {})
+}
+
+snapshot_type = "xshield_enforcement_snapshot"
+
+data_in_module = func(module, type) {
+	found = []
+	for value(module.resources, []) as r {
+		if r.mode is "data" and r.type is type {
+			append(found, r.values)
+		}
+	}
+	for value(module.child_modules, []) as child {
+		found += data_in_module(child, type)
+	}
+	return found
+}
+
+# The snapshots this plan was built from, however the read was scheduled.
+snapshots = func() {
+	found = data_in_module(value(value(value(tfplan.raw.prior_state, {}).values, {}).root_module, {}), snapshot_type)
+	for tfplan.resource_changes as _, rc {
+		if rc.mode is "data" and rc.type is snapshot_type and rc.change.after is not null {
+			append(found, rc.change.after)
+		}
+	}
+	return found
+}
+
+rule_types = ["aws_vpc_security_group_ingress_rule", "aws_vpc_security_group_egress_rule"]
+
+# Resources the plan leaves in place, with the value they will have.
+surviving = func(type) {
+	return filter tfplan.resource_changes as _, rc {
+		rc.mode is "managed" and rc.type is type and
+			not (length(rc.change.actions) is 1 and rc.change.actions[0] is "delete") and
+			rc.change.after is not null
+	}
+}
+
+is_unknown = func(rc, attr) {
+	unknown = rc.change.after_unknown else {}
+	if types.type_of(unknown) is not "map" {
+		return false
+	}
+	return value(unknown[attr], false)
+}

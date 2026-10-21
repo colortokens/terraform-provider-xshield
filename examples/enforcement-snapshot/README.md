@@ -18,6 +18,7 @@ Start with **[APPROACHES.md](APPROACHES.md)** for the comparison and how to choo
 │   │   └── iam-guardrails.md           #   REQUIRED SCP/IAM companion to Sentinel
 │   ├── modules/ct-workload-lookup/     #   the only surface application teams touch
 │   ├── app-workspace/                  #   example application-team consumption
+│   ├── monitor-workspace/              #   read-only drift and convergence alerts
 │   ├── azure-workspace/                #   same snapshot, Azure-native rendering
 │   └── sentinel/                       #   governance policy set
 │
@@ -81,11 +82,16 @@ cd pipeline-rendered/enforcement-workspace
 terraform init && terraform plan
 ```
 
-Expected: **15 resources** - composed group security groups (`ct-seg-*`), marker
+Expected: **16 resources** - composed group security groups (`ct-seg-*`), marker
 groups (`ct-ref-*`), a managed prefix list, 8 rules with stable content-derived
-keys (e.g. `pci-db|in|tcp|5432-5432|sg:pci-app` - note the peer is a *security
-group reference*, not an IP address), and the SSM directory entries. There is
-**no `tcp/22` rule**: an SSH block template suppressed it at compile time.
+keys (e.g. `pci-db|in|tcp|5432-5432|group:pci-app` - note the peer is a *group
+reference*, not an IP address), the SSM directory entries, and the apply
+receipt that reports every created resource ID back to Xshield. There is **no
+`tcp/22` rule**: an SSH block template suppressed it before the snapshot was
+built.
+
+A later policy change plans as exactly the rules it changes plus the receipt:
+the snapshot version and hash live on the receipt, not on every resource.
 
 Two plan warnings fire deliberately, demonstrating the guardrails:
 `1 quarantined asset` (fail-secure - its policy is not rendered) and

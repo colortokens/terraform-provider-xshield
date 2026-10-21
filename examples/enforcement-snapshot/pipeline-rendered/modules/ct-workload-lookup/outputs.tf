@@ -13,8 +13,3 @@ output "resolved_path" {
   description = "Directory path that matched, deepest-first. Useful in plan output and support tickets."
   value       = local.resolved_path
 }
-
-output "snapshot_version" {
-  description = "Snapshot version the resolved directory entry was published from."
-  value       = local.entry != null ? try(local.entry.snapshot, null) : null
-}
