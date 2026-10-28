@@ -1,0 +1,130 @@
+# Pipeline-rendered enforcement for AWS
+
+Apply Xshield segmentation policy through your own Terraform pipeline. Xshield renders every rule; these modules create exactly what it lists, and report back what was applied.
+
+| Directory | What it is |
+|--|--|
+| `modules/aws` | The enforcement module. One block per AWS account and region. |
+| `modules/group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
+| `enforcement/` | An enforcement workspace, ready to copy. |
+| `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
+| `monitor/` | A `check` block that alerts on drift, stalled pipelines and refused workloads. |
+| `demo-server/` | A stand-in for the Xshield API, to try all of this without a tenant. |
+| `connector-managed/` | The other way: author policy in HCL and let the Xshield connector enforce it. |
+
+## Quickstart
+
+### 1. Enforcement workspace: one per account and region
+
+```hcl
+provider "aws" {
+  region = "us-east-1"
+  assume_role { role_arn = "arn:aws:iam::123456789012:role/xshield-enforcement" }
+}
+
+provider "xshield" {} # credentials from XSHIELD_* environment variables
+
+module "xshield_enforcement" {
+  source = "colortokens/enforcement/xshield//modules/aws"
+}
+```
+
+The module needs no inputs. It enforces the account and region the AWS provider is configured for, and refuses to apply a snapshot meant for any other. Each plan names the workload every change is for:
+
+```
+# module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this["rds/orders-db/in/tcp/5432/10.20.1.11/32"] will be created
+# module.xshield_enforcement.aws_network_interface_sg_attachment.this["i-0a1b2c3d/eni-0f9e8d7c"] will be created
+```
+
+Set the API key as secret environment variables on the runner. `XSHIELD_PRIVATE_KEY` takes the key itself, so no file is needed:
+
+| Variable | Value |
+|--|--|
+| `XSHIELD_SERVER_URL` | `https://<tenant>.colortokens.com` |
+| `XSHIELD_TENANCY_ID`, `XSHIELD_USER_ID`, `XSHIELD_FINGERPRINT` | Shown with the API key under **Settings > API Keys** |
+| `XSHIELD_PRIVATE_KEY` or `XSHIELD_PRIVATE_KEY_PATH` | The PEM private key, or a path to it |
+
+The role the workspace assumes needs:
+
+| Purpose | Actions |
+|--|--|
+| Groups and rules | `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:AuthorizeSecurityGroupEgress`, `ec2:RevokeSecurityGroupIngress`, `ec2:RevokeSecurityGroupEgress`, `ec2:ModifySecurityGroupRules`, `ec2:CreateTags`, `ec2:Describe*` |
+| Instance attachments | `ec2:ModifyNetworkInterfaceAttribute` |
+| Directory | `ssm:PutParameter`, `ssm:DeleteParameter`, `ssm:GetParameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource` on `arn:aws:ssm:*:*:parameter/colortokens/*` |
+
+### 2. Databases, functions and services: the workspace that owns them attaches the group
+
+The enforcement workspace attaches each instance's group itself. Terraform has no separate attachment for an RDS instance, Aurora cluster, Lambda function, Managed Flink application or App Runner service, so the workspace that owns one adds its group to the resource's own list:
+
+```hcl
+module "orders_db_xshield" {
+  source = "colortokens/enforcement/xshield//modules/group-lookup"
+  handle = "rds/orders-db"
+}
+
+resource "aws_db_instance" "orders" {
+  identifier             = "orders-db"
+  # ...
+  vpc_security_group_ids = concat([aws_security_group.orders_db.id], module.orders_db_xshield.security_group_ids)
+}
+```
+
+| Resource | Handle |
+|--|--|
+| RDS instance | `rds/<DB instance identifier>` |
+| Aurora cluster | `rds-cluster/<cluster identifier>` |
+| Lambda function | `lambda/<function name>` |
+| Managed Flink application | `flink/<application name>` |
+| App Runner service | `apprunner/<service name>` |
+
+The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield.
+
+### 3. Instances whose Terraform declares their security groups
+
+Nothing to do for instances no workspace manages one by one, such as Auto Scaling instances. If a workspace sets `vpc_security_group_ids` on an `aws_instance`, that list is authoritative and removes the group the enforcement workspace attached. Tell Terraform to leave it alone:
+
+```hcl
+resource "aws_instance" "web" {
+  # ...
+  lifecycle {
+    ignore_changes = [vpc_security_group_ids]
+  }
+}
+```
+
+### 4. Monitor
+
+Copy `monitor/` into any workspace, or run it on a schedule. It alerts when Xshield sees high-severity drift, when approved policy has waited more than a day for an apply, and when a workload could not be enforced, naming the workload and the reason.
+
+## Try it locally
+
+No tenant or AWS account needed for the stand-in and the module tests.
+
+```bash
+python3 demo-server/serve.py
+```
+
+The stand-in serves the sample snapshot in `demo-server/` and checks receipts as Xshield does, so a configuration that leaves a resource out fails there first.
+
+To run the module tests, which mock both providers, build the provider from this repository and point Terraform at it. Run these from this directory:
+
+```bash
+(cd ../.. && go build -o examples/enforcement-snapshot/bin/ .) && sed "s|/absolute/path/to/examples/enforcement-snapshot|$PWD|" dev.tfrc > .dev.tfrc
+```
+
+```bash
+cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
+```
+
+## When something goes wrong
+
+| You see | It means | Do |
+|--|--|--|
+| `This snapshot is for A/R, but the AWS provider is configured for B/S` | The AWS provider points at another account or region than `cloud_account_id` or `region` | Point the AWS provider at the account the snapshot is for, or drop the inputs to use the provider's |
+| `Cannot resolve the snapshot Xshield expects` | Xshield could not be reached as configured, or the API key's user cannot read cloud snapshots. An account with nothing published is not an error: the plan shows no change | Check `XSHIELD_SERVER_URL` and the key's role |
+| `Xshield has published nothing for A/R, yet the account holds security groups Xshield rendered` | The provider reads another tenant or endpoint than the one that published the groups | Point the provider back at that tenant; to remove the groups on purpose, remove the module |
+| `This provider version cannot apply this snapshot` | Xshield publishes a newer snapshot format | Upgrade the `colortokens/xshield` provider |
+| `Xshield did not accept the apply receipt` | What was applied is not exactly what the snapshot lists | The details name the keys missing or unknown; use the enforcement module rather than hand-written resources |
+| `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
+| `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |
+| The `monitor` check names a workload with `NO_FREE_SLOT` | Its interfaces already carry as many groups as AWS allows | Free a slot, or raise the account's security groups per interface quota |

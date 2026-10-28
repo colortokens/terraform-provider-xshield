@@ -1,0 +1,31 @@
+{
+  "appliedVersion": 42,
+  "byRestoration": {
+    "manual": 0,
+    "pipeline": 1,
+    "workload": 1
+  },
+  "cloudAccountId": "123456789012",
+  "expectedVersion": 43,
+  "findings": [
+    {
+      "detail": "the asset is missing its group sg-00000000000000005; it is not enforced",
+      "kind": "memberUnattached",
+      "resource": "a-orders-db",
+      "restoration": "workload",
+      "severity": "high"
+    },
+    {
+      "detail": "approved rule was removed out of band; traffic it allows is now blocked",
+      "key": "i-db-1/in/tcp/5432/10.20.1.11/32",
+      "kind": "ruleMissing",
+      "resource": "sgr-00000000000000016",
+      "restoration": "pipeline",
+      "severity": "medium"
+    }
+  ],
+  "observationStale": false,
+  "observedAt": "2099-01-01T00:00:00Z",
+  "policyPending": true,
+  "region": "us-east-1"
+}

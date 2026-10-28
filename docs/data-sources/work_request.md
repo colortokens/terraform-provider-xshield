@@ -18,7 +18,7 @@ Mutating calls that do work in the background return a work request id in the `x
 ```terraform
 # Follow an asynchronous change through to completion.
 data "xshield_work_request" "last_change" {
-  id = "1f5ed7fa-f6dc-4b57-b963-0f26827662f8"
+  id = "12345678-1234-1234-1234-123456789012"
 }
 
 output "finished" {
