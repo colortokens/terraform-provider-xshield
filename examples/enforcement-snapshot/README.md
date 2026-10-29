@@ -7,6 +7,7 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `modules/aws` | The enforcement module. One block per AWS account and region. |
 | `modules/group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
 | `enforcement/` | An enforcement workspace, ready to copy. |
+| `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
 | `monitor/` | A `check` block that alerts on drift, stalled pipelines and refused workloads. |
 | `demo-server/` | A stand-in for the Xshield API, to try all of this without a tenant. |
@@ -63,7 +64,7 @@ module "orders_db_xshield" {
 }
 
 resource "aws_db_instance" "orders" {
-  identifier             = "orders-db"
+  identifier = "orders-db"
   # ...
   vpc_security_group_ids = concat([aws_security_group.orders_db.id], module.orders_db_xshield.security_group_ids)
 }
