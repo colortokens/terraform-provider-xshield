@@ -12,17 +12,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &EnforcementStatusDataSource{}
-var _ datasource.DataSourceWithConfigure = &EnforcementStatusDataSource{}
+var _ datasource.DataSource = &enforcementStatusDataSource{}
+var _ datasource.DataSourceWithConfigure = &enforcementStatusDataSource{}
 
-func NewEnforcementStatusDataSource() datasource.DataSource {
-	return &EnforcementStatusDataSource{}
+func newEnforcementStatusDataSource() datasource.DataSource {
+	return &enforcementStatusDataSource{}
 }
 
-// EnforcementStatusDataSource reports what Xshield knows about an enforcement
+// enforcementStatusDataSource reports what Xshield knows about an enforcement
 // point without changing anything, so it can run inside a check block that is
 // evaluated when no apply is happening.
-type EnforcementStatusDataSource struct {
+type enforcementStatusDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -43,7 +43,7 @@ type noticeModel struct {
 	Message types.String `tfsdk:"message"`
 }
 
-type EnforcementStatusDataSourceModel struct {
+type enforcementStatusDataSourceModel struct {
 	CloudAccountID      types.String        `tfsdk:"cloud_account_id"`
 	Region              types.String        `tfsdk:"region"`
 	Published           types.Bool          `tfsdk:"published"`
@@ -65,11 +65,11 @@ type EnforcementStatusDataSourceModel struct {
 	DriftFindings       []driftFindingModel `tfsdk:"drift_findings"`
 }
 
-func (d *EnforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *enforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_enforcement_status"
 }
 
-func (d *EnforcementStatusDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	str := func(description string) schema.StringAttribute {
 		return schema.StringAttribute{Computed: true, Description: description}
 	}
@@ -108,8 +108,8 @@ func (d *EnforcementStatusDataSource) Schema(ctx context.Context, req datasource
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A workload with a refusal " +
 					"carries no Xshield group until the cause is fixed. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused` or `withdrawing`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. " +
+					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. " +
 					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
 					"`message`: what happened and what it means for the workload.",
 			},
@@ -136,7 +136,7 @@ func (d *EnforcementStatusDataSource) Schema(ctx context.Context, req datasource
 	}
 }
 
-func (d *EnforcementStatusDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *enforcementStatusDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -185,8 +185,8 @@ type wireDrift struct {
 	} `json:"findings"`
 }
 
-func (d *EnforcementStatusDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data EnforcementStatusDataSourceModel
+func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data enforcementStatusDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -227,13 +227,13 @@ func (d *EnforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func setUnpublished(data *EnforcementStatusDataSourceModel) {
+func setUnpublished(data *enforcementStatusDataSourceModel) {
 	setStatus(data, wireStatus{State: "unpublished"})
 	data.Published = types.BoolValue(false)
 	data.ExpectedVersion, data.ExpectedContentHash = types.Int64Null(), types.StringNull()
 }
 
-func setStatus(data *EnforcementStatusDataSourceModel, st wireStatus) {
+func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.Published = types.BoolValue(true)
 	data.State = types.StringValue(st.State)
 	data.ExpectedVersion = types.Int64Value(st.Expected.Version)
@@ -242,7 +242,7 @@ func setStatus(data *EnforcementStatusDataSourceModel, st wireStatus) {
 	if st.Applied != nil {
 		data.AppliedVersion = types.Int64Value(st.Applied.Version)
 		data.AppliedContentHash = types.StringValue(st.Applied.ContentHash)
-		data.AppliedAt = types.StringValue(st.Applied.AppliedAt)
+		data.AppliedAt = appliedAtValue(st.Applied.AppliedAt)
 	}
 	data.LastCheckedAt = optionalString(st.LastCheckedAt)
 	data.PendingSince = optionalString(st.PendingSince)
@@ -260,7 +260,7 @@ func setStatus(data *EnforcementStatusDataSourceModel, st wireStatus) {
 	}
 }
 
-func setDrift(data *EnforcementStatusDataSourceModel, drift wireDrift) {
+func setDrift(data *enforcementStatusDataSourceModel, drift wireDrift) {
 	data.DriftEvaluated = types.BoolValue(!drift.ObservationStale)
 	data.DriftObservedAt = optionalString(drift.ObservedAt)
 	for _, f := range drift.Findings {

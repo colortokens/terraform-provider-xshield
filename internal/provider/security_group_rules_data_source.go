@@ -13,16 +13,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &SecurityGroupRulesDataSource{}
-var _ datasource.DataSourceWithConfigure = &SecurityGroupRulesDataSource{}
+var _ datasource.DataSource = &securityGroupRulesDataSource{}
+var _ datasource.DataSourceWithConfigure = &securityGroupRulesDataSource{}
 
-func NewSecurityGroupRulesDataSource() datasource.DataSource {
-	return &SecurityGroupRulesDataSource{}
+func newSecurityGroupRulesDataSource() datasource.DataSource {
+	return &securityGroupRulesDataSource{}
 }
 
-// SecurityGroupRulesDataSource is how Full control reaches a customer's own group in pipeline
+// securityGroupRulesDataSource is how Full control reaches a customer's own group in pipeline
 // delivery: the group's code passes its rules through it and declares what comes back.
-type SecurityGroupRulesDataSource struct {
+type securityGroupRulesDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -38,7 +38,7 @@ type sgrRuleModel struct {
 	Tags                      types.Map    `tfsdk:"tags"`
 }
 
-type SecurityGroupRulesDataSourceModel struct {
+type securityGroupRulesDataSourceModel struct {
 	CloudAccountID types.String            `tfsdk:"cloud_account_id"`
 	Region         types.String            `tfsdk:"region"`
 	VPCID          types.String            `tfsdk:"vpc_id"`
@@ -59,13 +59,13 @@ var sgrRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
 	"referenced_security_group_id": types.StringType, "description": types.StringType, "tags": esTagsType,
 }}
 
-func (d *SecurityGroupRulesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *securityGroupRulesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_security_group_rules"
 }
 
 // Schema takes the declared rules as nested attributes, so a rule sets only what it uses, and
 // returns the rules to keep as a map of objects, which Terraform's test mocks can set.
-func (d *SecurityGroupRulesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	declared := func(direction string) schema.MapNestedAttribute {
 		optional := func(description string) schema.StringAttribute {
 			return schema.StringAttribute{Optional: true, MarkdownDescription: description}
@@ -120,7 +120,7 @@ func (d *SecurityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 	}
 }
 
-func (d *SecurityGroupRulesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *securityGroupRulesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -132,8 +132,8 @@ func (d *SecurityGroupRulesDataSource) Configure(ctx context.Context, req dataso
 	d.api = cloudSnapshotAPI{client: client}
 }
 
-func (d *SecurityGroupRulesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data SecurityGroupRulesDataSourceModel
+func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data securityGroupRulesDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -165,7 +165,7 @@ func groupChangeOf(snap wireSnapshot, vpcID, name string) *wireCustomerGroupChan
 }
 
 // filterDeclaredRules never returns a nil map or list, so an unchanged group plans cleanly.
-func filterDeclaredRules(data *SecurityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
+func filterDeclaredRules(data *securityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
 	data.IngressRules, data.EgressRules = map[string]sgrRuleModel{}, map[string]sgrRuleModel{}
 	data.Revoked, data.Pending = []types.String{}, []types.String{}
 	for _, dir := range []struct {
@@ -213,7 +213,7 @@ func ruleMatches(rule sgrRuleModel, m wireRuleMatch) bool {
 	if canonicalProtocol(rule.IPProtocol.ValueString()) != canonicalProtocol(m.IPProtocol) {
 		return false
 	}
-	if m.FromPort != nil && (rule.FromPort.IsNull() || rule.FromPort.ValueInt64() != *m.FromPort || rule.ToPort.ValueInt64() != *m.ToPort) {
+	if m.FromPort != nil && !(samePort(rule.FromPort, m.FromPort) && samePort(rule.ToPort, m.ToPort)) {
 		return false
 	}
 	switch {
@@ -237,6 +237,13 @@ func canonicalProtocol(p string) string {
 		return name
 	}
 	return p
+}
+
+func samePort(declared types.Int64, want *int64) bool {
+	if want == nil {
+		return declared.IsNull()
+	}
+	return !declared.IsNull() && declared.ValueInt64() == *want
 }
 
 func samePrefix(declared types.String, want string) bool {

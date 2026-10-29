@@ -107,8 +107,8 @@ func pointArgs() map[string]tftypes.Value {
 func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testing.T) {
 	t.Parallel()
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/expected": {http.StatusNotFound, xshieldNotPublished}})
-	var m EnforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &EnforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
+	var m enforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("an account with nothing published must plan, not fail: %s", errs)
 	}
 	if m.Published.ValueBool() || !m.Version.IsNull() || !m.ContentHash.IsNull() {
@@ -128,8 +128,8 @@ func TestPublishedSnapshotSaysSo(t *testing.T) {
 		"/expected":    {http.StatusOK, `{"version":42,"contentHash":"sha256:x"}`},
 		"/versions/42": {http.StatusOK, readTestdata(t, "snapshot.json")},
 	})
-	var m EnforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &EnforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
+	var m enforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatal(errs)
 	}
 	if !m.Published.ValueBool() || m.Version.ValueInt64() != 42 || len(m.SecurityGroups) == 0 {
@@ -151,8 +151,8 @@ func TestAnyOtherFailureToReadTheSnapshotFailsThePlan(t *testing.T) {
 		"expected version gone":    {"/expected": {http.StatusOK, `{"version":42,"contentHash":"sha256:x"}`}},
 	} {
 		api, _ := newRoutedSnapshotAPI(t, routes)
-		var m EnforcementSnapshotDataSourceModel
-		if ok, _ := readDataSource(t, &EnforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok {
+		var m enforcementSnapshotDataSourceModel
+		if ok, _ := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok {
 			t.Errorf("%s: the plan went ahead with %+v", name, m)
 		}
 	}
@@ -166,8 +166,8 @@ func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 	})
 	args := pointArgs()
 	args["version"] = tftypes.NewValue(tftypes.Number, 7)
-	var m EnforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &EnforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version 7") {
+	var m enforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version 7") {
 		t.Errorf("a pin to a version Xshield does not hold must fail, naming it; got ok=%v %q", ok, errs)
 	}
 }
@@ -191,8 +191,8 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
 	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
-	var m SecurityGroupRulesDataSourceModel
-	if ok, errs := readDataSource(t, &SecurityGroupRulesDataSource{api: api}, args, &m); !ok {
+	var m securityGroupRulesDataSourceModel
+	if ok, errs := readDataSource(t, &securityGroupRulesDataSource{api: api}, args, &m); !ok {
 		t.Fatalf("a group's own pipeline must plan while nothing is published: %s", errs)
 	}
 	kept, ok := m.IngressRules["https_public"]
@@ -204,8 +204,8 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 func TestStatusOfAnAccountWithNothingPublishedIsQuiet(t *testing.T) {
 	t.Parallel()
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusNotFound, xshieldNotPublished}})
-	var m EnforcementStatusDataSourceModel
-	if ok, errs := readDataSource(t, &EnforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
+	var m enforcementStatusDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("a monitor must not fail on an account with nothing published: %s", errs)
 	}
 	if m.Published.ValueBool() || m.State.ValueString() != "unpublished" || !m.ExpectedVersion.IsNull() || !m.AppliedVersion.IsNull() ||
@@ -232,8 +232,8 @@ func TestDriftIsUnevaluatedOnlyWhenXshieldSaysWhy(t *testing.T) {
 		"notObserved, but as a 409": {cannedResponse{http.StatusConflict, xshieldNotObserved}, false},
 	} {
 		api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": status, "/drift": tc.drift})
-		var m EnforcementStatusDataSourceModel
-		ok, errs := readDataSource(t, &EnforcementStatusDataSource{api: api}, pointArgs(), &m)
+		var m enforcementStatusDataSourceModel
+		ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m)
 		if ok != tc.planOK {
 			t.Errorf("%s: plan ok %v, want %v (%s)", name, ok, tc.planOK, errs)
 		}

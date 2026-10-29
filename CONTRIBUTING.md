@@ -50,12 +50,23 @@ export XSHIELD_PRIVATE_KEY_PATH=...
 export XSHIELD_SERVER_URL=...          # optional
 export XSHIELD_TEST_ASSET_ID=...       # an existing asset, for xshield_asset
 export XSHIELD_TEST_ASSET_NAME=...     # the same asset's name
+export XSHIELD_TEST_CLOUD_ACCOUNT_ID=... # an AWS account with an enforcement snapshot published
+export XSHIELD_TEST_CLOUD_REGION=...   # the region of that snapshot
 make testacc
 ```
 
 `xshield_asset` needs the two fixture variables because assets are registered by
 the xshield agent and cannot be created through Terraform; its tests import an
 existing asset and then update it.
+
+The enforcement snapshot tests need an account and region whose policy delivery
+is Terraform pipeline. The `xshield_enforcement_receipt` test sends receipts with
+placeholder AWS IDs, so use an account that no real pipeline applies. To run
+these tests without a tenant, start
+`examples/enforcement-snapshot/demo-server/serve.py`, set `XSHIELD_SERVER_URL`
+to it, the account and region to `123456789012` and `us-east-1`, the API key
+variables to any values with `XSHIELD_PRIVATE_KEY_PATH` naming any RSA key, and
+run `TF_ACC=1 go test ./internal/provider/ -run 'TestAcc(Enforcement|SecurityGroupRules)'`.
 
 The full acceptance suite runs nightly against a matrix of Terraform versions in
 the `Nightly acceptance tests` workflow.

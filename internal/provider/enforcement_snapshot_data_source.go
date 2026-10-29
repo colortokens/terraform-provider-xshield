@@ -15,16 +15,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &EnforcementSnapshotDataSource{}
-var _ datasource.DataSourceWithConfigure = &EnforcementSnapshotDataSource{}
+var _ datasource.DataSource = &enforcementSnapshotDataSource{}
+var _ datasource.DataSourceWithConfigure = &enforcementSnapshotDataSource{}
 
-func NewEnforcementSnapshotDataSource() datasource.DataSource {
-	return &EnforcementSnapshotDataSource{}
+func newEnforcementSnapshotDataSource() datasource.DataSource {
+	return &enforcementSnapshotDataSource{}
 }
 
-// EnforcementSnapshotDataSource only reads: the customer's pipeline performs
+// enforcementSnapshotDataSource only reads: the customer's pipeline performs
 // every cloud write from what it returns.
-type EnforcementSnapshotDataSource struct {
+type enforcementSnapshotDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -36,14 +36,13 @@ type esSecurityGroupModel struct {
 }
 
 type esRuleModel struct {
-	SecurityGroup types.String `tfsdk:"security_group"`
-	IPProtocol    types.String `tfsdk:"ip_protocol"`
-	FromPort      types.Int64  `tfsdk:"from_port"`
-	ToPort        types.Int64  `tfsdk:"to_port"`
-	CIDRIPv4      types.String `tfsdk:"cidr_ipv4"`
-	CIDRIPv6      types.String `tfsdk:"cidr_ipv6"`
-	PrefixListID  types.String `tfsdk:"prefix_list_id"`
-	// ReferencedSecurityGroupID is set only on a Full control cohort's copy of a rule that names a group.
+	SecurityGroup             types.String      `tfsdk:"security_group"`
+	IPProtocol                types.String      `tfsdk:"ip_protocol"`
+	FromPort                  types.Int64       `tfsdk:"from_port"`
+	ToPort                    types.Int64       `tfsdk:"to_port"`
+	CIDRIPv4                  types.String      `tfsdk:"cidr_ipv4"`
+	CIDRIPv6                  types.String      `tfsdk:"cidr_ipv6"`
+	PrefixListID              types.String      `tfsdk:"prefix_list_id"`
 	ReferencedSecurityGroupID types.String      `tfsdk:"referenced_security_group_id"`
 	Description               types.String      `tfsdk:"description"`
 	Tags                      map[string]string `tfsdk:"tags"`
@@ -66,7 +65,7 @@ type esAssetModel struct {
 	AttachedBy    types.String `tfsdk:"attached_by"`
 }
 
-type EnforcementSnapshotDataSourceModel struct {
+type enforcementSnapshotDataSourceModel struct {
 	CloudAccountID       types.String                    `tfsdk:"cloud_account_id"`
 	Region               types.String                    `tfsdk:"region"`
 	Published            types.Bool                      `tfsdk:"published"`
@@ -81,7 +80,7 @@ type EnforcementSnapshotDataSourceModel struct {
 	Withdrawing          []types.String                  `tfsdk:"withdrawing"`
 }
 
-func (d *EnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *enforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_enforcement_snapshot"
 }
 
@@ -97,7 +96,7 @@ var (
 // Schema declares the collections as maps of objects rather than nested
 // attributes: Terraform's test mocks cannot set a computed nested attribute,
 // and a team testing its own modules against this data source needs to.
-func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	str := func(description string) schema.StringAttribute {
 		return schema.StringAttribute{Computed: true, MarkdownDescription: description}
 	}
@@ -177,7 +176,7 @@ func (d *EnforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 	}
 }
 
-func (d *EnforcementSnapshotDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *enforcementSnapshotDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -267,7 +266,6 @@ type wireSnapshot struct {
 // format may carry resources this provider would silently leave out.
 const supportedSnapshotSchema = "2"
 
-// renderable refuses a snapshot this provider would apply only part of.
 func renderable(snap wireSnapshot) error {
 	if snap.SchemaVersion != supportedSnapshotSchema {
 		return fmt.Errorf("this provider applies snapshot schema %q, and Xshield sent schema %q. Upgrade the xshield provider; "+
@@ -284,8 +282,8 @@ type wireExpected struct {
 	ContentHash string `json:"contentHash"`
 }
 
-func (d *EnforcementSnapshotDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data EnforcementSnapshotDataSourceModel
+func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data enforcementSnapshotDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -334,8 +332,8 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 // snapshotModel never returns a nil map or list: an empty account still plans
 // cleanly, and an attribute that switched between null and empty would show
 // as a change on every plan.
-func snapshotModel(account, region types.String, snap *wireSnapshot) EnforcementSnapshotDataSourceModel {
-	m := EnforcementSnapshotDataSourceModel{
+func snapshotModel(account, region types.String, snap *wireSnapshot) enforcementSnapshotDataSourceModel {
+	m := enforcementSnapshotDataSourceModel{
 		CloudAccountID:       account,
 		Region:               region,
 		Published:            types.BoolValue(snap != nil),

@@ -20,8 +20,8 @@ func declaredRule(protocol string, port int64, cidr string) sgrRuleModel {
 		ReferencedSecurityGroupID: types.StringNull(), Description: types.StringNull(), Tags: types.MapNull(types.StringType)}
 }
 
-func webRules() *SecurityGroupRulesDataSourceModel {
-	return &SecurityGroupRulesDataSourceModel{
+func webRules() *securityGroupRulesDataSourceModel {
+	return &securityGroupRulesDataSourceModel{
 		CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		VPCID: types.StringValue("vpc-1"), GroupName: types.StringValue("web"), Version: types.Int64Value(43),
 		Ingress: map[string]sgrRuleModel{"https_all": declaredRule("6", 443, "0.0.0.0/0"), "ssh_office": declaredRule("tcp", 22, "10.0.0.0/8")},
@@ -63,8 +63,8 @@ func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 	if e := m.Directory["lambda/reports"]; !slices.ContainsFunc(e.SecurityGroups, func(s types.String) bool { return s.ValueString() == sampleCohortKey }) {
 		t.Errorf("directory entry %+v, want the cohort for the function's workspace to attach", e)
 	}
-	group := ruleModel(wireRule{SecurityGroup: sampleCohortKey, IPProtocol: "-1", ReferencedSecurityGroupID: ptr("111111111111/sg-lb")})
-	if group.ReferencedSecurityGroupID.ValueString() != "111111111111/sg-lb" || !group.CIDRIPv4.IsNull() {
+	group := ruleModel(wireRule{SecurityGroup: sampleCohortKey, IPProtocol: "-1", ReferencedSecurityGroupID: ptr("111122223333/sg-lb")})
+	if group.ReferencedSecurityGroupID.ValueString() != "111122223333/sg-lb" || !group.CIDRIPv4.IsNull() {
 		t.Errorf("group-referenced rule %+v", group)
 	}
 }
@@ -133,9 +133,26 @@ func TestRuleMatchingComparesWhatAWSCompares(t *testing.T) {
 			r := declaredRule("tcp", 443, "")
 			r.CIDRIPv4, r.ReferencedSecurityGroupID = types.StringNull(), types.StringValue("sg-lb")
 			return r
-		}(), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), ReferencedSecurityGroupID: ptr("111111111111/sg-lb")}, true},
+		}(), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), ReferencedSecurityGroupID: ptr("111122223333/sg-lb")}, true},
 	} {
 		if got := ruleMatches(tc.rule, tc.want); got != tc.same {
+			t.Errorf("%s: matched %v, want %v", name, got, tc.same)
+		}
+	}
+}
+
+func TestRuleMatchingWithoutAToPort(t *testing.T) {
+	t.Parallel()
+	echoRequest := declaredRule("icmp", 8, "0.0.0.0/0")
+	echoRequest.ToPort = types.Int64Null()
+	for name, tc := range map[string]struct {
+		rule sgrRuleModel
+		same bool
+	}{
+		"declared rule sets a to_port": {declaredRule("icmp", 8, "0.0.0.0/0"), false},
+		"neither sets a to_port":       {echoRequest, true},
+	} {
+		if got := ruleMatches(tc.rule, wireRuleMatch{IPProtocol: "icmp", FromPort: i64(8), CIDRIPv4: ptr("0.0.0.0/0")}); got != tc.same {
 			t.Errorf("%s: matched %v, want %v", name, got, tc.same)
 		}
 	}
@@ -145,7 +162,7 @@ func TestRulesFilterModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp datasource.SchemaResponse
-	(&SecurityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	(&securityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
 	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json")), "vpc-1", "web"))
 	state := tfsdk.State{Schema: resp.Schema}

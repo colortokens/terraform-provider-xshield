@@ -28,18 +28,18 @@ variable "enable_deployment_trigger" {
 }
 
 variable "deployment_mode" {
-  description = "test | enforced | undeploy."
+  description = "test | enforce | undeploy."
   type        = string
   default     = "test"
 
   validation {
-    condition     = contains(["test", "enforced", "undeploy"], var.deployment_mode)
-    error_message = "deployment_mode must be one of: test, enforced, undeploy."
+    condition     = contains(["test", "enforce", "undeploy"], var.deployment_mode)
+    error_message = "deployment_mode must be one of: test, enforce, undeploy."
   }
 }
 
 variable "change_ticket" {
-  description = "Change record reference; required when deployment_mode is 'enforced'."
+  description = "Change record reference; required when deployment_mode is 'enforce'."
   type        = string
   default     = ""
 }

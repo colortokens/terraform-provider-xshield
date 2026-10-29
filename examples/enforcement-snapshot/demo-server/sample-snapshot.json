@@ -57,8 +57,8 @@
       }
     },
     "egressRules": {
-      "i-app-1/out/tcp/443/52.10.0.0/16": {
-        "cidrIpv4": "52.10.0.0/16",
+      "i-app-1/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -75,8 +75,8 @@
         },
         "toPort": 443
       },
-      "i-app-1/out/tcp/443/52.20.0.0/16": {
-        "cidrIpv4": "52.20.0.0/16",
+      "i-app-1/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -93,8 +93,8 @@
         },
         "toPort": 443
       },
-      "i-app-2/out/tcp/443/52.10.0.0/16": {
-        "cidrIpv4": "52.10.0.0/16",
+      "i-app-2/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -111,8 +111,8 @@
         },
         "toPort": 443
       },
-      "i-app-2/out/tcp/443/52.20.0.0/16": {
-        "cidrIpv4": "52.20.0.0/16",
+      "i-app-2/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -129,8 +129,8 @@
         },
         "toPort": 443
       },
-      "i-db-1/out/tcp/443/52.10.0.0/16": {
-        "cidrIpv4": "52.10.0.0/16",
+      "i-db-1/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -147,8 +147,8 @@
         },
         "toPort": 443
       },
-      "i-db-1/out/tcp/443/52.20.0.0/16": {
-        "cidrIpv4": "52.20.0.0/16",
+      "i-db-1/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -165,8 +165,8 @@
         },
         "toPort": 443
       },
-      "i-db-2/out/tcp/443/52.10.0.0/16": {
-        "cidrIpv4": "52.10.0.0/16",
+      "i-db-2/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -183,8 +183,8 @@
         },
         "toPort": 443
       },
-      "i-db-2/out/tcp/443/52.20.0.0/16": {
-        "cidrIpv4": "52.20.0.0/16",
+      "i-db-2/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
         "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
         "fromPort": 443,
@@ -939,7 +939,7 @@
     "withdrawing": []
   },
   "cloudAccountId": "123456789012",
-  "contentHash": "sha256:336ce33de492f30940b144605c2953bca8e6360493272e2d3df022da8991a98b",
+  "contentHash": "sha256:50663057a056e06dc781b09b3fca6b39e618d811b09e62121d16a6ac992247b5",
   "region": "us-east-1",
   "schemaVersion": "2",
   "version": 42

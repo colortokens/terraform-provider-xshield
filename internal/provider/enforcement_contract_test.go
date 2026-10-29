@@ -15,9 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// snapshot.json and snapshot_fullcontrol.json are copies of ng-backend's
-// policy-generator/pkg/cloudsnapshot/testdata/provider, which a test there holds
-// to what the server serves, so these tests read the server's real output.
+// snapshot.json and snapshot_fullcontrol.json are copies of the Xshield server's
+// golden snapshot output, so these tests read what the server serves.
 
 func loadJSON[T any](t *testing.T, name string) T {
 	t.Helper()
@@ -32,7 +31,7 @@ func loadJSON[T any](t *testing.T, name string) T {
 	return out
 }
 
-func sampleSnapshotModel(t *testing.T) EnforcementSnapshotDataSourceModel {
+func sampleSnapshotModel(t *testing.T) enforcementSnapshotDataSourceModel {
 	t.Helper()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
 	if err := renderable(snap); err != nil {
@@ -99,8 +98,8 @@ func TestEverySnapshotModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp datasource.SchemaResponse
-	(&EnforcementSnapshotDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
-	for name, m := range map[string]EnforcementSnapshotDataSourceModel{
+	(&enforcementSnapshotDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	for name, m := range map[string]enforcementSnapshotDataSourceModel{
 		"sample":       sampleSnapshotModel(t),
 		"empty":        snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot.json").emptied())),
 		"pinned":       withVersion(sampleSnapshotModel(t), 7),
@@ -124,7 +123,7 @@ func (s wireSnapshot) emptied() wireSnapshot {
 	return empty
 }
 
-func withVersion(m EnforcementSnapshotDataSourceModel, v int64) EnforcementSnapshotDataSourceModel {
+func withVersion(m enforcementSnapshotDataSourceModel, v int64) enforcementSnapshotDataSourceModel {
 	m.Version = types.Int64Value(v)
 	return m
 }
@@ -155,7 +154,7 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		Message string `json:"message"`
 	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", Message: "the connector would refuse this workload's policy"})
 
-	data := EnforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
+	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
 	setDrift(&data, loadJSON[wireDrift](t, "drift.json"))
 
@@ -177,7 +176,7 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	}
 
 	var resp datasource.SchemaResponse
-	(&EnforcementStatusDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	(&enforcementStatusDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {
 		t.Errorf("the status model does not fit its schema: %v", diags)
@@ -188,12 +187,12 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp resource.SchemaResponse
-	(&EnforcementReceiptResource{}).Schema(ctx, resource.SchemaRequest{}, &resp)
+	(&enforcementReceiptResource{}).Schema(ctx, resource.SchemaRequest{}, &resp)
 	mapOf := func(m map[string]string) types.Map {
 		v, _ := types.MapValueFrom(ctx, types.StringType, m)
 		return v
 	}
-	data := EnforcementReceiptResourceModel{
+	data := enforcementReceiptResourceModel{
 		ID: types.StringValue("rcpt-1"), CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.Int64Value(42), ContentHash: types.StringValue("sha256:abc"),
 		SecurityGroups: mapOf(map[string]string{"i-db-1": "sg-1"}), Rules: mapOf(map[string]string{"k": "sgr-1"}),

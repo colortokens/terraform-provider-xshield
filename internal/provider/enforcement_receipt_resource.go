@@ -19,17 +19,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ resource.Resource = &EnforcementReceiptResource{}
-var _ resource.ResourceWithConfigure = &EnforcementReceiptResource{}
-var _ resource.ResourceWithImportState = &EnforcementReceiptResource{}
+var _ resource.Resource = &enforcementReceiptResource{}
+var _ resource.ResourceWithConfigure = &enforcementReceiptResource{}
+var _ resource.ResourceWithImportState = &enforcementReceiptResource{}
 
-func NewEnforcementReceiptResource() resource.Resource { return &EnforcementReceiptResource{} }
+func newEnforcementReceiptResource() resource.Resource { return &enforcementReceiptResource{} }
 
-type EnforcementReceiptResource struct {
+type enforcementReceiptResource struct {
 	api cloudSnapshotAPI
 }
 
-type EnforcementReceiptResourceModel struct {
+type enforcementReceiptResourceModel struct {
 	ID              types.String `tfsdk:"id"`
 	CloudAccountID  types.String `tfsdk:"cloud_account_id"`
 	Region          types.String `tfsdk:"region"`
@@ -43,11 +43,11 @@ type EnforcementReceiptResourceModel struct {
 	AppliedAt       types.String `tfsdk:"applied_at"`
 }
 
-func (r *EnforcementReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *enforcementReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_enforcement_receipt"
 }
 
-func (r *EnforcementReceiptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	idMap := func(description string, required bool) schema.MapAttribute {
 		return schema.MapAttribute{ElementType: types.StringType, Required: required, Optional: !required, Description: description}
 	}
@@ -105,7 +105,7 @@ func (r *EnforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 	}
 }
 
-func (r *EnforcementReceiptResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *enforcementReceiptResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -130,7 +130,7 @@ type wireReceipt struct {
 	ContentHash string                `json:"contentHash"`
 	Workspace   string                `json:"workspace"`
 	RunID       string                `json:"runId,omitempty"`
-	AppliedAt   string                `json:"appliedAt,omitempty"`
+	AppliedAt   *time.Time            `json:"appliedAt,omitempty"`
 	Resources   wireRenderedResources `json:"resources"`
 }
 
@@ -139,7 +139,7 @@ type wireConvergence struct {
 	Applied *wireReceipt `json:"applied"`
 }
 
-func receiptRequest(ctx context.Context, data *EnforcementReceiptResourceModel, runID string) (wireReceipt, diag.Diagnostics) {
+func receiptRequest(ctx context.Context, data *enforcementReceiptResourceModel, runID string) (wireReceipt, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	ids := func(m types.Map) map[string]string {
 		out := map[string]string{}
@@ -188,7 +188,7 @@ func receiptIsCurrent(status wireConvergence, receiptID string) bool {
 	return status.Applied != nil && status.Applied.ReceiptID == receiptID
 }
 
-func (r *EnforcementReceiptResource) send(ctx context.Context, data *EnforcementReceiptResourceModel, diags *diag.Diagnostics) {
+func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcementReceiptResourceModel, diags *diag.Diagnostics) {
 	runID := os.Getenv("TFC_RUN_ID")
 	body, d := receiptRequest(ctx, data, runID)
 	diags.Append(d...)
@@ -205,12 +205,12 @@ func (r *EnforcementReceiptResource) send(ctx context.Context, data *Enforcement
 		return
 	}
 	data.ID = types.StringValue(created.ReceiptID)
-	data.AppliedAt = types.StringValue(created.AppliedAt.UTC().Format(time.RFC3339))
+	data.AppliedAt = appliedAtValue(&created.AppliedAt)
 	data.RunID = types.StringValue(runID)
 }
 
-func (r *EnforcementReceiptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data EnforcementReceiptResourceModel
+func (r *enforcementReceiptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data enforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -222,8 +222,8 @@ func (r *EnforcementReceiptResource) Create(ctx context.Context, req resource.Cr
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *EnforcementReceiptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data EnforcementReceiptResourceModel
+func (r *enforcementReceiptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data enforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -235,8 +235,8 @@ func (r *EnforcementReceiptResource) Update(ctx context.Context, req resource.Up
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *EnforcementReceiptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data EnforcementReceiptResourceModel
+func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data enforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -267,7 +267,7 @@ func (r *EnforcementReceiptResource) Read(ctx context.Context, req resource.Read
 
 // adopt fills an imported receipt from the one Xshield currently holds, so a
 // lost state file can be recovered without sending a new receipt.
-func (r *EnforcementReceiptResource) adopt(ctx context.Context, data *EnforcementReceiptResourceModel, status wireConvergence, diags *diag.Diagnostics) {
+func (r *enforcementReceiptResource) adopt(ctx context.Context, data *enforcementReceiptResourceModel, status wireConvergence, diags *diag.Diagnostics) {
 	if status.Applied == nil {
 		diags.AddError("Nothing to import", "Xshield holds no apply receipt for this account and region yet.")
 		return
@@ -286,16 +286,23 @@ func (r *EnforcementReceiptResource) adopt(ctx context.Context, data *Enforcemen
 	data.Rules = toMap(a.Resources.Rules)
 	data.Attachments = toMap(a.Resources.Attachments)
 	data.RunID = types.StringValue(a.RunID)
-	data.AppliedAt = types.StringValue(a.AppliedAt)
+	data.AppliedAt = appliedAtValue(a.AppliedAt)
 }
 
-func (r *EnforcementReceiptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func appliedAtValue(at *time.Time) types.String {
+	if at == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(at.UTC().Format(time.RFC3339Nano))
+}
+
+func (r *enforcementReceiptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// A receipt is a historical record; Xshield keeps it after the resource goes.
 }
 
 // ImportState takes "<cloud_account_id>/<region>" and adopts the receipt
 // Xshield currently holds for it.
-func (r *EnforcementReceiptResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *enforcementReceiptResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	account, region, ok := strings.Cut(req.ID, "/")
 	if !ok || account == "" || region == "" {
 		resp.Diagnostics.AddError("Invalid import id", fmt.Sprintf("expected <cloud_account_id>/<region>, got %q", req.ID))

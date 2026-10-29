@@ -161,7 +161,7 @@ run "refuses_another_accounts_snapshot" {
 
   override_data {
     target = data.aws_caller_identity.current
-    values = { account_id = "999999999999" }
+    values = { account_id = "111122223333" }
   }
 
   expect_failures = [data.xshield_enforcement_snapshot.this]
