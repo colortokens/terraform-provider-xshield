@@ -118,7 +118,6 @@ resource "xshield_enforcement_receipt" "this" {
   region           = local.snap.region
   workspace        = local.workspace
   snapshot_version = local.snap.version
-  content_hash     = local.snap.content_hash
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(

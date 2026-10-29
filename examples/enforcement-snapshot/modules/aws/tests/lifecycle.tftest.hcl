@@ -20,7 +20,6 @@ mock_provider "xshield" {
     defaults = {
       published             = false
       version               = null
-      content_hash          = null
       security_groups       = {}
       ingress_rules         = {}
       egress_rules          = {}
@@ -58,9 +57,8 @@ run "first_version_applies_and_is_confirmed" {
   override_data {
     target = data.xshield_enforcement_snapshot.this
     values = {
-      published    = true
-      version      = 1
-      content_hash = "sha256:v1"
+      published = true
+      version   = "v1"
       security_groups = {
         "i-1"           = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
         "rds/orders-db" = { name = "ct-policy-0000000000d1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
@@ -93,7 +91,7 @@ run "first_version_applies_and_is_confirmed" {
     error_message = "the first version creates its groups, attachment and directory entry"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == 1 && toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(["i-1", "rds/orders-db"])
+    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v1" && toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(["i-1", "rds/orders-db"])
     error_message = "the first apply is confirmed with a receipt for exactly what it created"
   }
 }
@@ -105,9 +103,8 @@ run "changes_touch_only_what_changed" {
   override_data {
     target = data.xshield_enforcement_snapshot.this
     values = {
-      published    = true
-      version      = 2
-      content_hash = "sha256:v2"
+      published = true
+      version   = "v2"
       security_groups = {
         "i-1"           = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
         "i-2"           = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
@@ -158,7 +155,7 @@ run "changes_touch_only_what_changed" {
     error_message = "the database's directory entry still names the same group"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == 2 && length(xshield_enforcement_receipt.this[0].rules) == 3
+    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v2" && length(xshield_enforcement_receipt.this[0].rules) == 3
     error_message = "the receipt moves to the new version"
   }
 }
@@ -171,9 +168,8 @@ run "withdrawn_group_outlives_its_attachment" {
   override_data {
     target = data.xshield_enforcement_snapshot.this
     values = {
-      published    = true
-      version      = 3
-      content_hash = "sha256:v3"
+      published = true
+      version   = "v3"
       security_groups = {
         "i-1"           = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
         "i-2"           = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
@@ -222,9 +218,8 @@ run "detached_group_is_removed_and_the_rest_stay" {
   override_data {
     target = data.xshield_enforcement_snapshot.this
     values = {
-      published    = true
-      version      = 4
-      content_hash = "sha256:v4"
+      published = true
+      version   = "v4"
       security_groups = {
         "i-1" = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
         "i-2" = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
@@ -280,8 +275,7 @@ run "off_removes_everything_and_still_confirms" {
     target = data.xshield_enforcement_snapshot.this
     values = {
       published             = true
-      version               = 5
-      content_hash          = "sha256:v5"
+      version               = "v5"
       security_groups       = {}
       ingress_rules         = {}
       egress_rules          = {}
@@ -297,7 +291,7 @@ run "off_removes_everything_and_still_confirms" {
     error_message = "an empty published version removes every group"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == 5
+    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v5"
     error_message = "and still confirms the version, so Xshield knows the removal was applied"
   }
 }

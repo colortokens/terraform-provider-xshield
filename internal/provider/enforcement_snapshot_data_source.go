@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strconv"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -69,8 +68,7 @@ type enforcementSnapshotDataSourceModel struct {
 	CloudAccountID       types.String                    `tfsdk:"cloud_account_id"`
 	Region               types.String                    `tfsdk:"region"`
 	Published            types.Bool                      `tfsdk:"published"`
-	Version              types.Int64                     `tfsdk:"version"`
-	ContentHash          types.String                    `tfsdk:"content_hash"`
+	Version              types.String                    `tfsdk:"version"`
 	SecurityGroups       map[string]esSecurityGroupModel `tfsdk:"security_groups"`
 	IngressRules         map[string]esRuleModel          `tfsdk:"ingress_rules"`
 	EgressRules          map[string]esRuleModel          `tfsdk:"egress_rules"`
@@ -97,9 +95,6 @@ var (
 // attributes: Terraform's test mocks cannot set a computed nested attribute,
 // and a team testing its own modules against this data source needs to.
 func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	str := func(description string) schema.StringAttribute {
-		return schema.StringAttribute{Computed: true, MarkdownDescription: description}
-	}
 	objects := func(elem attr.Type, description string) schema.MapAttribute {
 		return schema.MapAttribute{Computed: true, ElementType: elem, MarkdownDescription: description}
 	}
@@ -123,21 +118,21 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id": schema.StringAttribute{Required: true, MarkdownDescription: "AWS account the snapshot is for."},
 			"region":           schema.StringAttribute{Required: true, MarkdownDescription: "AWS region the snapshot is for."},
-			"version": schema.Int64Attribute{
+			"version": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
-				MarkdownDescription: "Pins a version, for break-glass rollback or forensics. When omitted, the version Xshield expects is " +
-					"fetched, so the configuration never changes when policy does. While a pin is in place, Xshield reports the " +
-					"account as pending.",
+				MarkdownDescription: "The snapshot's version, which is the hash of everything it asks for; Xshield accepts a receipt only " +
+					"for a version it published. Set it to pin a version, for break-glass rollback or forensics. When omitted, the version " +
+					"Xshield expects is fetched, so the configuration never changes when policy does. While a pin is in place, Xshield " +
+					"reports the account as pending.",
 			},
 			"published": schema.BoolAttribute{
 				Computed: true,
 				MarkdownDescription: "False while Xshield has published nothing for this account and region, such as before the " +
-					"account is onboarded with policy delivery set to Terraform pipeline: every map is empty and `version` and " +
-					"`content_hash` are null, so a configuration built on it plans no change. Only Xshield's own answer that nothing " +
+					"account is onboarded with policy delivery set to Terraform pipeline: every map is empty and `version` is null, " +
+					"so a configuration built on it plans no change. Only Xshield's own answer that nothing " +
 					"is published counts; any other failure to read the snapshot fails the plan.",
 			},
-			"content_hash": str("Hash of everything this version asks for. Xshield accepts a receipt only for this exact content. Null when nothing is published."),
 			"security_groups": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"name": types.StringType, "description": types.StringType, "vpc_id": types.StringType, "tags": esTagsType,
 			}}, "One security group per workload, or per Aurora cluster, keyed by its instance ID or handle, and at Full "+
@@ -216,22 +211,17 @@ type wireRuleMatch struct {
 
 // wireCustomerGroupChange is a Full control change to one of the customer's own groups.
 type wireCustomerGroupChange struct {
-	GroupID    string          `json:"groupId"`
-	GroupName  string          `json:"groupName"`
-	VPCID      string          `json:"vpcId"`
 	Revoke     []wireRuleMatch `json:"revoke"`
 	ChangeSets []struct {
 		ID          string          `json:"id"`
-		Fingerprint string          `json:"fingerprint"`
-		State       string          `json:"state"`
-		Moves       []wireRuleMatch `json:"moves"`
+		State string          `json:"state"`
+		Moves []wireRuleMatch `json:"moves"`
 	} `json:"changeSets"`
 }
 
 type wireSnapshot struct {
 	SchemaVersion  string `json:"schemaVersion"`
-	Version        int64  `json:"version"`
-	ContentHash    string `json:"contentHash"`
+	Version        string `json:"version"`
 	CloudAccountID string `json:"cloudAccountId"`
 	Region         string `json:"region"`
 	AWS            *struct {
@@ -278,8 +268,7 @@ func renderable(snap wireSnapshot) error {
 }
 
 type wireExpected struct {
-	Version     int64  `json:"version"`
-	ContentHash string `json:"contentHash"`
+	Version string `json:"version"`
 }
 
 func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -302,11 +291,11 @@ func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
 // it has published nothing; a pinned version must exist.
-func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.Int64, diags *diag.Diagnostics) (*wireSnapshot, bool) {
-	version := pinned.ValueInt64()
+func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.String, diags *diag.Diagnostics) (*wireSnapshot, bool) {
+	version := pinned.ValueString()
 	if pinned.IsNull() || pinned.IsUnknown() {
 		var exp wireExpected
-		err := api.get(ctx, api.endpoint(account, region, "expected"), &exp)
+		err := api.get(ctx, api.endpoint(cloudAWS, account, region, "expected"), &exp)
 		if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
 			return nil, true
 		}
@@ -318,8 +307,8 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 		version = exp.Version
 	}
 	var snap wireSnapshot
-	if err := api.get(ctx, api.endpoint(account, region, "versions", strconv.FormatInt(version, 10)), &snap); err != nil {
-		diags.AddError(fmt.Sprintf("Cannot fetch snapshot version %d for %s/%s", version, account, region), err.Error())
+	if err := api.get(ctx, api.endpoint(cloudAWS, account, region, "versions", version), &snap); err != nil {
+		diags.AddError(fmt.Sprintf("Cannot fetch snapshot version %s for %s/%s", version, account, region), err.Error())
 		return nil, false
 	}
 	if err := renderable(snap); err != nil {
@@ -337,8 +326,7 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) enforcement
 		CloudAccountID:       account,
 		Region:               region,
 		Published:            types.BoolValue(snap != nil),
-		Version:              types.Int64Null(),
-		ContentHash:          types.StringNull(),
+		Version:              types.StringNull(),
 		SecurityGroups:       map[string]esSecurityGroupModel{},
 		IngressRules:         map[string]esRuleModel{},
 		EgressRules:          map[string]esRuleModel{},
@@ -351,7 +339,7 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) enforcement
 		return m
 	}
 	plan := snap.AWS
-	m.Version, m.ContentHash = types.Int64Value(snap.Version), types.StringValue(snap.ContentHash)
+	m.Version = types.StringValue(snap.Version)
 	m.Withdrawing = toStrList(plan.Withdrawing)
 	for key, g := range plan.SecurityGroups {
 		m.SecurityGroups[key] = esSecurityGroupModel{Name: types.StringValue(g.Name), Description: types.StringValue(g.Description),

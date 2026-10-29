@@ -11,8 +11,8 @@ variable "region" {
 }
 
 variable "snapshot_version" {
-  description = "Pins a snapshot version, for break-glass rollback or forensics. Leave unset to apply the version Xshield expects; while a pin is in place, Xshield reports the account as pending."
-  type        = number
+  description = "Pins a snapshot version, its content hash, for break-glass rollback or forensics. Leave unset to apply the version Xshield expects; while a pin is in place, Xshield reports the account as pending."
+  type        = string
   default     = null
 }
 

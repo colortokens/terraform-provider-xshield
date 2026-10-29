@@ -72,20 +72,23 @@ func newSnapshotTestAPI(t *testing.T, status int, response string) (cloudSnapsho
 	return cloudSnapshotAPI{client: client}, recorder, &key.PublicKey
 }
 
+// testVersion stands for a snapshot version, which Xshield names by its content hash.
+var testVersion = strings.Repeat("ab", 64)
+
 func TestSnapshotCallsUseTheProviderConfiguredClient(t *testing.T) {
 	t.Parallel()
 	// The provider block's proxy and timeout live on this client; a private
 	// client would silently bypass a proxy the customer configured.
-	api, recorder, _ := newSnapshotTestAPI(t, http.StatusOK, `{"version":42,"contentHash":"sha256:x"}`)
+	api, recorder, _ := newSnapshotTestAPI(t, http.StatusOK, `{"version":"`+testVersion+`"}`)
 
 	var exp wireExpected
-	if err := api.get(context.Background(), api.endpoint("123456789012", "us-east-1", "expected"), &exp); err != nil {
+	if err := api.get(context.Background(), api.endpoint(cloudAWS, "123456789012", "us-east-1", "expected"), &exp); err != nil {
 		t.Fatal(err)
 	}
-	if exp.Version != 42 || len(recorder.requests) != 1 {
-		t.Fatalf("got version %d over %d requests through the configured client, want 42 over 1", exp.Version, len(recorder.requests))
+	if exp.Version != testVersion || len(recorder.requests) != 1 {
+		t.Fatalf("got version %s over %d requests through the configured client, want %s over 1", exp.Version, len(recorder.requests), testVersion)
 	}
-	if got := recorder.requests[0].path; got != "/api/policies/cloudsnapshots/123456789012/us-east-1/expected" {
+	if got := recorder.requests[0].path; got != "/api/policies/cloudsnapshots/aws/123456789012/us-east-1/expected" {
 		t.Errorf("requested %s", got)
 	}
 }
@@ -94,10 +97,10 @@ func TestReceiptPostSignatureVerifiesOverTheBodySent(t *testing.T) {
 	t.Parallel()
 	api, recorder, pub := newSnapshotTestAPI(t, http.StatusCreated, `{"receiptId":"rcpt-1","appliedAt":"2026-01-02T03:04:05Z"}`)
 
-	receipt := wireReceipt{Version: 43, ContentHash: "sha256:abc", Workspace: "ws", Resources: wireRenderedResources{
+	receipt := wireReceipt{Version: testVersion, Workspace: "ws", Resources: wireRenderedResources{
 		SecurityGroups: map[string]string{"i-db-1": "sg-1"}, Rules: map[string]string{"k": "sgr-1"},
 	}}
-	if err := api.post(context.Background(), api.endpoint("123456789012", "us-east-1", "receipts"), receipt, http.StatusCreated, nil); err != nil {
+	if err := api.post(context.Background(), api.endpoint(cloudAWS, "123456789012", "us-east-1", "receipts"), receipt, http.StatusCreated, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorder.requests) != 1 {
@@ -136,7 +139,7 @@ func TestReceiptRejectionSurfacesWhatWasWrong(t *testing.T) {
 	api, _, _ := newSnapshotTestAPI(t, http.StatusUnprocessableEntity,
 		`{"status":422,"message":"receipt does not account for exactly the snapshot's resources","details":{"rulesMissing":["i-db-1/in/tcp/5432/10.20.1.11/32"]}}`)
 
-	err := api.post(context.Background(), api.endpoint("123456789012", "us-east-1", "receipts"), wireReceipt{}, http.StatusCreated, nil)
+	err := api.post(context.Background(), api.endpoint(cloudAWS, "123456789012", "us-east-1", "receipts"), wireReceipt{}, http.StatusCreated, nil)
 	if err == nil || !strings.Contains(err.Error(), "rulesMissing") || !strings.Contains(err.Error(), "5432") {
 		t.Fatalf("error should name the missing rule, got %v", err)
 	}
@@ -153,8 +156,7 @@ func TestReceiptRequestCarriesEveryRenderedID(t *testing.T) {
 		CloudAccountID:  types.StringValue("123456789012"),
 		Region:          types.StringValue("us-east-1"),
 		Workspace:       types.StringValue("ws"),
-		SnapshotVersion: types.Int64Value(43),
-		ContentHash:     types.StringValue("sha256:abc"),
+		SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups:  mapOf(map[string]string{"i-db-1": "sg-1"}),
 		Rules:           mapOf(map[string]string{"i-db-1/in/tcp/5432/10.20.1.11/32": "sgr-1"}),
 		Attachments:     types.MapNull(types.StringType),
@@ -163,7 +165,7 @@ func TestReceiptRequestCarriesEveryRenderedID(t *testing.T) {
 	if diags.HasError() {
 		t.Fatal(diags)
 	}
-	if req.Version != 43 || req.ContentHash != "sha256:abc" || req.RunID != "run-123" ||
+	if req.Version != testVersion || req.RunID != "run-123" ||
 		req.Resources.SecurityGroups["i-db-1"] != "sg-1" || req.Resources.Rules["i-db-1/in/tcp/5432/10.20.1.11/32"] != "sgr-1" {
 		t.Errorf("receipt request lost a value: %+v", req)
 	}
@@ -193,7 +195,7 @@ func TestReceiptTimeReadsTheSameWhenCreatedAndWhenImported(t *testing.T) {
 	api, _, _ := newSnapshotTestAPI(t, http.StatusCreated, `{"receiptId":"rcpt-1","appliedAt":"`+served+`"}`)
 	r := &enforcementReceiptResource{api: api}
 	created := enforcementReceiptResourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
-		Workspace: types.StringValue("ws"), SnapshotVersion: types.Int64Value(42), ContentHash: types.StringValue("sha256:abc"),
+		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType)}
 	var diags diag.Diagnostics
 	r.send(context.Background(), &created, &diags)

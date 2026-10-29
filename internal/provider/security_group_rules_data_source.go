@@ -43,7 +43,7 @@ type securityGroupRulesDataSourceModel struct {
 	Region         types.String            `tfsdk:"region"`
 	VPCID          types.String            `tfsdk:"vpc_id"`
 	GroupName      types.String            `tfsdk:"group_name"`
-	Version        types.Int64             `tfsdk:"version"`
+	Version        types.String            `tfsdk:"version"`
 	Published      types.Bool              `tfsdk:"published"`
 	Ingress        map[string]sgrRuleModel `tfsdk:"ingress"`
 	Egress         map[string]sgrRuleModel `tfsdk:"egress"`
@@ -103,7 +103,7 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 			"region":           schema.StringAttribute{Required: true, MarkdownDescription: "AWS region the group is in."},
 			"vpc_id":           schema.StringAttribute{Required: true, MarkdownDescription: "VPC the group is in."},
 			"group_name":       schema.StringAttribute{Required: true, MarkdownDescription: "The group's name."},
-			"version": schema.Int64Attribute{Optional: true, Computed: true,
+			"version": schema.StringAttribute{Optional: true, Computed: true,
 				MarkdownDescription: "Pins a snapshot version. When omitted, the version Xshield expects is read."},
 			"published": schema.BoolAttribute{Computed: true,
 				MarkdownDescription: "False while Xshield has published nothing for this account and region; every declared rule " +
@@ -147,9 +147,9 @@ func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.
 		return
 	}
 	var change *wireCustomerGroupChange
-	data.Published, data.Version = types.BoolValue(snap != nil), types.Int64Null()
+	data.Published, data.Version = types.BoolValue(snap != nil), types.StringNull()
 	if snap != nil {
-		data.Version = types.Int64Value(snap.Version)
+		data.Version = types.StringValue(snap.Version)
 		change = groupChangeOf(*snap, data.VPCID.ValueString(), data.GroupName.ValueString())
 	}
 	filterDeclaredRules(&data, change)

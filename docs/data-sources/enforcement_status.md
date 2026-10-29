@@ -50,13 +50,11 @@ check "xshield_enforcement" {
 ### Read-Only
 
 - `applied_at` (String) When the latest receipt was recorded.
-- `applied_content_hash` (String) Content hash in the latest apply receipt.
-- `applied_version` (Number) Version in the latest apply receipt. Null when nothing has been applied.
+- `applied_version` (String) Version in the latest apply receipt. Null when nothing has been applied.
 - `drift_evaluated` (Boolean) Whether drift could be evaluated: it needs an applied receipt and a cloud connector observation taken after it. An observation older than the latest apply describes resources that apply replaced, so it is not evaluated.
 - `drift_findings` (List of Object) Differences between the cloud as observed and the snapshot as applied. `kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. `severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. `restoration`: `pipeline` when the next enforcement apply restores it, `manual` when Terraform cannot see it and it must be removed by hand, `workload` when the owning workspace's attachment must change. `resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. `key`: snapshot key involved, when there is one. `detail`: human-readable explanation. (see [below for nested schema](#nestedatt--drift_findings))
 - `drift_observed_at` (String) When the cloud connector's latest observation was taken.
-- `expected_content_hash` (String) Content hash of the expected snapshot.
-- `expected_version` (Number) Version Xshield expects to be enforced.
+- `expected_version` (String) Version Xshield expects to be enforced, the hash of everything it asks for.
 - `last_checked_at` (String) When an enforcement plan last resolved the expected version. A stale value means the pipeline has stopped running, whatever the convergence state says.
 - `notices` (List of Object) What Xshield could not enforce in the latest version, and why. A workload with a refusal carries no Xshield group until the cause is fixed. `code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. `reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. `asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. `message`: what happened and what it means for the workload. (see [below for nested schema](#nestedatt--notices))
 - `pending_attachments_added` (List of String) Keys of interface attachments the next enforcement run will create.

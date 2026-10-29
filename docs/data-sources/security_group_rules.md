@@ -65,7 +65,7 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
 
 - `egress` (Attributes Map) The egress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_egress_rule`. (see [below for nested schema](#nestedatt--egress))
 - `ingress` (Attributes Map) The ingress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_ingress_rule`. (see [below for nested schema](#nestedatt--ingress))
-- `version` (Number) Pins a snapshot version. When omitted, the version Xshield expects is read.
+- `version` (String) Pins a snapshot version. When omitted, the version Xshield expects is read.
 
 ### Read-Only
 

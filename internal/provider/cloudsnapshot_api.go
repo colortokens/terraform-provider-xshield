@@ -33,10 +33,14 @@ type cloudSnapshotAPI struct {
 	client *sdk.Xshield
 }
 
-func (a cloudSnapshotAPI) endpoint(account, region string, path ...string) string {
+// cloudAWS is the only cloud whose snapshot this provider applies yet.
+const cloudAWS = "aws"
+
+func (a cloudSnapshotAPI) endpoint(cloud, account, region string, path ...string) string {
 	parts := []string{
 		strings.TrimRight(a.client.ServerURL(), "/"),
 		"api/policies/cloudsnapshots",
+		url.PathEscape(cloud),
 		url.PathEscape(account),
 		url.PathEscape(region),
 	}
@@ -62,13 +66,9 @@ type snapshotAPIError struct {
 	Detail           string
 }
 
-// Xshield sends these codes for an expected absence; a 404 without one, such
-// as from a proxy or a platform without the route, stays an error.
-const (
-	codeNotPublished = "notPublished"
-	codeNotApplied   = "notApplied"
-	codeNotObserved  = "notObserved"
-)
+// Xshield sends this code for an expected absence; a 404 without one, such as
+// from a proxy or a platform without the route, stays an error.
+const codeNotPublished = "notPublished"
 
 func isAPIRefusal(err error, status int, code string) bool {
 	var apiErr *snapshotAPIError

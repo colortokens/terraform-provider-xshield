@@ -13,7 +13,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
-var contentHashPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+// versionPattern is a snapshot version, which Xshield names by its content hash.
+var versionPattern = regexp.MustCompile(`^[0-9a-f]{128}$`)
 
 func testAccPublishedEnforcementPoint(t *testing.T) (account, region string) {
 	t.Helper()
@@ -36,7 +37,6 @@ resource "xshield_enforcement_receipt" "test" {
   region           = local.snapshot.region
   workspace        = %[3]q
   snapshot_version = local.snapshot.version
-  content_hash     = local.snapshot.content_hash
 
   security_groups = { for key in keys(local.snapshot.security_groups) : key => "sg-${substr(sha1(key), 0, 17)}" }
   rules           = { for key in keys(merge(local.snapshot.ingress_rules, local.snapshot.egress_rules)) : key => "sgr-${substr(sha1(key), 0, 17)}" }
@@ -110,10 +110,10 @@ data "xshield_enforcement_snapshot" "pinned" {
 `, account, region)),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue("data.xshield_enforcement_snapshot.expected", tfjsonpath.New("published"), knownvalue.Bool(true)),
-					statecheck.ExpectKnownValue("data.xshield_enforcement_snapshot.expected", tfjsonpath.New("content_hash"), knownvalue.StringRegexp(contentHashPattern)),
+					statecheck.ExpectKnownValue("data.xshield_enforcement_snapshot.expected", tfjsonpath.New("version"), knownvalue.StringRegexp(versionPattern)),
 					statecheck.CompareValuePairs(
-						"data.xshield_enforcement_snapshot.expected", tfjsonpath.New("content_hash"),
-						"data.xshield_enforcement_snapshot.pinned", tfjsonpath.New("content_hash"),
+						"data.xshield_enforcement_snapshot.expected", tfjsonpath.New("version"),
+						"data.xshield_enforcement_snapshot.pinned", tfjsonpath.New("version"),
 						compare.ValuesSame(),
 					),
 					statecheck.CompareValuePairs(
@@ -150,8 +150,8 @@ data "xshield_enforcement_status" "test" {
 					statecheck.ExpectKnownValue("data.xshield_enforcement_status.test", tfjsonpath.New("published"), knownvalue.Bool(true)),
 					statecheck.ExpectKnownValue("data.xshield_enforcement_status.test", tfjsonpath.New("state"), knownvalue.StringRegexp(regexp.MustCompile(`^(converged|pending|unapplied)$`))),
 					statecheck.CompareValuePairs(
-						"data.xshield_enforcement_status.test", tfjsonpath.New("expected_content_hash"),
-						"data.xshield_enforcement_snapshot.test", tfjsonpath.New("content_hash"),
+						"data.xshield_enforcement_status.test", tfjsonpath.New("expected_version"),
+						"data.xshield_enforcement_snapshot.test", tfjsonpath.New("version"),
 						compare.ValuesSame(),
 					),
 				},

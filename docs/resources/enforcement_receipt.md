@@ -30,7 +30,6 @@ resource "xshield_enforcement_receipt" "this" {
   region           = data.xshield_enforcement_snapshot.this.region
   workspace        = "xshield-enforcement-123456789012-us-east-1"
   snapshot_version = data.xshield_enforcement_snapshot.this.version
-  content_hash     = data.xshield_enforcement_snapshot.this.content_hash
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(
@@ -47,11 +46,10 @@ resource "xshield_enforcement_receipt" "this" {
 ### Required
 
 - `cloud_account_id` (String) Cloud account the snapshot was applied to.
-- `content_hash` (String) Content hash of the snapshot that was applied, from `xshield_enforcement_snapshot`.
 - `region` (String) Region the snapshot was applied to.
 - `rules` (Map of String) Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.
 - `security_groups` (Map of String) Security group ID created for each key in the snapshot's `security_groups`.
-- `snapshot_version` (Number) Version of the snapshot that was applied, from `xshield_enforcement_snapshot`.
+- `snapshot_version` (String) Version of the snapshot that was applied, from `xshield_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.
 - `workspace` (String) Name of the enforcement workspace that applied it, as shown in Xshield.
 
 ### Optional

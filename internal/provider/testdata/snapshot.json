@@ -30,9 +30,49 @@
         "securityGroup": "rds/orders-db"
       }
     },
-    "cohorts": {},
-    "customerGroupChanges": {},
+    "cohorts": {
+      "ct-cohort-0123456789abcdef": {
+        "members": {
+          "a-legacy": "pipeline",
+          "a-reports": "owner"
+        }
+      }
+    },
+    "customerGroupChanges": {
+      "vpc-1/web": {
+        "changeSets": [
+          {
+            "id": "cs-1",
+            "moves": [
+              {
+                "cidrIpv4": "0.0.0.0/0",
+                "cidrIpv6": null,
+                "direction": "ingress",
+                "fromPort": 443,
+                "ipProtocol": "tcp",
+                "prefixListId": null,
+                "referencedSecurityGroupId": null,
+                "toPort": 443
+              }
+            ],
+            "state": "attaching"
+          }
+        ],
+        "revoke": []
+      }
+    },
     "directory": {
+      "lambda/reports": {
+        "handle": "lambda/reports",
+        "parameterName": "/colortokens/v1/lambda/reports/security-groups",
+        "securityGroups": [
+          "ct-cohort-0123456789abcdef"
+        ],
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:delivery": "pipeline"
+        }
+      },
       "rds-cluster/orders-cluster": {
         "handle": "rds-cluster/orders-cluster",
         "parameterName": "/colortokens/v1/rds-cluster/orders-cluster/security-groups",
@@ -203,6 +243,22 @@
       }
     },
     "ingressRules": {
+      "ct-cohort-0123456789abcdef/in/tcp/443/0.0.0.0/0": {
+        "cidrIpv4": "0.0.0.0/0",
+        "cidrIpv6": null,
+        "description": "",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:kind": "cohort"
+        },
+        "toPort": 443
+      },
       "i-app-1/in/tcp/443/0.0.0.0/0": {
         "cidrIpv4": "0.0.0.0/0",
         "cidrIpv6": null,
@@ -835,6 +891,10 @@
       }
     },
     "interfaceAttachments": {
+      "ct-cohort-0123456789abcdef/eni-legacy": {
+        "networkInterfaceId": "eni-legacy",
+        "securityGroup": "ct-cohort-0123456789abcdef"
+      },
       "i-app-1/eni-app-1": {
         "networkInterfaceId": "eni-app-1",
         "securityGroup": "i-app-1"
@@ -857,6 +917,18 @@
       }
     },
     "securityGroups": {
+      "ct-cohort-0123456789abcdef": {
+        "description": "ColorTokens split cohort group",
+        "name": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "cohort",
+          "ct:split-group": "sg-web"
+        },
+        "vpcId": "vpc-1"
+      },
       "i-app-1": {
         "description": "ColorTokens add-only enforcement group",
         "name": "ct-policy-7e86db99b6e3",
@@ -939,8 +1011,8 @@
     "withdrawing": []
   },
   "cloudAccountId": "123456789012",
-  "contentHash": "sha256:552c3487f2f6a0f3a19d2866842faef133e57c8d33648cdcd95bc44fbff2a56d",
+  "cloudProvider": "aws",
   "region": "us-east-1",
   "schemaVersion": "2",
-  "version": 42
+  "version": "56b1d26c370e11102ac3e144ac55b0cfbaf3f32fb9c73f05dca7b2b9d69e57b436633eb064c2a21e0ceb79014024c21256e93e16153f22aa4ad4952cbec171fc"
 }

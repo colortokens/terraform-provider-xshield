@@ -23,7 +23,7 @@ func declaredRule(protocol string, port int64, cidr string) sgrRuleModel {
 func webRules() *securityGroupRulesDataSourceModel {
 	return &securityGroupRulesDataSourceModel{
 		CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
-		VPCID: types.StringValue("vpc-1"), GroupName: types.StringValue("web"), Version: types.Int64Value(43),
+		VPCID: types.StringValue("vpc-1"), GroupName: types.StringValue("web"), Version: types.StringValue(testVersion),
 		Ingress: map[string]sgrRuleModel{"https_all": declaredRule("6", 443, "0.0.0.0/0"), "ssh_office": declaredRule("tcp", 22, "10.0.0.0/8")},
 		Egress:  map[string]sgrRuleModel{"https_out": declaredRule("tcp", 443, "0.0.0.0/0")},
 	}
@@ -48,7 +48,7 @@ func narrowed(snap wireSnapshot) wireSnapshot {
 
 func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 	t.Parallel()
-	m := snapshotModel(types.StringValue("123456789012"), types.StringValue("us-east-1"), ptr(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json")))
+	m := snapshotModel(types.StringValue("123456789012"), types.StringValue("us-east-1"), ptr(loadJSON[wireSnapshot](t, "snapshot.json")))
 	if g, ok := m.SecurityGroups[sampleCohortKey]; !ok || g.Name.ValueString() != sampleCohortKey || g.Tags["ct:kind"] != "cohort" {
 		t.Fatalf("cohort group %+v, want it named and tagged as the connector names its cohorts", g)
 	}
@@ -72,7 +72,7 @@ func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 func TestRulesFilterKeepsARuleUntilEveryMemberCarriesItsCohort(t *testing.T) {
 	t.Parallel()
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json"), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(loadJSON[wireSnapshot](t, "snapshot.json"), "vpc-1", "web"))
 
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"https_all", "ssh_office"}) {
 		t.Errorf("kept %v, want every declared rule while the cohort is attaching", got)
@@ -88,7 +88,7 @@ func TestRulesFilterKeepsARuleUntilEveryMemberCarriesItsCohort(t *testing.T) {
 func TestRulesFilterLeavesOutTheMovedRuleByItsContent(t *testing.T) {
 	t.Parallel()
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json")), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "web"))
 
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"ssh_office"}) {
 		t.Errorf("kept %v, want the broad 443 rule left out though it was declared with protocol 6", got)
@@ -105,7 +105,7 @@ func TestRulesFilterReturnsAnotherGroupUnchanged(t *testing.T) {
 	t.Parallel()
 	data := webRules()
 	data.GroupName = types.StringValue("db")
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json")), "vpc-1", "db"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "db"))
 
 	if len(data.IngressRules) != 2 || len(data.EgressRules) != 1 || len(data.Revoked) != 0 || len(data.Pending) != 0 {
 		t.Errorf("kept %v and %v, revoked %v, want everything kept", sortedKeys(data.IngressRules), sortedKeys(data.EgressRules), keysOf(data.Revoked))
@@ -164,7 +164,7 @@ func TestRulesFilterModelFitsTheDataSourceSchema(t *testing.T) {
 	var resp datasource.SchemaResponse
 	(&securityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json")), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "web"))
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {
 		t.Errorf("the model does not fit the schema, so every plan would fail: %v", diags)

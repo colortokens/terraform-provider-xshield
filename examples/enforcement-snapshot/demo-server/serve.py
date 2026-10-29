@@ -8,11 +8,13 @@ this directory, for its account and region. Any other account or region gets
 Xshield's answer for one with nothing published, so a workspace pointed at it
 plans no change:
 
-    GET  /api/policies/cloudsnapshots/{account}/{region}/expected
-    GET  /api/policies/cloudsnapshots/{account}/{region}/versions/{n}
-    GET  /api/policies/cloudsnapshots/{account}/{region}/status
-    GET  /api/policies/cloudsnapshots/{account}/{region}/drift
-    POST /api/policies/cloudsnapshots/{account}/{region}/receipts
+    GET  /api/policies/cloudsnapshots/aws/{account}/{region}/expected
+    GET  /api/policies/cloudsnapshots/aws/{account}/{region}/versions/{version}
+    GET  /api/policies/cloudsnapshots/aws/{account}/{region}/status
+    POST /api/policies/cloudsnapshots/aws/{account}/{region}/receipts
+
+A version is the snapshot's content hash, as Xshield names it. The status has no
+drift: this stand-in receives no cloud observations.
 
 Standard library only - no dependencies.
 
@@ -36,11 +38,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SNAPSHOT = json.load(open(os.path.join(HERE, "sample-snapshot.json")))
 EXPECTED = json.load(open(os.path.join(HERE, "sample-expected.json")))
 
-BASE = r"/api/policies/cloudsnapshots/(?P<account>[^/]+)/(?P<region>[^/]+)"
+BASE = r"/api/policies/cloudsnapshots/(?P<cloud>[^/]+)/(?P<account>[^/]+)/(?P<region>[^/]+)"
 RE_EXPECTED = re.compile(BASE + r"/expected$")
-RE_VERSION = re.compile(BASE + r"/versions/(?P<version>\d+)$")
+RE_VERSION = re.compile(BASE + r"/versions/(?P<version>[0-9a-f]+)$")
 RE_STATUS = re.compile(BASE + r"/status$")
-RE_DRIFT = re.compile(BASE + r"/drift$")
 RE_RECEIPTS = re.compile(BASE + r"/receipts$")
 
 RECEIPTS = []
@@ -86,7 +87,8 @@ class Handler(BaseHTTPRequestHandler):
         return auth.split('keyId="')[1].split('"')[0] if 'keyId="' in auth else "-"
 
     def _published(self, m):
-        return m.group("account") == SNAPSHOT["cloudAccountId"] and m.group("region") == SNAPSHOT["region"]
+        return (m.group("cloud") == SNAPSHOT["cloudProvider"] and m.group("account") == SNAPSHOT["cloudAccountId"]
+                and m.group("region") == SNAPSHOT["region"])
 
     def do_GET(self):
         if self.path == "/healthz":
@@ -106,29 +108,21 @@ class Handler(BaseHTTPRequestHandler):
 
         m = RE_VERSION.match(self.path)
         if m:
-            requested = int(m.group("version"))
+            requested = m.group("version")
             if requested != SNAPSHOT["version"]:
-                return self._send(404, {
-                    "status": 404,
-                    "message": "this stand-in only serves version %d" % SNAPSHOT["version"],
-                })
-            print("snapshot  <- v%d (keyId %s)" % (requested, self._key_id()), flush=True)
+                return self._send(404, {"status": 404, "message": "unknown snapshot version"})
+            print("snapshot  <- %s (keyId %s)" % (requested[:12], self._key_id()), flush=True)
             # Versioned snapshots are immutable and content-addressed.
             return self._send(200, SNAPSHOT, {
-                "ETag": '"%s"' % SNAPSHOT["contentHash"],
+                "ETag": '"%s"' % SNAPSHOT["version"],
                 "Cache-Control": "public, max-age=31536000, immutable",
             })
 
         if RE_STATUS.match(self.path):
             applied = RECEIPTS[-1] if RECEIPTS else None
             state = "unapplied" if applied is None else (
-                "converged" if applied["contentHash"] == EXPECTED["contentHash"] else "pending")
+                "converged" if applied["version"] == EXPECTED["version"] else "pending")
             return self._send(200, {"state": state, "expected": EXPECTED, "applied": applied, "notices": []})
-
-        if RE_DRIFT.match(self.path):
-            if not RECEIPTS:
-                return self._send(409, {"status": 409, "code": "notApplied", "message": "nothing has been applied yet, so there is no state to drift from"})
-            return self._send(404, {"status": 404, "code": "notObserved", "message": "this stand-in has no cloud observations"})
 
         self._send(404, {"status": 404, "message": "not found"})
 
@@ -140,8 +134,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, NOT_PUBLISHED)
         length = int(self.headers.get("Content-Length", 0))
         receipt = json.loads(self.rfile.read(length) or b"{}")
-        if receipt.get("contentHash") != SNAPSHOT["contentHash"]:
-            return self._send(409, {"status": 409, "message": "receipt content hash does not match the snapshot it claims to have applied"})
+        if receipt.get("version") != SNAPSHOT["version"]:
+            return self._send(404, {"status": 404, "message": "receipt references an unknown snapshot version"})
         gaps = receipt_gaps(receipt.get("resources") or {})
         if gaps:
             print("receipt   x %s" % json.dumps(gaps), flush=True)
@@ -150,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
         receipt["appliedAt"] = now()
         RECEIPTS.append(receipt)
         res = receipt.get("resources", {})
-        print("receipt   -> v%s: %d groups, %d rules, %d attachments" % (receipt.get("version"), len(res.get("securityGroups", {})),
+        print("receipt   -> %s: %d groups, %d rules, %d attachments" % (receipt.get("version")[:12], len(res.get("securityGroups", {})),
               len(res.get("rules", {})), len(res.get("attachments") or {})), flush=True)
         self._send(201, {"receiptId": receipt["receiptId"], "appliedAt": receipt["appliedAt"]})
 
@@ -161,6 +155,6 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8087
     print("Xshield snapshot API stand-in on http://127.0.0.1:%d" % port)
-    print("  account %s / region %s / snapshot v%d; any other account or region has nothing published"
-          % (SNAPSHOT["cloudAccountId"], SNAPSHOT["region"], SNAPSHOT["version"]))
+    print("  %s account %s / region %s / snapshot %s; any other account or region has nothing published"
+          % (SNAPSHOT["cloudProvider"], SNAPSHOT["cloudAccountId"], SNAPSHOT["region"], SNAPSHOT["version"][:12]))
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()

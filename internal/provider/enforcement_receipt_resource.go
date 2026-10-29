@@ -34,8 +34,7 @@ type enforcementReceiptResourceModel struct {
 	CloudAccountID  types.String `tfsdk:"cloud_account_id"`
 	Region          types.String `tfsdk:"region"`
 	Workspace       types.String `tfsdk:"workspace"`
-	SnapshotVersion types.Int64  `tfsdk:"snapshot_version"`
-	ContentHash     types.String `tfsdk:"content_hash"`
+	SnapshotVersion types.String `tfsdk:"snapshot_version"`
 	SecurityGroups  types.Map    `tfsdk:"security_groups"`
 	Rules           types.Map    `tfsdk:"rules"`
 	Attachments     types.Map    `tfsdk:"attachments"`
@@ -81,13 +80,9 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 				Required:    true,
 				Description: "Name of the enforcement workspace that applied it, as shown in Xshield.",
 			},
-			"snapshot_version": schema.Int64Attribute{
+			"snapshot_version": schema.StringAttribute{
 				Required:    true,
-				Description: "Version of the snapshot that was applied, from `xshield_enforcement_snapshot`.",
-			},
-			"content_hash": schema.StringAttribute{
-				Required:    true,
-				Description: "Content hash of the snapshot that was applied, from `xshield_enforcement_snapshot`.",
+				Description: "Version of the snapshot that was applied, from `xshield_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.",
 			},
 			"security_groups": idMap("Security group ID created for each key in the snapshot's `security_groups`.", true),
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
@@ -125,13 +120,12 @@ type wireRenderedResources struct {
 }
 
 type wireReceipt struct {
-	ReceiptID   string                `json:"receiptId,omitempty"`
-	Version     int64                 `json:"version"`
-	ContentHash string                `json:"contentHash"`
-	Workspace   string                `json:"workspace"`
-	RunID       string                `json:"runId,omitempty"`
-	AppliedAt   *time.Time            `json:"appliedAt,omitempty"`
-	Resources   wireRenderedResources `json:"resources"`
+	ReceiptID string                `json:"receiptId,omitempty"`
+	Version   string                `json:"version"`
+	Workspace string                `json:"workspace"`
+	RunID     string                `json:"runId,omitempty"`
+	AppliedAt *time.Time            `json:"appliedAt,omitempty"`
+	Resources wireRenderedResources `json:"resources"`
 }
 
 type wireConvergence struct {
@@ -149,10 +143,9 @@ func receiptRequest(ctx context.Context, data *enforcementReceiptResourceModel, 
 		return out
 	}
 	req := wireReceipt{
-		Version:     data.SnapshotVersion.ValueInt64(),
-		ContentHash: data.ContentHash.ValueString(),
-		Workspace:   data.Workspace.ValueString(),
-		RunID:       runID,
+		Version:   data.SnapshotVersion.ValueString(),
+		Workspace: data.Workspace.ValueString(),
+		RunID:     runID,
 		Resources: wireRenderedResources{
 			SecurityGroups: ids(data.SecurityGroups),
 			Rules:          ids(data.Rules),
@@ -170,14 +163,12 @@ func receiptAdvice(err error) string {
 		return "The resources were created; run apply again to send the receipt."
 	}
 	switch apiErr.Status {
-	case http.StatusConflict:
-		return "The content hash is not the one Xshield published for this version. Pass content_hash from the same " +
-			"xshield_enforcement_snapshot the resources were created from."
 	case http.StatusUnprocessableEntity:
 		return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. Create " +
 			"every key the snapshot lists, and nothing else, or use the aws enforcement module, which does."
 	case http.StatusNotFound:
-		return "Xshield has no such version for this account and region. A pinned version may have been pruned; remove the pin."
+		return "Xshield published no such version for this account and region. Pass snapshot_version from the same " +
+			"xshield_enforcement_snapshot the resources were created from."
 	}
 	return "The resources were created; run apply again to send the receipt."
 }
@@ -199,7 +190,7 @@ func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcement
 		ReceiptID string    `json:"receiptId"`
 		AppliedAt time.Time `json:"appliedAt"`
 	}
-	endpoint := r.api.endpoint(data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
+	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
 	if err := r.api.post(ctx, endpoint, body, http.StatusCreated, &created); err != nil {
 		diags.AddError("Xshield did not accept the apply receipt", err.Error()+"\n\n"+receiptAdvice(err))
 		return
@@ -243,7 +234,7 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 	}
 
 	var status wireConvergence
-	endpoint := r.api.endpoint(data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
+	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
 		resp.Diagnostics.AddWarning("Cannot confirm Xshield still holds this apply receipt", err.Error())
 		return
@@ -280,8 +271,7 @@ func (r *enforcementReceiptResource) adopt(ctx context.Context, data *enforcemen
 	}
 	data.ID = types.StringValue(a.ReceiptID)
 	data.Workspace = types.StringValue(a.Workspace)
-	data.SnapshotVersion = types.Int64Value(a.Version)
-	data.ContentHash = types.StringValue(a.ContentHash)
+	data.SnapshotVersion = types.StringValue(a.Version)
 	data.SecurityGroups = toMap(a.Resources.SecurityGroups)
 	data.Rules = toMap(a.Resources.Rules)
 	data.Attachments = toMap(a.Resources.Attachments)

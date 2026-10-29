@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -22,11 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
-const (
-	xshieldNotPublished = `{"status":404,"code":"notPublished","message":"no snapshot published for this account and region"}`
-	xshieldNotApplied   = `{"status":409,"code":"notApplied","message":"nothing has been applied yet, so there is no state to drift from"}`
-	xshieldNotObserved  = `{"status":404,"code":"notObserved","message":"no cloud observation recorded yet"}`
-)
+const xshieldNotPublished = `{"status":404,"code":"notPublished","message":"no snapshot published for this account and region"}`
 
 type cannedResponse struct {
 	status int
@@ -111,8 +108,8 @@ func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testin
 	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("an account with nothing published must plan, not fail: %s", errs)
 	}
-	if m.Published.ValueBool() || !m.Version.IsNull() || !m.ContentHash.IsNull() {
-		t.Errorf("published %v version %v hash %v, want false, null, null", m.Published, m.Version, m.ContentHash)
+	if m.Published.ValueBool() || !m.Version.IsNull() {
+		t.Errorf("published %v version %v, want false and null", m.Published, m.Version)
 	}
 	if len(m.SecurityGroups)+len(m.IngressRules)+len(m.EgressRules)+len(m.InterfaceAttachments)+len(m.Directory)+len(m.Assets)+len(m.Withdrawing) != 0 {
 		t.Errorf("an unpublished snapshot must hold nothing to create: %+v", m)
@@ -125,15 +122,16 @@ func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testin
 func TestPublishedSnapshotSaysSo(t *testing.T) {
 	t.Parallel()
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{
-		"/expected":    {http.StatusOK, `{"version":42,"contentHash":"sha256:x"}`},
-		"/versions/42": {http.StatusOK, readTestdata(t, "snapshot.json")},
+		"/expected":                {http.StatusOK, `{"version":"` + testVersion + `"}`},
+		"/versions/" + testVersion: {http.StatusOK, readTestdata(t, "snapshot.json")},
 	})
 	var m enforcementSnapshotDataSourceModel
 	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatal(errs)
 	}
-	if !m.Published.ValueBool() || m.Version.ValueInt64() != 42 || len(m.SecurityGroups) == 0 {
-		t.Errorf("published %v version %v groups %d, want true, 42 and the snapshot's groups", m.Published, m.Version, len(m.SecurityGroups))
+	served := loadJSON[wireSnapshot](t, "snapshot.json")
+	if !m.Published.ValueBool() || m.Version.ValueString() != served.Version || len(m.SecurityGroups) == 0 {
+		t.Errorf("published %v version %v groups %d, want true, the served version and the snapshot's groups", m.Published, m.Version, len(m.SecurityGroups))
 	}
 }
 
@@ -148,7 +146,7 @@ func TestAnyOtherFailureToReadTheSnapshotFailsThePlan(t *testing.T) {
 		"forbidden":                {"/expected": {http.StatusForbidden, `{"status":403,"message":"cloud snapshots are served to users whose role covers every asset"}`}},
 		"unauthorized":             {"/expected": {http.StatusUnauthorized, `{"message":"Unauthorized"}`}},
 		"not published, but 403":   {"/expected": {http.StatusForbidden, `{"status":403,"code":"notPublished","message":"x"}`}},
-		"expected version gone":    {"/expected": {http.StatusOK, `{"version":42,"contentHash":"sha256:x"}`}},
+		"expected version gone":    {"/expected": {http.StatusOK, `{"version":"` + testVersion + `"}`}},
 	} {
 		api, _ := newRoutedSnapshotAPI(t, routes)
 		var m enforcementSnapshotDataSourceModel
@@ -160,14 +158,15 @@ func TestAnyOtherFailureToReadTheSnapshotFailsThePlan(t *testing.T) {
 
 func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 	t.Parallel()
+	pinned := strings.Repeat("cd", 64)
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{
-		"/expected":   {http.StatusNotFound, xshieldNotPublished},
-		"/versions/7": {http.StatusNotFound, `{"status":404,"message":"unknown snapshot version","details":{"retained":20}}`},
+		"/expected":           {http.StatusNotFound, xshieldNotPublished},
+		"/versions/" + pinned: {http.StatusNotFound, `{"status":404,"message":"unknown snapshot version"}`},
 	})
 	args := pointArgs()
-	args["version"] = tftypes.NewValue(tftypes.Number, 7)
+	args["version"] = tftypes.NewValue(tftypes.String, pinned)
 	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version 7") {
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version "+pinned) {
 		t.Errorf("a pin to a version Xshield does not hold must fail, naming it; got ok=%v %q", ok, errs)
 	}
 }
@@ -217,29 +216,25 @@ func TestStatusOfAnAccountWithNothingPublishedIsQuiet(t *testing.T) {
 	}
 }
 
-func TestDriftIsUnevaluatedOnlyWhenXshieldSaysWhy(t *testing.T) {
+// Drift arrives with the status once Xshield has a receipt and an observation; until then it reads as unevaluated.
+func TestStatusWithoutDriftReadsAsUnevaluated(t *testing.T) {
 	t.Parallel()
-	status := cannedResponse{http.StatusOK, readTestdata(t, "status.json")}
-	for name, tc := range map[string]struct {
-		drift  cannedResponse
-		planOK bool
-	}{
-		"nothing applied yet":       {cannedResponse{http.StatusConflict, xshieldNotApplied}, true},
-		"nothing observed yet":      {cannedResponse{http.StatusNotFound, xshieldNotObserved}, true},
-		"404 without a code":        {cannedResponse{http.StatusNotFound, `{"message":"no Route matched with those values"}`}, false},
-		"409 without a code":        {cannedResponse{http.StatusConflict, `{"message":"conflict"}`}, false},
-		"not published, mid-read":   {cannedResponse{http.StatusNotFound, xshieldNotPublished}, false},
-		"notObserved, but as a 409": {cannedResponse{http.StatusConflict, xshieldNotObserved}, false},
-	} {
-		api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": status, "/drift": tc.drift})
-		var m enforcementStatusDataSourceModel
-		ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m)
-		if ok != tc.planOK {
-			t.Errorf("%s: plan ok %v, want %v (%s)", name, ok, tc.planOK, errs)
-		}
-		if ok && (m.DriftEvaluated.ValueBool() || len(m.DriftFindings) != 0 || !m.Published.ValueBool()) {
-			t.Errorf("%s: %+v, want published with drift unevaluated", name, m)
-		}
+	st := loadJSON[map[string]any](t, "status.json")
+	delete(st, "drift")
+	body, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusOK, string(body)}})
+	var m enforcementStatusDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
+		t.Fatalf("a status without drift must plan: %s", errs)
+	}
+	if m.DriftEvaluated.ValueBool() || len(m.DriftFindings) != 0 || !m.DriftObservedAt.IsNull() || !m.Published.ValueBool() {
+		t.Errorf("%+v, want published with drift unevaluated", m)
+	}
+	if len(*requested) != 1 {
+		t.Errorf("requested %v, want the status alone", *requested)
 	}
 }
 

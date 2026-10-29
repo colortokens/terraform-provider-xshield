@@ -17,9 +17,8 @@ mock_provider "aws" {
 mock_provider "xshield" {
   mock_data "xshield_enforcement_snapshot" {
     defaults = {
-      published    = true
-      version      = 42
-      content_hash = "sha256:0d1f"
+      published = true
+      version   = "v42"
       security_groups = {
         "i-0a1" = {
           name        = "ct-policy-3f2a9c1d7e4b"
@@ -184,8 +183,7 @@ run "empty_snapshot_still_reports" {
     target = data.xshield_enforcement_snapshot.this
     values = {
       published             = true
-      version               = 43
-      content_hash          = "sha256:e3b0"
+      version               = "v43"
       security_groups       = {}
       ingress_rules         = {}
       egress_rules          = {}
@@ -197,7 +195,7 @@ run "empty_snapshot_still_reports" {
   }
 
   assert {
-    condition     = length(aws_security_group.this) == 0 && xshield_enforcement_receipt.this[0].snapshot_version == 43
+    condition     = length(aws_security_group.this) == 0 && xshield_enforcement_receipt.this[0].snapshot_version == "v43"
     error_message = "moving to Off removes every group and still confirms the version"
   }
 }
@@ -209,9 +207,8 @@ run "full_control_cohort_rule_names_its_group" {
   override_data {
     target = data.xshield_enforcement_snapshot.this
     values = {
-      published    = true
-      version      = 44
-      content_hash = "sha256:c0h0"
+      published = true
+      version   = "v44"
       security_groups = {
         "ct-cohort-0123456789abcdef" = {
           name        = "ct-cohort-0123456789abcdef"

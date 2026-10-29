@@ -6,7 +6,6 @@ resource "xshield_enforcement_receipt" "this" {
   region           = data.xshield_enforcement_snapshot.this.region
   workspace        = "xshield-enforcement-123456789012-us-east-1"
   snapshot_version = data.xshield_enforcement_snapshot.this.version
-  content_hash     = data.xshield_enforcement_snapshot.this.content_hash
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(

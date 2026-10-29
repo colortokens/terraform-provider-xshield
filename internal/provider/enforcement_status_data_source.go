@@ -48,10 +48,8 @@ type enforcementStatusDataSourceModel struct {
 	Region              types.String        `tfsdk:"region"`
 	Published           types.Bool          `tfsdk:"published"`
 	State               types.String        `tfsdk:"state"`
-	ExpectedVersion     types.Int64         `tfsdk:"expected_version"`
-	ExpectedContentHash types.String        `tfsdk:"expected_content_hash"`
-	AppliedVersion      types.Int64         `tfsdk:"applied_version"`
-	AppliedContentHash  types.String        `tfsdk:"applied_content_hash"`
+	ExpectedVersion     types.String        `tfsdk:"expected_version"`
+	AppliedVersion      types.String        `tfsdk:"applied_version"`
 	AppliedAt           types.String        `tfsdk:"applied_at"`
 	LastCheckedAt       types.String        `tfsdk:"last_checked_at"`
 	PendingSince        types.String        `tfsdk:"pending_since"`
@@ -89,11 +87,9 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"state": str("`converged` when the latest receipt matches the expected snapshot, `pending` when Xshield " +
 				"expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when " +
 				"Xshield has published nothing to apply."),
-			"expected_version":      schema.Int64Attribute{Computed: true, Description: "Version Xshield expects to be enforced."},
-			"expected_content_hash": str("Content hash of the expected snapshot."),
-			"applied_version":       schema.Int64Attribute{Computed: true, Description: "Version in the latest apply receipt. Null when nothing has been applied."},
-			"applied_content_hash":  str("Content hash in the latest apply receipt."),
-			"applied_at":            str("When the latest receipt was recorded."),
+			"expected_version": str("Version Xshield expects to be enforced, the hash of everything it asks for."),
+			"applied_version":  str("Version in the latest apply receipt. Null when nothing has been applied."),
+			"applied_at":       str("When the latest receipt was recorded."),
 			"last_checked_at": str("When an enforcement plan last resolved the expected version. A stale value means " +
 				"the pipeline has stopped running, whatever the convergence state says."),
 			"pending_since":                 str("When the oldest policy change not yet applied was published."),
@@ -151,8 +147,7 @@ func (d *enforcementStatusDataSource) Configure(ctx context.Context, req datasou
 type wireStatus struct {
 	State    string `json:"state"`
 	Expected struct {
-		Version     int64  `json:"version"`
-		ContentHash string `json:"contentHash"`
+		Version string `json:"version"`
 	} `json:"expected"`
 	Applied       *wireReceipt `json:"applied"`
 	LastCheckedAt string       `json:"lastCheckedAt"`
@@ -170,6 +165,7 @@ type wireStatus struct {
 		Group   string `json:"group"`
 		Message string `json:"message"`
 	} `json:"notices"`
+	Drift *wireDrift `json:"drift"`
 }
 
 type wireDrift struct {
@@ -201,7 +197,7 @@ func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 	data.DriftEvaluated = types.BoolValue(false)
 	data.DriftObservedAt = types.StringNull()
 	var st wireStatus
-	err := d.api.get(ctx, d.api.endpoint(account, region, "status"), &st)
+	err := d.api.get(ctx, d.api.endpoint(cloudAWS, account, region, "status"), &st)
 	if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
 		setUnpublished(&data)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -212,36 +208,25 @@ func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 		return
 	}
 	setStatus(&data, st)
-
-	var drift wireDrift
-	err = d.api.get(ctx, d.api.endpoint(account, region, "drift"), &drift)
-	switch {
-	case err == nil:
-		setDrift(&data, drift)
-	case driftNotYetAvailable(err):
-	default:
-		resp.Diagnostics.AddError("failed to read drift findings", err.Error())
-		return
+	if st.Drift != nil {
+		setDrift(&data, *st.Drift)
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func setUnpublished(data *enforcementStatusDataSourceModel) {
 	setStatus(data, wireStatus{State: "unpublished"})
 	data.Published = types.BoolValue(false)
-	data.ExpectedVersion, data.ExpectedContentHash = types.Int64Null(), types.StringNull()
+	data.ExpectedVersion = types.StringNull()
 }
 
 func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.Published = types.BoolValue(true)
 	data.State = types.StringValue(st.State)
-	data.ExpectedVersion = types.Int64Value(st.Expected.Version)
-	data.ExpectedContentHash = types.StringValue(st.Expected.ContentHash)
-	data.AppliedVersion, data.AppliedContentHash, data.AppliedAt = types.Int64Null(), types.StringNull(), types.StringNull()
+	data.ExpectedVersion = types.StringValue(st.Expected.Version)
+	data.AppliedVersion, data.AppliedAt = types.StringNull(), types.StringNull()
 	if st.Applied != nil {
-		data.AppliedVersion = types.Int64Value(st.Applied.Version)
-		data.AppliedContentHash = types.StringValue(st.Applied.ContentHash)
+		data.AppliedVersion = types.StringValue(st.Applied.Version)
 		data.AppliedAt = appliedAtValue(st.Applied.AppliedAt)
 	}
 	data.LastCheckedAt = optionalString(st.LastCheckedAt)
@@ -269,12 +254,6 @@ func setDrift(data *enforcementStatusDataSourceModel, drift wireDrift) {
 			Resource: types.StringValue(f.Resource), Key: optionalString(f.Key), Detail: types.StringValue(f.Detail),
 		})
 	}
-}
-
-// driftNotYetAvailable is the expected answer before the first apply receipt
-// or the first connector observation, not a failure.
-func driftNotYetAvailable(err error) bool {
-	return isAPIRefusal(err, http.StatusConflict, codeNotApplied) || isAPIRefusal(err, http.StatusNotFound, codeNotObserved)
 }
 
 func optionalString(s string) types.String {

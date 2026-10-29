@@ -43,8 +43,8 @@ func sampleSnapshotModel(t *testing.T) enforcementSnapshotDataSourceModel {
 func TestSnapshotKeysNameTheWorkloadEachChangeIsFor(t *testing.T) {
 	t.Parallel()
 	m := sampleSnapshotModel(t)
-	if got := sortedKeys(m.SecurityGroups); !slices.Equal(got, []string{"i-app-1", "i-app-2", "i-db-1", "i-db-2", "rds-cluster/orders-cluster", "rds/orders-db"}) {
-		t.Errorf("security group keys %v, want instance IDs and handles", got)
+	if got := sortedKeys(m.SecurityGroups); !slices.Equal(got, []string{"ct-cohort-0123456789abcdef", "i-app-1", "i-app-2", "i-db-1", "i-db-2", "rds-cluster/orders-cluster", "rds/orders-db"}) {
+		t.Errorf("security group keys %v, want instance IDs, handles and the cohort's name", got)
 	}
 	for key := range m.IngressRules {
 		if !strings.HasPrefix(key, m.IngressRules[key].SecurityGroup.ValueString()+"/in/") {
@@ -100,12 +100,11 @@ func TestEverySnapshotModelFitsTheDataSourceSchema(t *testing.T) {
 	var resp datasource.SchemaResponse
 	(&enforcementSnapshotDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	for name, m := range map[string]enforcementSnapshotDataSourceModel{
-		"sample":       sampleSnapshotModel(t),
-		"empty":        snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot.json").emptied())),
-		"pinned":       withVersion(sampleSnapshotModel(t), 7),
-		"nothing":      snapshotModel(types.StringValue("1"), types.StringValue("r"), &wireSnapshot{SchemaVersion: supportedSnapshotSchema, AWS: loadJSON[wireSnapshot](t, "snapshot.json").emptied().AWS}),
-		"full control": snapshotModel(types.StringValue("123456789012"), types.StringValue("us-east-1"), ptr(loadJSON[wireSnapshot](t, "snapshot_fullcontrol.json"))),
-		"unpublished":  snapshotModel(types.StringValue("1"), types.StringValue("r"), nil),
+		"sample":      sampleSnapshotModel(t),
+		"empty":       snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot.json").emptied())),
+		"pinned":      withVersion(sampleSnapshotModel(t), testVersion),
+		"nothing":     snapshotModel(types.StringValue("1"), types.StringValue("r"), &wireSnapshot{SchemaVersion: supportedSnapshotSchema, AWS: loadJSON[wireSnapshot](t, "snapshot.json").emptied().AWS}),
+		"unpublished": snapshotModel(types.StringValue("1"), types.StringValue("r"), nil),
 	} {
 		state := tfsdk.State{Schema: resp.Schema}
 		if diags := state.Set(ctx, m); diags.HasError() {
@@ -123,8 +122,8 @@ func (s wireSnapshot) emptied() wireSnapshot {
 	return empty
 }
 
-func withVersion(m enforcementSnapshotDataSourceModel, v int64) enforcementSnapshotDataSourceModel {
-	m.Version = types.Int64Value(v)
+func withVersion(m enforcementSnapshotDataSourceModel, v string) enforcementSnapshotDataSourceModel {
+	m.Version = types.StringValue(v)
 	return m
 }
 
@@ -156,10 +155,10 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 
 	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
-	setDrift(&data, loadJSON[wireDrift](t, "drift.json"))
+	setDrift(&data, *st.Drift)
 
-	if data.State.ValueString() != "pending" || data.AppliedVersion.ValueInt64() != 42 || data.ExpectedVersion.ValueInt64() != 43 {
-		t.Errorf("state %s applied %v expected %v, want pending 42 -> 43", data.State, data.AppliedVersion, data.ExpectedVersion)
+	if data.State.ValueString() != "pending" || data.AppliedVersion.ValueString() != st.Applied.Version || data.ExpectedVersion.ValueString() != st.Expected.Version {
+		t.Errorf("state %s applied %v expected %v, want pending from the applied version to the expected one", data.State, data.AppliedVersion, data.ExpectedVersion)
 	}
 	if len(data.PendingRulesAdded) != 4 || !strings.HasPrefix(data.PendingRulesAdded[0].ValueString(), "i-db-1/in/tcp/6432/") {
 		t.Errorf("pending rules %v, want the four pgbouncer rules", data.PendingRulesAdded)
@@ -194,7 +193,7 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 	}
 	data := enforcementReceiptResourceModel{
 		ID: types.StringValue("rcpt-1"), CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
-		Workspace: types.StringValue("ws"), SnapshotVersion: types.Int64Value(42), ContentHash: types.StringValue("sha256:abc"),
+		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: mapOf(map[string]string{"i-db-1": "sg-1"}), Rules: mapOf(map[string]string{"k": "sgr-1"}),
 		Attachments: mapOf(map[string]string{"i-db-1/eni-1": "sg-1_eni-1"}), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
 	}
@@ -207,9 +206,8 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 func TestRefusedReceiptSaysWhatToChange(t *testing.T) {
 	t.Parallel()
 	for status, phrase := range map[int]string{
-		http.StatusConflict:            "content_hash",
 		http.StatusUnprocessableEntity: "missing or unknown",
-		http.StatusNotFound:            "remove the pin",
+		http.StatusNotFound:            "snapshot_version",
 	} {
 		if got := receiptAdvice(&snapshotAPIError{Status: status}); !strings.Contains(got, phrase) {
 			t.Errorf("advice for %d is %q, want it to mention %q", status, got, phrase)

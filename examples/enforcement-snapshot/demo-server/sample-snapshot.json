@@ -30,9 +30,49 @@
         "securityGroup": "rds/orders-db"
       }
     },
-    "cohorts": {},
-    "customerGroupChanges": {},
+    "cohorts": {
+      "ct-cohort-0123456789abcdef": {
+        "members": {
+          "a-legacy": "pipeline",
+          "a-reports": "owner"
+        }
+      }
+    },
+    "customerGroupChanges": {
+      "vpc-1/web": {
+        "changeSets": [
+          {
+            "id": "cs-1",
+            "moves": [
+              {
+                "cidrIpv4": "0.0.0.0/0",
+                "cidrIpv6": null,
+                "direction": "ingress",
+                "fromPort": 443,
+                "ipProtocol": "tcp",
+                "prefixListId": null,
+                "referencedSecurityGroupId": null,
+                "toPort": 443
+              }
+            ],
+            "state": "attaching"
+          }
+        ],
+        "revoke": []
+      }
+    },
     "directory": {
+      "lambda/reports": {
+        "handle": "lambda/reports",
+        "parameterName": "/colortokens/v1/lambda/reports/security-groups",
+        "securityGroups": [
+          "ct-cohort-0123456789abcdef"
+        ],
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:delivery": "pipeline"
+        }
+      },
       "rds-cluster/orders-cluster": {
         "handle": "rds-cluster/orders-cluster",
         "parameterName": "/colortokens/v1/rds-cluster/orders-cluster/security-groups",
@@ -203,6 +243,22 @@
       }
     },
     "ingressRules": {
+      "ct-cohort-0123456789abcdef/in/tcp/443/0.0.0.0/0": {
+        "cidrIpv4": "0.0.0.0/0",
+        "cidrIpv6": null,
+        "description": "",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:kind": "cohort"
+        },
+        "toPort": 443
+      },
       "i-app-1/in/tcp/443/0.0.0.0/0": {
         "cidrIpv4": "0.0.0.0/0",
         "cidrIpv6": null,
@@ -835,6 +891,10 @@
       }
     },
     "interfaceAttachments": {
+      "ct-cohort-0123456789abcdef/eni-legacy": {
+        "networkInterfaceId": "eni-legacy",
+        "securityGroup": "ct-cohort-0123456789abcdef"
+      },
       "i-app-1/eni-app-1": {
         "networkInterfaceId": "eni-app-1",
         "securityGroup": "i-app-1"
@@ -857,6 +917,18 @@
       }
     },
     "securityGroups": {
+      "ct-cohort-0123456789abcdef": {
+        "description": "ColorTokens split cohort group",
+        "name": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "cohort",
+          "ct:split-group": "sg-web"
+        },
+        "vpcId": "vpc-1"
+      },
       "i-app-1": {
         "description": "ColorTokens add-only enforcement group",
         "name": "ct-policy-7e86db99b6e3",
@@ -868,7 +940,7 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "7e86db99b6e39a61"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       },
       "i-app-2": {
         "description": "ColorTokens add-only enforcement group",
@@ -881,7 +953,7 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "ad3013e5c1d51a78"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       },
       "i-db-1": {
         "description": "ColorTokens add-only enforcement group",
@@ -894,7 +966,7 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "9067fdbf6af319ba"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       },
       "i-db-2": {
         "description": "ColorTokens add-only enforcement group",
@@ -907,7 +979,7 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "33ee02b31ffb5f9d"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       },
       "rds-cluster/orders-cluster": {
         "description": "ColorTokens add-only enforcement group",
@@ -920,7 +992,7 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "68291709db53071e"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       },
       "rds/orders-db": {
         "description": "ColorTokens add-only enforcement group",
@@ -933,14 +1005,14 @@
           "ct:managed": "policy-enforcement",
           "ct:owner": "d411c86ae7cee7d1"
         },
-        "vpcId": "vpc-0demo"
+        "vpcId": "vpc-1"
       }
     },
     "withdrawing": []
   },
   "cloudAccountId": "123456789012",
-  "contentHash": "sha256:50663057a056e06dc781b09b3fca6b39e618d811b09e62121d16a6ac992247b5",
+  "cloudProvider": "aws",
   "region": "us-east-1",
   "schemaVersion": "2",
-  "version": 42
+  "version": "56b1d26c370e11102ac3e144ac55b0cfbaf3f32fb9c73f05dca7b2b9d69e57b436633eb064c2a21e0ceb79014024c21256e93e16153f22aa4ad4952cbec171fc"
 }
