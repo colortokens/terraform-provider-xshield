@@ -224,8 +224,8 @@ run "full_control_cohort_rule_names_its_group" {
         "ct-cohort-0123456789abcdef/in/tcp/443/sg-lb" = {
           security_group = "ct-cohort-0123456789abcdef", ip_protocol = "tcp", from_port = 443, to_port = 443
           cidr_ipv4      = null, cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = "sg-lb"
-          description    = "ColorTokens split cohort rule"
-          tags           = { ManagedBy = "ColorTokens", "ct:kind" = "cohort" }
+          description    = null
+          tags           = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:change-set" = "cs-1" }
         }
       }
       egress_rules = {}

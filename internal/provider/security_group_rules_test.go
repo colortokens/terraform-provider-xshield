@@ -54,6 +54,8 @@ func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 	}
 	if r, ok := m.IngressRules[sampleCohortKey+"/in/tcp/443/0.0.0.0/0"]; !ok || r.CIDRIPv4.ValueString() != "0.0.0.0/0" || !r.ReferencedSecurityGroupID.IsNull() {
 		t.Errorf("cohort rule %+v, want the moved rule copied", r)
+	} else if !r.Description.IsNull() || r.Tags["ct:change-set"] != "cs-1" {
+		t.Errorf("cohort rule %+v, want no description and the change set's tag, as the connector copies it", r)
 	}
 	if a := m.InterfaceAttachments[sampleCohortKey+"/eni-legacy"]; a.SecurityGroup.ValueString() != sampleCohortKey {
 		t.Errorf("attachment %+v, want the cohort on the instance's interface", a)

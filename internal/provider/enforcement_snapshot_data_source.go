@@ -388,7 +388,7 @@ func ruleModel(r wireRule) esRuleModel {
 		CIDRIPv6:                  types.StringPointerValue(r.CIDRIPv6),
 		PrefixListID:              types.StringPointerValue(r.PrefixListID),
 		ReferencedSecurityGroupID: types.StringPointerValue(r.ReferencedSecurityGroupID),
-		Description:               types.StringValue(r.Description),
+		Description:               optionalString(r.Description),
 		Tags:                      nonNilTags(r.Tags),
 	}
 }

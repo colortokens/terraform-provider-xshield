@@ -252,7 +252,7 @@
       "ct-cohort-0123456789abcdef/in/tcp/443/0.0.0.0/0": {
         "cidrIpv4": "0.0.0.0/0",
         "cidrIpv6": null,
-        "description": "ColorTokens split cohort rule",
+        "description": "",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -260,6 +260,7 @@
         "securityGroup": "ct-cohort-0123456789abcdef",
         "tags": {
           "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
           "ct:kind": "cohort"
         },
         "toPort": 443
@@ -1016,7 +1017,7 @@
     "withdrawing": []
   },
   "cloudAccountId": "123456789012",
-  "contentHash": "sha256:8dbc7bf33d786050105d2f31705ebf41a9b772067c0027b6c7fab332b73c2c09",
+  "contentHash": "sha256:353acf0a581c79e1dd8406206cc6ed350ba3920e8cfc9a2eab0f80db0735a7c5",
   "region": "us-east-1",
   "schemaVersion": "2",
   "version": 43
