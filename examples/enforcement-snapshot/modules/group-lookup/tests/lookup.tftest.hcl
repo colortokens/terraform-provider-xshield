@@ -60,6 +60,8 @@ run "returns_nothing_without_an_entry" {
     condition     = output.security_group_ids == []
     error_message = "a resource Xshield lists no entry for attaches nothing, and its plan does not fail"
   }
+
+  expect_failures = [check.directory_entry]
 }
 
 run "ignores_other_parameters_under_the_handle" {
@@ -79,6 +81,8 @@ run "ignores_other_parameters_under_the_handle" {
     condition     = output.security_group_ids == []
     error_message = "only the security-groups parameter is read"
   }
+
+  expect_failures = [check.directory_entry]
 }
 
 run "rejects_handle_without_kind" {
@@ -88,7 +92,7 @@ run "rejects_handle_without_kind" {
     handle = "orders-db"
   }
 
-  expect_failures = [var.handle]
+  expect_failures = [data.aws_ssm_parameters_by_path.entry]
 }
 
 run "refuses_entry_for_another_handle" {
@@ -109,12 +113,12 @@ run "refuses_entry_for_another_handle" {
   expect_failures = [output.security_group_ids]
 }
 
-run "fails_without_an_entry_when_one_is_required" {
+# A resource the plan creates has no entry yet: the plan warns and goes ahead.
+run "warns_without_an_entry" {
   command = plan
 
   variables {
-    handle        = "rds/orders-dbb"
-    require_entry = true
+    handle = "rds/orders-dbb"
   }
 
   override_data {
@@ -122,17 +126,36 @@ run "fails_without_an_entry_when_one_is_required" {
     values = { names = [], values = [] }
   }
 
-  expect_failures = [output.security_group_ids]
+  expect_failures = [check.directory_entry]
 }
 
-run "returns_listed_group_when_an_entry_is_required" {
+# RDS stores identifiers in lowercase, and Xshield's handle comes from the ARN.
+run "lowercases_an_rds_handle" {
   variables {
-    handle        = "rds/orders-db"
-    require_entry = true
+    handle = "rds/Orders-DB"
   }
 
   assert {
-    condition     = output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
-    error_message = "a required entry that exists is returned as usual"
+    condition     = data.aws_ssm_parameters_by_path.entry.path == "/colortokens/v1/rds/orders-db" && output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
+    error_message = "an RDS handle is read in lowercase"
+  }
+}
+
+run "keeps_the_case_of_other_handles" {
+  variables {
+    handle = "lambda/Orders-API"
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/lambda/Orders-API/security-groups"]
+      values = ["{\"handle\":\"lambda/Orders-API\",\"security_group_ids\":[\"sg-0aa\"]}"]
+    }
+  }
+
+  assert {
+    condition     = data.aws_ssm_parameters_by_path.entry.path == "/colortokens/v1/lambda/Orders-API" && output.security_group_ids == ["sg-0aa"]
+    error_message = "a Lambda function name keeps its case"
   }
 }

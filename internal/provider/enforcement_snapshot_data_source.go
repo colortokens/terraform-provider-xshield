@@ -160,7 +160,7 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 			"assets": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"security_group": types.StringType, "attached_by": types.StringType,
 			}}, "How each Xshield asset carries its group, keyed by Xshield asset ID. "+
-				"`security_group`: key, in `security_groups`, of the asset's group. Null when its policy holds no rule or was refused. "+
+				"`security_group`: key, in `security_groups`, of the asset's group. Null when its group was refused, or for an instance whose policy holds no rule. "+
 				"`attached_by`: `pipeline` when this plan attaches it to the asset's interfaces, `owner` when the asset's own workspace does."),
 			"withdrawing": schema.ListAttribute{
 				Computed: true, ElementType: types.StringType,

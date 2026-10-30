@@ -22,7 +22,7 @@ output "summary" {
 }
 
 output "security_group_ids" {
-  description = "Each Xshield asset's security group ID, keyed by Xshield asset ID. Null for an asset whose policy holds no rule or was refused."
+  description = "Each Xshield asset's security group ID, keyed by Xshield asset ID. Null for an asset whose group was refused, or an instance whose policy holds no rule."
   value       = { for id, asset in local.snap.assets : id => asset.security_group == null ? null : aws_security_group.this[asset.security_group].id }
 }
 
