@@ -84,7 +84,7 @@ resource "aws_db_instance" "orders" {
 
 An App Runner service takes groups only through its VPC connector, and every service on a connector gets the connector's groups, so give each service a connector of its own: see `apprunner/`.
 
-The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield. A misspelt handle therefore attaches nothing, and Xshield reports the resource as `memberUnattached`; set `require_entry = true` on the lookup to fail the plan instead.
+The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield. A misspelt handle therefore attaches nothing, and Xshield reports the resource as `memberUnattached`; set `require_entry = true` on the lookup to fail the plan instead, but only for a resource that already has its entry: a resource the same plan creates has none until Xshield discovers it.
 
 ### 3. Instances whose Terraform declares their security groups
 
@@ -140,6 +140,6 @@ cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=fal
 | `This provider version cannot apply this snapshot` | Xshield publishes a newer snapshot format | Upgrade the `colortokens/xshield` provider |
 | `Xshield did not accept the apply receipt` | What was applied is not exactly what the snapshot lists | The details name the keys missing or unknown; use the enforcement module rather than hand-written resources |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
-| `Xshield lists no entry for <handle>` | `require_entry` is set and the handle is misspelt, or Xshield has not yet published the resource | Compare the handle with the enforcement module's `directory` output |
+| `Xshield lists no entry for <handle>` | `require_entry` is set and the handle is misspelt, the resource is new and Xshield has not yet discovered it, or Xshield refuses the resource | Compare the handle with the enforcement module's `directory` output |
 | `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |
 | The `monitor` check names a workload with `NO_FREE_SLOT` | Its interfaces already carry as many groups as AWS allows | Free a slot, or raise the account's security groups per interface quota |

@@ -24,7 +24,7 @@ variable "handle" {
 }
 
 variable "require_entry" {
-  description = "Fail the plan when Xshield lists no entry for the handle, such as a misspelt one. Leave false until Xshield has published the account and its enforcement workspace has applied."
+  description = "Fail the plan when Xshield lists no entry for the handle, such as a misspelt one. Leave false for a resource the same plan creates, which has no entry until Xshield discovers it."
   type        = bool
   default     = false
 }
