@@ -27,20 +27,22 @@ type enforcementStatusDataSource struct {
 }
 
 type driftFindingModel struct {
-	Kind        types.String `tfsdk:"kind"`
-	Severity    types.String `tfsdk:"severity"`
-	Restoration types.String `tfsdk:"restoration"`
-	Resource    types.String `tfsdk:"resource"`
-	Key         types.String `tfsdk:"key"`
-	Detail      types.String `tfsdk:"detail"`
+	Kind         types.String `tfsdk:"kind"`
+	Severity     types.String `tfsdk:"severity"`
+	Restoration  types.String `tfsdk:"restoration"`
+	Resource     types.String `tfsdk:"resource"`
+	ResourceName types.String `tfsdk:"resource_name"`
+	Key          types.String `tfsdk:"key"`
+	Detail       types.String `tfsdk:"detail"`
 }
 
 type noticeModel struct {
-	Code    types.String `tfsdk:"code"`
-	Reason  types.String `tfsdk:"reason"`
-	AssetID types.String `tfsdk:"asset_id"`
-	Group   types.String `tfsdk:"group"`
-	Message types.String `tfsdk:"message"`
+	Code      types.String `tfsdk:"code"`
+	Reason    types.String `tfsdk:"reason"`
+	AssetID   types.String `tfsdk:"asset_id"`
+	AssetName types.String `tfsdk:"asset_name"`
+	Group     types.String `tfsdk:"group"`
+	Message   types.String `tfsdk:"message"`
 }
 
 type enforcementStatusDataSourceModel struct {
@@ -103,13 +105,14 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"notices": schema.ListAttribute{
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
-					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "group": types.StringType, "message": types.StringType,
+					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType, "message": types.StringType,
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A workload with a refusal " +
 					"carries no Xshield group until the cause is fixed. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. " +
 					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
+					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`message`: what happened and what it means for the workload.",
 			},
 			"applied_security_groups": appliedIDs("security group ID", "`aws_security_group.this`"),
@@ -125,7 +128,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
 					"kind": types.StringType, "severity": types.StringType, "restoration": types.StringType,
-					"resource": types.StringType, "key": types.StringType, "detail": types.StringType,
+					"resource": types.StringType, "resource_name": types.StringType, "key": types.StringType, "detail": types.StringType,
 				}},
 				MarkdownDescription: "Differences between the cloud as observed and the snapshot as applied. " +
 					"`kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. " +
@@ -133,6 +136,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` when Terraform cannot see it " +
 					"and it must be removed by hand, `workload` when the owning workspace's attachment must change. " +
 					"`resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. " +
+					"`resource_name`: for an attachment finding, the workload as AWS names it, its instance ID or its handle. " +
 					"`key`: snapshot key involved, when there is one. " +
 					"`detail`: human-readable explanation.",
 			},
@@ -167,11 +171,12 @@ type wireStatus struct {
 		AttachmentsAdded    []string `json:"attachmentsAdded"`
 	} `json:"pendingDelta"`
 	Notices []struct {
-		Code    string `json:"code"`
-		Reason  string `json:"reason"`
-		AssetID string `json:"assetId"`
-		Group   string `json:"group"`
-		Message string `json:"message"`
+		Code      string `json:"code"`
+		Reason    string `json:"reason"`
+		AssetID   string `json:"assetId"`
+		AssetName string `json:"assetName"`
+		Group     string `json:"group"`
+		Message   string `json:"message"`
 	} `json:"notices"`
 	Drift *wireDrift `json:"drift"`
 }
@@ -180,12 +185,13 @@ type wireDrift struct {
 	ObservedAt       string `json:"observedAt"`
 	ObservationStale bool   `json:"observationStale"`
 	Findings         []struct {
-		Kind        string `json:"kind"`
-		Severity    string `json:"severity"`
-		Restoration string `json:"restoration"`
-		Resource    string `json:"resource"`
-		Key         string `json:"key"`
-		Detail      string `json:"detail"`
+		Kind         string `json:"kind"`
+		Severity     string `json:"severity"`
+		Restoration  string `json:"restoration"`
+		Resource     string `json:"resource"`
+		ResourceName string `json:"resourceName"`
+		Key          string `json:"key"`
+		Detail       string `json:"detail"`
 	} `json:"findings"`
 }
 
@@ -266,7 +272,7 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.Notices = []noticeModel{}
 	for _, n := range st.Notices {
 		data.Notices = append(data.Notices, noticeModel{Code: types.StringValue(n.Code), Reason: optionalString(n.Reason),
-			AssetID: optionalString(n.AssetID), Group: optionalString(n.Group), Message: types.StringValue(n.Message)})
+			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Message: types.StringValue(n.Message)})
 	}
 }
 
@@ -276,7 +282,7 @@ func setDrift(data *enforcementStatusDataSourceModel, drift wireDrift) {
 	for _, f := range drift.Findings {
 		data.DriftFindings = append(data.DriftFindings, driftFindingModel{
 			Kind: types.StringValue(f.Kind), Severity: types.StringValue(f.Severity), Restoration: types.StringValue(f.Restoration),
-			Resource: types.StringValue(f.Resource), Key: optionalString(f.Key), Detail: types.StringValue(f.Detail),
+			Resource: types.StringValue(f.Resource), ResourceName: optionalString(f.ResourceName), Key: optionalString(f.Key), Detail: types.StringValue(f.Detail),
 		})
 	}
 }

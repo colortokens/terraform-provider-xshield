@@ -31,7 +31,7 @@ check "xshield_enforcement" {
   assert {
     condition = length([for f in data.xshield_enforcement_status.this.drift_findings : f if f.severity == "high"]) == 0
     error_message = join("\n", concat(["Xshield sees high-severity drift in ${var.cloud_account_id}/${var.region}:"], [
-      for f in data.xshield_enforcement_status.this.drift_findings : "  ${f.kind} ${f.resource}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
+      for f in data.xshield_enforcement_status.this.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
     ]))
   }
 
@@ -44,7 +44,7 @@ check "xshield_enforcement" {
     # A contained workload and a group being withdrawn are deliberate states, not failures.
     condition = length([for n in data.xshield_enforcement_status.this.notices : n if contains(["assetRefused", "groupRefused"], n.code)]) == 0
     error_message = join("\n", concat(["Xshield could not enforce every workload in ${var.cloud_account_id}/${var.region}:"], [
-      for n in data.xshield_enforcement_status.this.notices : "  ${coalesce(n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
+      for n in data.xshield_enforcement_status.this.notices : "  ${coalesce(n.asset_name, n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
     ]))
   }
 }

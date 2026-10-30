@@ -146,12 +146,13 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	ctx := context.Background()
 	st := loadJSON[wireStatus](t, "status.json")
 	st.Notices = append(st.Notices, struct {
-		Code    string `json:"code"`
-		Reason  string `json:"reason"`
-		AssetID string `json:"assetId"`
-		Group   string `json:"group"`
-		Message string `json:"message"`
-	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", Message: "the connector would refuse this workload's policy"})
+		Code      string `json:"code"`
+		Reason    string `json:"reason"`
+		AssetID   string `json:"assetId"`
+		AssetName string `json:"assetName"`
+		Group     string `json:"group"`
+		Message   string `json:"message"`
+	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "the connector would refuse this workload's policy"})
 
 	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
@@ -168,7 +169,8 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		len(attachments) != len(st.Applied.Resources.Attachments) || len(groups) == 0 {
 		t.Errorf("applied IDs %d groups %d rules %d attachments, want every resource the receipt records", len(groups), len(rules), len(attachments))
 	}
-	if len(data.Notices) != 1 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() {
+	if len(data.Notices) != 1 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() ||
+		data.Notices[0].AssetName.ValueString() != "rds/db-1" {
 		t.Errorf("notices %+v", data.Notices)
 	}
 	kinds := []string{}

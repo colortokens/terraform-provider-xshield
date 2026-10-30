@@ -125,7 +125,7 @@ func TestReceiptPostSignatureVerifiesOverTheBodySent(t *testing.T) {
 	material := strings.Join([]string{
 		"(request-target): post " + sent.path,
 		"date: " + sent.header.Get("date"),
-		"host: " + sent.host,
+		"host: " + strings.Split(sent.host, ":")[0], // as the gateway reads it: without a port
 		"x-content-sha256: " + sent.header.Get("x-content-sha256"),
 	}, "\n")
 	digest := sha256.Sum256([]byte(material))
