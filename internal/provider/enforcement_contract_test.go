@@ -163,6 +163,11 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	if len(data.PendingRulesAdded) != 4 || !strings.HasPrefix(data.PendingRulesAdded[0].ValueString(), "i-db-1/in/tcp/6432/") {
 		t.Errorf("pending rules %v, want the four pgbouncer rules", data.PendingRulesAdded)
 	}
+	groups, rules, attachments := data.AppliedGroups.Elements(), data.AppliedRules.Elements(), data.AppliedAttachments.Elements()
+	if len(groups) != len(st.Applied.Resources.SecurityGroups) || len(rules) != len(st.Applied.Resources.Rules) ||
+		len(attachments) != len(st.Applied.Resources.Attachments) || len(groups) == 0 {
+		t.Errorf("applied IDs %d groups %d rules %d attachments, want every resource the receipt records", len(groups), len(rules), len(attachments))
+	}
 	if len(data.Notices) != 1 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() {
 		t.Errorf("notices %+v", data.Notices)
 	}
@@ -195,7 +200,7 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 		ID: types.StringValue("rcpt-1"), CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: mapOf(map[string]string{"i-db-1": "sg-1"}), Rules: mapOf(map[string]string{"k": "sgr-1"}),
-		Attachments: mapOf(map[string]string{"i-db-1/eni-1": "sg-1_eni-1"}), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
+		Attachments: mapOf(map[string]string{"i-db-1/eni-1": "eni-1_sg-1"}), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
 	}
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {

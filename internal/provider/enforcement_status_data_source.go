@@ -61,6 +61,9 @@ type enforcementStatusDataSourceModel struct {
 	DriftEvaluated      types.Bool          `tfsdk:"drift_evaluated"`
 	DriftObservedAt     types.String        `tfsdk:"drift_observed_at"`
 	DriftFindings       []driftFindingModel `tfsdk:"drift_findings"`
+	AppliedGroups       types.Map           `tfsdk:"applied_security_groups"`
+	AppliedRules        types.Map           `tfsdk:"applied_rules"`
+	AppliedAttachments  types.Map           `tfsdk:"applied_attachments"`
 }
 
 func (d *enforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -109,6 +112,11 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
 					"`message`: what happened and what it means for the workload.",
 			},
+			"applied_security_groups": appliedIDs("security group ID", "`aws_security_group.this`"),
+			"applied_rules": appliedIDs("security group rule ID", "`aws_vpc_security_group_ingress_rule.this`, for a key with `/in/`, or "+
+				"`aws_vpc_security_group_egress_rule.this`, for a key with `/out/`"),
+			"applied_attachments": appliedIDs("attachment import ID, `<network interface ID>_<security group ID>`",
+				"`aws_network_interface_sg_attachment.this`"),
 			"drift_evaluated": schema.BoolAttribute{Computed: true, Description: "Whether drift could be evaluated: it " +
 				"needs an applied receipt and a cloud connector observation taken after it. An observation older than the " +
 				"latest apply describes resources that apply replaced, so it is not evaluated."},
@@ -214,6 +222,20 @@ func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+// appliedIDs lets a lost state be rebuilt from the last receipt with import blocks keyed as the module keys its resources.
+func appliedIDs(what, resource string) schema.MapAttribute {
+	return schema.MapAttribute{Computed: true, ElementType: types.StringType, MarkdownDescription: "From the last receipt: the " +
+		what + " of each resource the enforcement module created, keyed as the module keys " + resource + ". Empty before the first receipt."}
+}
+
+func stringMap(m map[string]string) types.Map {
+	values := make(map[string]attr.Value, len(m))
+	for k, v := range m {
+		values[k] = types.StringValue(v)
+	}
+	return types.MapValueMust(types.StringType, values)
+}
+
 func setUnpublished(data *enforcementStatusDataSourceModel) {
 	setStatus(data, wireStatus{State: "unpublished"})
 	data.Published = types.BoolValue(false)
@@ -225,10 +247,13 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.State = types.StringValue(st.State)
 	data.ExpectedVersion = types.StringValue(st.Expected.Version)
 	data.AppliedVersion, data.AppliedAt = types.StringNull(), types.StringNull()
+	applied := wireRenderedResources{}
 	if st.Applied != nil {
 		data.AppliedVersion = types.StringValue(st.Applied.Version)
 		data.AppliedAt = appliedAtValue(st.Applied.AppliedAt)
+		applied = st.Applied.Resources
 	}
+	data.AppliedGroups, data.AppliedRules, data.AppliedAttachments = stringMap(applied.SecurityGroups), stringMap(applied.Rules), stringMap(applied.Attachments)
 	data.LastCheckedAt = optionalString(st.LastCheckedAt)
 	data.PendingSince = optionalString(st.PendingSince)
 	data.PendingRulesAdded, data.PendingRulesRemoved, data.PendingGroups, data.PendingAttachments = []types.String{}, []types.String{}, []types.String{}, []types.String{}
