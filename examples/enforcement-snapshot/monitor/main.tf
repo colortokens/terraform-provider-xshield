@@ -36,7 +36,7 @@ check "xshield_enforcement" {
   }
 
   assert {
-    condition     = data.xshield_enforcement_status.this.state != "pending" || timecmp(timeadd(data.xshield_enforcement_status.this.pending_since, "24h"), plantimestamp()) > 0
+    condition     = data.xshield_enforcement_status.this.state != "pending" || timecmp(timeadd(coalesce(data.xshield_enforcement_status.this.pending_since, plantimestamp()), "24h"), plantimestamp()) > 0
     error_message = "Approved Xshield policy has waited more than 24 hours for an enforcement run: ${length(data.xshield_enforcement_status.this.pending_rules_added)} rule(s) to add."
   }
 

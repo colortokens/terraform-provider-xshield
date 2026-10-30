@@ -120,6 +120,23 @@ func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testin
 	}
 }
 
+// A snapshot is applied by an AWS provider set up for one account and region; one served for any other must not be.
+func TestSnapshotForAnotherAccountIsRefused(t *testing.T) {
+	t.Parallel()
+	other := strings.Replace(readTestdata(t, "snapshot.json"), `"cloudAccountId": "123456789012"`, `"cloudAccountId": "210987654321"`, 1)
+	if !strings.Contains(other, "210987654321") {
+		t.Fatal("the fixture no longer names its account as expected")
+	}
+	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{
+		"/expected":                {http.StatusOK, `{"version":"` + testVersion + `"}`},
+		"/versions/" + testVersion: {http.StatusOK, other},
+	})
+	var m enforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok || !strings.Contains(errs, "another account or region") {
+		t.Errorf("ok=%v %q, want the snapshot for 210987654321 refused", ok, errs)
+	}
+}
+
 func TestPublishedSnapshotSaysSo(t *testing.T) {
 	t.Parallel()
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{

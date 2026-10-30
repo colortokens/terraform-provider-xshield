@@ -286,6 +286,11 @@ func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 	if !ok {
 		return
 	}
+	if snap != nil && (snap.CloudAccountID != data.CloudAccountID.ValueString() || snap.Region != data.Region.ValueString()) {
+		resp.Diagnostics.AddError("Xshield served a snapshot for another account or region",
+			fmt.Sprintf("asked for %s/%s, got %s/%s; nothing is applied", data.CloudAccountID.ValueString(), data.Region.ValueString(), snap.CloudAccountID, snap.Region))
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, snapshotModel(data.CloudAccountID, data.Region, snap))...)
 }
 
