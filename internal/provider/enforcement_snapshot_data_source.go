@@ -282,7 +282,7 @@ func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, &resp.Diagnostics)
+	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, true, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -290,21 +290,25 @@ func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource
 }
 
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
-// it has published nothing; a pinned version must exist.
-func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.String, diags *diag.Diagnostics) (*wireSnapshot, bool) {
+// it has published nothing; a pinned version must exist. Only the enforcement
+// module's read is a heartbeat: reading /expected records it as the pipeline's
+// last check, pinned or not, while other readers take the version from /status.
+func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.String, heartbeat bool, diags *diag.Diagnostics) (*wireSnapshot, bool) {
+	isPinned := !pinned.IsNull() && !pinned.IsUnknown()
 	version := pinned.ValueString()
-	if pinned.IsNull() || pinned.IsUnknown() {
-		var exp wireExpected
-		err := api.get(ctx, api.endpoint(cloudAWS, account, region, "expected"), &exp)
-		if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
-			return nil, true
-		}
-		if err != nil {
+	if heartbeat || !isPinned {
+		expected, published, err := expectedVersion(ctx, api, account, region, heartbeat)
+		switch {
+		case err != nil:
 			diags.AddError("Cannot resolve the snapshot Xshield expects for "+account+"/"+region,
 				err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")
 			return nil, false
+		case isPinned:
+		case !published:
+			return nil, true
+		default:
+			version = expected
 		}
-		version = exp.Version
 	}
 	var snap wireSnapshot
 	if err := api.get(ctx, api.endpoint(cloudAWS, account, region, "versions", version), &snap); err != nil {
@@ -316,6 +320,24 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 		return nil, false
 	}
 	return &snap, true
+}
+
+func expectedVersion(ctx context.Context, api cloudSnapshotAPI, account, region string, heartbeat bool) (string, bool, error) {
+	var version string
+	var err error
+	if heartbeat {
+		var exp wireExpected
+		err = api.get(ctx, api.endpoint(cloudAWS, account, region, "expected"), &exp)
+		version = exp.Version
+	} else {
+		var st wireStatus
+		err = api.get(ctx, api.endpoint(cloudAWS, account, region, "status"), &st)
+		version = st.Expected.Version
+	}
+	if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
+		return "", false, nil
+	}
+	return version, err == nil, err
 }
 
 // snapshotModel never returns a nil map or list: an empty account still plans

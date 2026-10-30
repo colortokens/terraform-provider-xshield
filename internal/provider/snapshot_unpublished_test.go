@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -156,6 +157,28 @@ func TestAnyOtherFailureToReadTheSnapshotFailsThePlan(t *testing.T) {
 	}
 }
 
+// A pinned enforcement workspace still runs, so its reads must keep last_checked_at current.
+func TestPinnedEnforcementReadStillRecordsTheCheck(t *testing.T) {
+	t.Parallel()
+	served := loadJSON[wireSnapshot](t, "snapshot.json")
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{
+		"/expected":                   {http.StatusOK, `{"version":"` + strings.Repeat("ab", 64) + `"}`},
+		"/versions/" + served.Version: {http.StatusOK, readTestdata(t, "snapshot.json")},
+	})
+	args := pointArgs()
+	args["version"] = tftypes.NewValue(tftypes.String, served.Version)
+	var m enforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); !ok {
+		t.Fatal(errs)
+	}
+	if m.Version.ValueString() != served.Version {
+		t.Errorf("version %v, want the pinned one", m.Version)
+	}
+	if !slices.ContainsFunc(*requested, func(p string) bool { return strings.HasSuffix(p, "/expected") }) {
+		t.Errorf("requested %v, want the expected version read, which records the pipeline's check", *requested)
+	}
+}
+
 func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 	t.Parallel()
 	pinned := strings.Repeat("cd", 64)
@@ -173,7 +196,7 @@ func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 
 func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	t.Parallel()
-	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/expected": {http.StatusNotFound, xshieldNotPublished}})
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusNotFound, xshieldNotPublished}})
 	ruleType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
 		"ip_protocol": tftypes.String, "from_port": tftypes.Number, "to_port": tftypes.Number,
 		"cidr_ipv4": tftypes.String, "cidr_ipv6": tftypes.String, "prefix_list_id": tftypes.String,
@@ -197,6 +220,9 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	kept, ok := m.IngressRules["https_public"]
 	if m.Published.ValueBool() || !m.Version.IsNull() || !ok || kept.CIDRIPv4.ValueString() != "0.0.0.0/0" || len(m.Revoked)+len(m.Pending) != 0 {
 		t.Errorf("published %v version %v kept %+v revoked %v pending %v, want every declared rule back unchanged", m.Published, m.Version, m.IngressRules, m.Revoked, m.Pending)
+	}
+	if slices.ContainsFunc(*requested, func(p string) bool { return strings.HasSuffix(p, "/expected") }) {
+		t.Errorf("requested %v: a team's rules filter read the expected version, which Xshield records as the enforcement pipeline's last check", *requested)
 	}
 }
 

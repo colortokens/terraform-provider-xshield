@@ -142,7 +142,7 @@ func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.
 		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
-	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, &resp.Diagnostics)
+	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, false, &resp.Diagnostics)
 	if !ok {
 		return
 	}
