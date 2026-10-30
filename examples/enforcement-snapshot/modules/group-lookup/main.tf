@@ -23,6 +23,12 @@ variable "handle" {
   }
 }
 
+variable "require_entry" {
+  description = "Fail the plan when Xshield lists no entry for the handle, such as a misspelt one. Leave false until Xshield has published the account and its enforcement workspace has applied."
+  type        = bool
+  default     = false
+}
+
 variable "directory_prefix" {
   description = "SSM path the enforcement workspace writes the directory under."
   type        = string
@@ -53,5 +59,9 @@ output "security_group_ids" {
   precondition {
     condition     = local.entry.handle == var.handle
     error_message = "The directory entry at ${local.parameter_name} is for ${local.entry.handle}, not ${var.handle}. Only the enforcement workspace should write under ${var.directory_prefix}."
+  }
+  precondition {
+    condition     = local.found || !var.require_entry
+    error_message = "Xshield lists no entry for ${var.handle} at ${local.parameter_name}. Check the handle against the enforcement module's directory output."
   }
 }

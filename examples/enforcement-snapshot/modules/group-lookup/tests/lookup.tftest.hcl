@@ -108,3 +108,31 @@ run "refuses_entry_for_another_handle" {
 
   expect_failures = [output.security_group_ids]
 }
+
+run "fails_without_an_entry_when_one_is_required" {
+  command = plan
+
+  variables {
+    handle        = "rds/orders-dbb"
+    require_entry = true
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = { names = [], values = [] }
+  }
+
+  expect_failures = [output.security_group_ids]
+}
+
+run "returns_listed_group_when_an_entry_is_required" {
+  variables {
+    handle        = "rds/orders-db"
+    require_entry = true
+  }
+
+  assert {
+    condition     = output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
+    error_message = "a required entry that exists is returned as usual"
+  }
+}

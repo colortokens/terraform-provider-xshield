@@ -9,6 +9,7 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
+| `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own for its Xshield group. |
 | `monitor/` | A `check` block that alerts on drift, stalled pipelines and refused workloads. |
 | `demo-server/` | A stand-in for the Xshield API, to try all of this without a tenant. |
 | `connector-managed/` | The other way: author policy in HCL and let the Xshield connector enforce it. |
@@ -45,13 +46,16 @@ Set the API key as secret environment variables on the runner. `XSHIELD_PRIVATE_
 | `XSHIELD_TENANCY_ID`, `XSHIELD_USER_ID`, `XSHIELD_FINGERPRINT` | Shown with the API key under **Settings > API Keys** |
 | `XSHIELD_PRIVATE_KEY` or `XSHIELD_PRIVATE_KEY_PATH` | The PEM private key, or a path to it |
 
-The role the workspace assumes needs:
+The role the workspace assumes needs only these actions; `enforcement-role/` creates it, limiting every group and rule change to resources tagged `ManagedBy = ColorTokens`:
 
 | Purpose | Actions |
 |--|--|
-| Groups and rules | `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:AuthorizeSecurityGroupEgress`, `ec2:RevokeSecurityGroupIngress`, `ec2:RevokeSecurityGroupEgress`, `ec2:ModifySecurityGroupRules`, `ec2:CreateTags`, `ec2:Describe*` |
+| Groups and rules | `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:AuthorizeSecurityGroupEgress`, `ec2:RevokeSecurityGroupIngress`, `ec2:RevokeSecurityGroupEgress`, `ec2:ModifySecurityGroupRules`, `ec2:CreateTags`, `ec2:DeleteTags` |
 | Instance attachments | `ec2:ModifyNetworkInterfaceAttribute` |
-| Directory | `ssm:PutParameter`, `ssm:DeleteParameter`, `ssm:GetParameter*`, `ssm:AddTagsToResource`, `ssm:ListTagsForResource` on `arn:aws:ssm:*:*:parameter/colortokens/*` |
+| Reads | `ec2:DescribeSecurityGroups`, `ec2:DescribeSecurityGroupRules`, `ec2:DescribeNetworkInterfaces` |
+| Directory | `ssm:PutParameter`, `ssm:DeleteParameter`, `ssm:GetParameter`, `ssm:AddTagsToResource`, `ssm:RemoveTagsFromResource`, `ssm:ListTagsForResource` on `arn:aws:ssm:*:*:parameter/colortokens/*`, and `ssm:DescribeParameters`, which takes no parameter ARN |
+
+Deleting a group that an AWS-managed interface still references, such as one Lambda has not yet removed, fails until AWS removes that interface; the next apply then succeeds. Grant `ec2:DetachNetworkInterface` and `ec2:DeleteNetworkInterface` if you would rather Terraform removed such interfaces itself.
 
 ### 2. Databases, functions and services: the workspace that owns them attaches the group
 
@@ -78,17 +82,26 @@ resource "aws_db_instance" "orders" {
 | Managed Flink application | `flink/<application name>` |
 | App Runner service | `apprunner/<service name>` |
 
-The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield.
+An App Runner service takes groups only through its VPC connector, and every service on a connector gets the connector's groups, so give each service a connector of its own: see `apprunner/`.
+
+The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield. A misspelt handle therefore attaches nothing, and Xshield reports the resource as `memberUnattached`; set `require_entry = true` on the lookup to fail the plan instead.
 
 ### 3. Instances whose Terraform declares their security groups
 
-Nothing to do for instances no workspace manages one by one, such as Auto Scaling instances. If a workspace sets `vpc_security_group_ids` on an `aws_instance`, that list is authoritative and removes the group the enforcement workspace attached. Tell Terraform to leave it alone:
+Nothing to do for instances no workspace manages one by one, such as Auto Scaling instances. If a workspace sets `vpc_security_group_ids` on an `aws_instance`, or `security_groups` on an `aws_network_interface`, that list is authoritative and removes the group the enforcement workspace attached. Tell Terraform to leave it alone:
 
 ```hcl
 resource "aws_instance" "web" {
   # ...
   lifecycle {
     ignore_changes = [vpc_security_group_ids]
+  }
+}
+
+resource "aws_network_interface" "web" {
+  # ...
+  lifecycle {
+    ignore_changes = [security_groups]
   }
 }
 ```
@@ -127,5 +140,6 @@ cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=fal
 | `This provider version cannot apply this snapshot` | Xshield publishes a newer snapshot format | Upgrade the `colortokens/xshield` provider |
 | `Xshield did not accept the apply receipt` | What was applied is not exactly what the snapshot lists | The details name the keys missing or unknown; use the enforcement module rather than hand-written resources |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
+| `Xshield lists no entry for <handle>` | `require_entry` is set and the handle is misspelt, or Xshield has not yet published the resource | Compare the handle with the enforcement module's `directory` output |
 | `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |
 | The `monitor` check names a workload with `NO_FREE_SLOT` | Its interfaces already carry as many groups as AWS allows | Free a slot, or raise the account's security groups per interface quota |
