@@ -94,6 +94,10 @@ run "first_version_applies_and_is_confirmed" {
     condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v1" && toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(["i-1", "rds/orders-db"])
     error_message = "the first apply is confirmed with a receipt for exactly what it created"
   }
+  assert {
+    condition     = xshield_enforcement_receipt.this[0].attachments["i-1/eni-1"] == "eni-1_${aws_security_group.this["i-1"].id}"
+    error_message = "the receipt records each attachment by the ID that imports it, network interface first"
+  }
 }
 
 # A changed rule, a new workload, and a contained one, all in one version.

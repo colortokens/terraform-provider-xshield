@@ -55,6 +55,12 @@ resource "aws_security_group" "this" {
   description = each.value.description
   vpc_id      = each.value.vpc_id
   tags        = merge(var.tags, each.value.tags)
+
+  # Xshield drops a group only once no network interface holds it. If one still does, such as an
+  # interface AWS has not yet released, fail within minutes rather than hold the pipeline.
+  timeouts {
+    delete = "5m"
+  }
 }
 
 resource "aws_vpc_security_group_ingress_rule" "this" {
@@ -124,7 +130,8 @@ resource "xshield_enforcement_receipt" "this" {
     { for key, rule in aws_vpc_security_group_ingress_rule.this : key => rule.security_group_rule_id },
     { for key, rule in aws_vpc_security_group_egress_rule.this : key => rule.security_group_rule_id },
   )
-  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => attachment.id }
+  # Recorded as the attachment's import ID, so a lost state can be rebuilt from the receipt.
+  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
 
   depends_on = [aws_ssm_parameter.directory]
 }
