@@ -67,7 +67,7 @@ run "alerts_on_a_refused_workload" {
       state          = "converged"
       drift_findings = []
       notices = [
-        { code = "assetRefused", reason = "NO_FREE_SLOT", asset_id = "asset-web-1", group = null, message = "the connector would refuse this workload's policy" },
+        { code = "assetRefused", reason = "NO_FREE_SLOT", asset_id = "asset-web-1", group = null, message = "no Xshield group can be written for this workload as it stands" },
       ]
     }
   }

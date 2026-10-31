@@ -152,7 +152,7 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		AssetName string `json:"assetName"`
 		Group     string `json:"group"`
 		Message   string `json:"message"`
-	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "the connector would refuse this workload's policy"})
+	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "no Xshield group can be written for this workload as it stands"})
 
 	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
