@@ -93,10 +93,28 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   tags                         = merge(var.tags, each.value.tags)
 }
 
+# An instance's interfaces go with the instance, often before discovery tells
+# Xshield, so an attachment is planned only while its interface exists: a
+# terminated instance never fails the apply. Xshield accepts a receipt that
+# leaves such an attachment out.
+data "aws_network_interfaces" "present" {
+  count = length(local.snap.interface_attachments) > 0 ? 1 : 0
+
+  filter {
+    name   = "vpc-id"
+    values = distinct([for attachment in values(local.snap.interface_attachments) : local.snap.security_groups[attachment.security_group].vpc_id])
+  }
+}
+
+locals {
+  present_interfaces = try(data.aws_network_interfaces.present[0].ids, [])
+  attachments        = { for key, attachment in local.snap.interface_attachments : key => attachment if contains(local.present_interfaces, attachment.network_interface_id) }
+}
+
 # Adds the group to the interface and leaves the interface's other groups in
 # place, as the cloud connector does.
 resource "aws_network_interface_sg_attachment" "this" {
-  for_each = local.snap.interface_attachments
+  for_each = local.attachments
 
   security_group_id    = aws_security_group.this[each.value.security_group].id
   network_interface_id = each.value.network_interface_id

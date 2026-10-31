@@ -12,6 +12,9 @@ mock_provider "aws" {
   mock_data "aws_security_groups" {
     defaults = { ids = [] }
   }
+  mock_data "aws_network_interfaces" {
+    defaults = { ids = ["eni-0a1", "eni-0a1b", "eni-legacy"] }
+  }
 }
 
 mock_provider "xshield" {
@@ -148,6 +151,30 @@ run "receipt_lists_what_was_created" {
   assert {
     condition     = output.security_group_ids["asset-batch-1"] == null && output.security_group_ids["asset-web-1"] == aws_security_group.this["i-0a1"].id
     error_message = "each asset maps to its group's ID, or null when it has none"
+  }
+}
+
+# An instance terminated before discovery told Xshield keeps its attachment in the
+# snapshot: the apply attaches what still exists and the receipt leaves the rest out.
+run "gone_interface_is_neither_attached_nor_receipted" {
+  command = apply
+
+  override_data {
+    target = data.aws_network_interfaces.present[0]
+    values = { ids = ["eni-0a1"] }
+  }
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1"])
+    error_message = "only the interface that still exists is attached"
+  }
+  assert {
+    condition     = toset(keys(xshield_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1"])
+    error_message = "the receipt leaves out the gone interface's attachment"
+  }
+  assert {
+    condition     = toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
+    error_message = "the receipt still lists every group"
   }
 }
 

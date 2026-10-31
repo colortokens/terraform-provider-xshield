@@ -13,6 +13,9 @@ mock_provider "aws" {
   mock_data "aws_security_groups" {
     defaults = { ids = [] }
   }
+  mock_data "aws_network_interfaces" {
+    defaults = { ids = ["eni-1", "eni-2"] }
+  }
 }
 
 mock_provider "xshield" {
