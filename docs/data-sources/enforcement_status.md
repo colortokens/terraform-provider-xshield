@@ -66,7 +66,7 @@ check "xshield_enforcement" {
 - `pending_security_groups_added` (List of String) Keys of security groups the next enforcement run will create.
 - `pending_since` (String) When the oldest policy change not yet applied was published.
 - `published` (Boolean) False while Xshield has published nothing for this account and region. `state` is then `unpublished`, versions are null and every list is empty, so checks stay quiet.
-- `state` (String) `converged` when the latest receipt matches the expected snapshot, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published nothing to apply.
+- `state` (String) `converged` when the latest receipt matches the expected snapshot, `waiting` when it does but a Full control change still waits on another workspace's apply or on discovery, which its `changeSetHeld` notices name, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published nothing to apply.
 
 <a id="nestedatt--drift_findings"></a>
 ### Nested Schema for `drift_findings`

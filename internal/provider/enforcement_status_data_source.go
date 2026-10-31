@@ -89,9 +89,10 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"region":           schema.StringAttribute{Required: true, Description: "Region to report on."},
 			"published": schema.BoolAttribute{Computed: true, Description: "False while Xshield has published nothing for this " +
 				"account and region. `state` is then `unpublished`, versions are null and every list is empty, so checks stay quiet."},
-			"state": str("`converged` when the latest receipt matches the expected snapshot, `pending` when Xshield " +
-				"expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when " +
-				"Xshield has published nothing to apply."),
+			"state": str("`converged` when the latest receipt matches the expected snapshot, `waiting` when it does but a " +
+				"Full control change still waits on another workspace's apply or on discovery, which its `changeSetHeld` notices " +
+				"name, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied " +
+				"yet, `unpublished` when Xshield has published nothing to apply."),
 			"expected_version": str("Version Xshield expects to be enforced, the hash of everything it asks for."),
 			"applied_version":  str("Version in the latest apply receipt. Null when nothing has been applied."),
 			"applied_at":       str("When the latest receipt was recorded."),
