@@ -14,7 +14,7 @@ terraform {
 }
 
 variable "handle" {
-  description = "The resource's kind and name: rds/<DB instance identifier>, rds-cluster/<cluster identifier>, lambda/<function name>, flink/<application name> or apprunner/<service name>. An RDS identifier may be given in any case."
+  description = "The resource's kind and name: rds/<DB instance identifier>, rds-cluster/<cluster identifier>, lambda/<function name>, flink/<application name>, apprunner/<service name> or asg/<Auto Scaling group name>. An RDS identifier may be given in any case."
   type        = string
 }
 
@@ -34,7 +34,7 @@ data "aws_ssm_parameters_by_path" "entry" {
   lifecycle {
     precondition {
       condition     = can(regex("^[a-z0-9-]+/[A-Za-z0-9_.-]+$", local.handle))
-      error_message = "handle must be <kind>/<name>, such as rds/orders-db, rds-cluster/orders, lambda/orders-api, flink/clickstream or apprunner/orders-web."
+      error_message = "handle must be <kind>/<name>, such as rds/orders-db, rds-cluster/orders, lambda/orders-api, flink/clickstream, apprunner/orders-web or asg/orders-web."
     }
   }
 }
