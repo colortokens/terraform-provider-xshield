@@ -11,6 +11,9 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
 | `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own for its Xshield group. |
 | `monitor/` | A `check` block that alerts on drift, stalled pipelines and refused workloads. |
+| `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
+| `handover/` | Import blocks that take over the groups the cloud connector created, when an account moves to pipeline delivery. |
+| `leave/` | A `removed` block that hands the account's groups to the cloud connector, when an account moves back to connector delivery. |
 | `demo-server/` | A stand-in for the Xshield API, to try all of this without a tenant. |
 | `connector-managed/` | The other way: author policy in HCL and let the Xshield connector enforce it. |
 
