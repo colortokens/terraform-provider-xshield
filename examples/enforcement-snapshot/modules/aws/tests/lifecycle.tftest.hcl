@@ -16,6 +16,9 @@ mock_provider "aws" {
   mock_data "aws_network_interfaces" {
     defaults = { ids = ["eni-1", "eni-2"] }
   }
+  mock_data "aws_network_interface" {
+    defaults = { security_groups = ["sg-0customer"], attachment = [] }
+  }
 }
 
 mock_provider "xshield" {
@@ -31,6 +34,9 @@ mock_provider "xshield" {
       assets                = {}
       withdrawing           = []
     }
+  }
+  mock_data "xshield_enforcement_status" {
+    defaults = { applied_attachments = {} }
   }
 }
 
@@ -77,9 +83,9 @@ run "first_version_applies_and_is_confirmed" {
         }
       }
       egress_rules          = {}
-      interface_attachments = { "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1" } }
+      interface_attachments = { "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 } }
       directory = {
-        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" } }
+        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
@@ -132,9 +138,9 @@ run "changes_touch_only_what_changed" {
         }
       }
       egress_rules          = {}
-      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2" } }
+      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
       directory = {
-        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" } }
+        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
@@ -197,9 +203,9 @@ run "withdrawn_group_outlives_its_attachment" {
         }
       }
       egress_rules          = {}
-      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2" } }
+      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
       directory = {
-        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = [], tags = { ManagedBy = "ColorTokens" } }
+        "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = [], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
@@ -242,7 +248,7 @@ run "detached_group_is_removed_and_the_rest_stay" {
         }
       }
       egress_rules          = {}
-      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2" } }
+      interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
       directory             = {}
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }

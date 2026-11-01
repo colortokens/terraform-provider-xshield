@@ -111,10 +111,49 @@ locals {
   attachments        = { for key, attachment in local.snap.interface_attachments : key => attachment if contains(local.present_interfaces, attachment.network_interface_id) }
 }
 
+# An interface that filled up since Xshield last discovered it has no room for a
+# new group, and AWS would refuse the apply. So an attachment the last receipt does
+# not hold goes only on an interface with room for every new group: the others are
+# left out with a warning, the receipt leaves them out, and Xshield refuses the
+# workload once discovery shows the interface full. Only those interfaces are read.
+data "xshield_enforcement_status" "this" {
+  count = length(local.attachments) > 0 ? 1 : 0
+
+  cloud_account_id = local.account_id
+  region           = local.region
+}
+
+locals {
+  applied_attachments = try(keys(data.xshield_enforcement_status.this[0].applied_attachments), [])
+  new_attachments     = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !contains(local.applied_attachments, key) }
+}
+
+data "aws_network_interface" "receiving" {
+  for_each = toset([for attachment in values(local.new_attachments) : attachment.network_interface_id])
+
+  id = each.key
+}
+
+locals {
+  new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
+  full_interfaces = {
+    for id, interface in data.aws_network_interface.receiving : id => try(interface.attachment[0].instance_id, "not attached")
+    if length(interface.security_groups) + length(lookup(local.new_limits, id, [])) > min(concat(lookup(local.new_limits, id, []), [length(interface.security_groups) + 1])...)
+  }
+  attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(contains(keys(local.new_attachments), key) && contains(keys(local.full_interfaces), attachment.network_interface_id)) }
+}
+
+check "interfaces_have_room" {
+  assert {
+    condition     = length(local.full_interfaces) == 0
+    error_message = "These network interfaces carry as many security groups as the account allows, so Xshield's new group was left off them this run, as AWS would refuse it: ${join(", ", [for id, instance in local.full_interfaces : "${id} (${instance})"])}. Xshield refuses these workloads once discovery shows the interfaces full. To enforce them, remove a group from each interface or raise the account's security groups per network interface quota."
+  }
+}
+
 # Adds the group to the interface and leaves the interface's other groups in
 # place, as the cloud connector does.
 resource "aws_network_interface_sg_attachment" "this" {
-  for_each = local.attachments
+  for_each = local.attachments_with_room
 
   security_group_id    = aws_security_group.this[each.value.security_group].id
   network_interface_id = each.value.network_interface_id
@@ -130,6 +169,7 @@ resource "aws_ssm_parameter" "directory" {
   insecure_value = jsonencode({
     handle             = each.value.handle
     security_group_ids = [for key in each.value.security_groups : aws_security_group.this[key].id]
+    slot_limit         = each.value.slot_limit
   })
   tags = merge(var.tags, each.value.tags)
 }

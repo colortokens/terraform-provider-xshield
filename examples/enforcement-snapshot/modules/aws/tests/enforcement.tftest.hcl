@@ -15,6 +15,9 @@ mock_provider "aws" {
   mock_data "aws_network_interfaces" {
     defaults = { ids = ["eni-0a1", "eni-0a1b", "eni-legacy"] }
   }
+  mock_data "aws_network_interface" {
+    defaults = { security_groups = ["sg-0customer1", "sg-0customer2"], attachment = [] }
+  }
 }
 
 mock_provider "xshield" {
@@ -71,8 +74,8 @@ mock_provider "xshield" {
         }
       }
       interface_attachments = {
-        "i-0a1/eni-0a1"  = { security_group = "i-0a1", network_interface_id = "eni-0a1" }
-        "i-0a1/eni-0a1b" = { security_group = "i-0a1", network_interface_id = "eni-0a1b" }
+        "i-0a1/eni-0a1"  = { security_group = "i-0a1", network_interface_id = "eni-0a1", slot_limit = 5 }
+        "i-0a1/eni-0a1b" = { security_group = "i-0a1", network_interface_id = "eni-0a1b", slot_limit = null }
       }
       directory = {
         "rds/orders-db" = {
@@ -80,6 +83,7 @@ mock_provider "xshield" {
           handle          = "rds/orders-db"
           security_groups = ["rds/orders-db"]
           tags            = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" }
+          slot_limit      = 5
         }
       }
       assets = {
@@ -89,6 +93,9 @@ mock_provider "xshield" {
       }
       withdrawing = []
     }
+  }
+  mock_data "xshield_enforcement_status" {
+    defaults = { applied_attachments = {} }
   }
 }
 
@@ -149,6 +156,10 @@ run "receipt_lists_what_was_created" {
     error_message = "the directory gives the database its group's ID"
   }
   assert {
+    condition     = jsondecode(aws_ssm_parameter.directory["rds/orders-db"].insecure_value).slot_limit == 5
+    error_message = "the directory tells the database's workspace how many groups AWS allows on it"
+  }
+  assert {
     condition     = output.security_group_ids["asset-batch-1"] == null && output.security_group_ids["asset-web-1"] == aws_security_group.this["i-0a1"].id
     error_message = "each asset maps to its group's ID, or null when it has none"
   }
@@ -175,6 +186,61 @@ run "gone_interface_is_neither_attached_nor_receipted" {
   assert {
     condition     = toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
     error_message = "the receipt still lists every group"
+  }
+}
+
+# An interface that filled up since Xshield last discovered it would make AWS refuse
+# the apply, so a new attachment is left off it with a warning, and the receipt
+# leaves it out; the rest of the account is still enforced.
+run "new_attachment_is_left_off_a_full_interface" {
+  command = apply
+
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-4", "sg-5"], attachment = [{ instance_id = "i-0a1", attachment_id = "eni-attach-1", device_index = 0, network_card_index = 0, instance_owner_id = "123456789012" }] }
+  }
+
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1b"])
+    error_message = "the full interface is left out and the other attached"
+  }
+  assert {
+    condition     = toset(keys(xshield_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1b"])
+    error_message = "the receipt leaves out the attachment the interface had no room for"
+  }
+  assert {
+    condition     = local.full_interfaces == { "eni-0a1" = "i-0a1" }
+    error_message = "the warning names the interface and its instance"
+  }
+}
+
+# What the last receipt attached already holds its slot, so a full interface keeps it.
+run "applied_attachment_stays_on_a_full_interface" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this[0]
+    values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0abc" } }
+  }
+
+  assert {
+    condition     = length(data.aws_network_interface.receiving) == 0 && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
+    error_message = "an attachment the last receipt holds is neither read again nor left out"
+  }
+}
+
+run "new_attachment_goes_on_an_interface_with_room" {
+  command = plan
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1", "i-0a1/eni-0a1b"]) && length(local.full_interfaces) == 0
+    error_message = "two groups and ours fit under a limit of five"
+  }
+  assert {
+    condition     = toset(keys(data.aws_network_interface.receiving)) == toset(["eni-0a1"])
+    error_message = "only the interface with a new attachment and a known limit is read"
   }
 }
 
@@ -254,7 +320,7 @@ run "full_control_cohort_rule_names_its_group" {
       }
       egress_rules = {}
       interface_attachments = {
-        "ct-cohort-0123456789abcdef/eni-legacy" = { security_group = "ct-cohort-0123456789abcdef", network_interface_id = "eni-legacy" }
+        "ct-cohort-0123456789abcdef/eni-legacy" = { security_group = "ct-cohort-0123456789abcdef", network_interface_id = "eni-legacy", slot_limit = null }
       }
       directory   = {}
       assets      = {}

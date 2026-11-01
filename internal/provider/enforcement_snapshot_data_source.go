@@ -50,6 +50,7 @@ type esRuleModel struct {
 type esAttachmentModel struct {
 	SecurityGroup      types.String `tfsdk:"security_group"`
 	NetworkInterfaceID types.String `tfsdk:"network_interface_id"`
+	SlotLimit          types.Int64  `tfsdk:"slot_limit"`
 }
 
 type esDirectoryModel struct {
@@ -57,6 +58,7 @@ type esDirectoryModel struct {
 	Handle         types.String      `tfsdk:"handle"`
 	SecurityGroups []types.String    `tfsdk:"security_groups"`
 	Tags           map[string]string `tfsdk:"tags"`
+	SlotLimit      types.Int64       `tfsdk:"slot_limit"`
 }
 
 type esAssetModel struct {
@@ -143,20 +145,23 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 			"ingress_rules": rules("ingress"),
 			"egress_rules":  rules("egress"),
 			"interface_attachments": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
-				"security_group": types.StringType, "network_interface_id": types.StringType,
+				"security_group": types.StringType, "network_interface_id": types.StringType, "slot_limit": types.Int64Type,
 			}}, "Each instance interface a group goes on, keyed `<security group key>/<interface ID>`. The attachment adds the "+
 				"group and leaves the interface's other groups in place, as the connector does. A contained instance's attachment "+
 				"is left out until the containment is reverted. "+
 				"`security_group`: key, in `security_groups`, of the group to attach. "+
-				"`network_interface_id`: interface to attach it to."),
+				"`network_interface_id`: interface to attach it to. "+
+				"`slot_limit`: how many security groups the account allows on the interface, as Xshield last discovered it; null when it has not."),
 			"directory": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"parameter_name": types.StringType, "handle": types.StringType, "security_groups": types.ListType{ElemType: types.StringType}, "tags": esTagsType,
+				"slot_limit": types.Int64Type,
 			}}, "One SSM parameter per database, function or service its own workspace attaches, keyed by handle. The "+
 				"`group-lookup` module reads it. An entry listing no group attaches nothing. "+
 				"`parameter_name`: `/colortokens/v1/<handle>/security-groups`. "+
 				"`handle`: the resource's kind and name, such as `rds/orders-db` or `lambda/orders-api`. "+
 				"`security_groups`: keys, in `security_groups`, of the groups the resource attaches. "+
-				"`tags`: tags for the parameter."),
+				"`tags`: tags for the parameter. "+
+				"`slot_limit`: how many security groups AWS allows on the resource, as Xshield last discovered it; null when it has not."),
 			"assets": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"security_group": types.StringType, "attached_by": types.StringType,
 			}}, "How each Xshield asset carries its group, keyed by Xshield asset ID. "+
@@ -213,7 +218,7 @@ type wireRuleMatch struct {
 type wireCustomerGroupChange struct {
 	Revoke     []wireRuleMatch `json:"revoke"`
 	ChangeSets []struct {
-		ID          string          `json:"id"`
+		ID    string          `json:"id"`
 		State string          `json:"state"`
 		Moves []wireRuleMatch `json:"moves"`
 	} `json:"changeSets"`
@@ -236,12 +241,14 @@ type wireSnapshot struct {
 		InterfaceAttachments map[string]struct {
 			SecurityGroup      string `json:"securityGroup"`
 			NetworkInterfaceID string `json:"networkInterfaceId"`
+			SlotLimit          int64  `json:"slotLimit"`
 		} `json:"interfaceAttachments"`
 		Directory map[string]struct {
 			ParameterName  string            `json:"parameterName"`
 			Handle         string            `json:"handle"`
 			SecurityGroups []string          `json:"securityGroups"`
 			Tags           map[string]string `json:"tags"`
+			SlotLimit      int64             `json:"slotLimit"`
 		} `json:"directory"`
 		Assets map[string]struct {
 			SecurityGroup *string `json:"securityGroup"`
@@ -379,16 +386,25 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) enforcement
 		m.EgressRules[key] = ruleModel(r)
 	}
 	for key, a := range plan.InterfaceAttachments {
-		m.InterfaceAttachments[key] = esAttachmentModel{SecurityGroup: types.StringValue(a.SecurityGroup), NetworkInterfaceID: types.StringValue(a.NetworkInterfaceID)}
+		m.InterfaceAttachments[key] = esAttachmentModel{SecurityGroup: types.StringValue(a.SecurityGroup), NetworkInterfaceID: types.StringValue(a.NetworkInterfaceID),
+			SlotLimit: knownLimit(a.SlotLimit)}
 	}
 	for key, e := range plan.Directory {
 		m.Directory[key] = esDirectoryModel{ParameterName: types.StringValue(e.ParameterName), Handle: types.StringValue(e.Handle),
-			SecurityGroups: toStrList(e.SecurityGroups), Tags: nonNilTags(e.Tags)}
+			SecurityGroups: toStrList(e.SecurityGroups), Tags: nonNilTags(e.Tags), SlotLimit: knownLimit(e.SlotLimit)}
 	}
 	for id, a := range plan.Assets {
 		m.Assets[id] = esAssetModel{SecurityGroup: types.StringPointerValue(a.SecurityGroup), AttachedBy: types.StringValue(a.AttachedBy)}
 	}
 	return m
+}
+
+// knownLimit is null for a limit Xshield has not discovered, which the snapshot leaves out.
+func knownLimit(limit int64) types.Int64 {
+	if limit == 0 {
+		return types.Int64Null()
+	}
+	return types.Int64Value(limit)
 }
 
 func ruleModel(r wireRule) esRuleModel {

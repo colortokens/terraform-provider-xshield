@@ -94,6 +94,32 @@ func TestSnapshotMapsAttachmentsDirectoryAndAssets(t *testing.T) {
 	}
 }
 
+// A workspace checks for room against the limit Xshield discovered; one it has not discovered is null, never 0.
+func TestSnapshotMapsSlotLimitsAndLeavesAnUndiscoveredOneNull(t *testing.T) {
+	t.Parallel()
+	snap := loadJSON[wireSnapshot](t, "snapshot.json")
+	attachment := snap.AWS.InterfaceAttachments["i-app-1/eni-app-1-data"]
+	attachment.SlotLimit = 8
+	snap.AWS.InterfaceAttachments["i-app-1/eni-app-1-data"] = attachment
+	entry := snap.AWS.Directory["rds/orders-db"]
+	entry.SlotLimit = 5
+	snap.AWS.Directory["rds/orders-db"] = entry
+
+	m := snapshotModel(types.StringValue("123456789012"), types.StringValue("us-east-1"), &snap)
+
+	if got := m.InterfaceAttachments["i-app-1/eni-app-1-data"].SlotLimit; got.ValueInt64() != 8 {
+		t.Errorf("attachment limit %v, want 8", got)
+	}
+	if got := m.Directory["rds/orders-db"].SlotLimit; got.ValueInt64() != 5 {
+		t.Errorf("directory limit %v, want 5", got)
+	}
+	for key, a := range m.InterfaceAttachments {
+		if key != "i-app-1/eni-app-1-data" && !a.SlotLimit.IsNull() {
+			t.Errorf("attachment %s limit %v, want null where the snapshot gives none", key, a.SlotLimit)
+		}
+	}
+}
+
 func TestEverySnapshotModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

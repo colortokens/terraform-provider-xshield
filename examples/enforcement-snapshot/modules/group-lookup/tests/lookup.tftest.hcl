@@ -159,3 +159,61 @@ run "keeps_the_case_of_other_handles" {
     error_message = "a Lambda function name keeps its case"
   }
 }
+
+# A developer adding a group of their own learns at plan, not from AWS at apply,
+# that it no longer fits beside Xshield's.
+run "own_groups_that_do_not_fit_fail_the_plan" {
+  command = plan
+
+  variables {
+    handle                 = "rds/orders-db"
+    own_security_group_ids = ["sg-01", "sg-02", "sg-03", "sg-04", "sg-05"]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/rds/orders-db/security-groups"]
+      values = ["{\"handle\":\"rds/orders-db\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"slot_limit\":5}"]
+    }
+  }
+
+  expect_failures = [output.security_group_ids]
+}
+
+run "own_groups_that_fit_pass_and_room_is_reported" {
+  command = plan
+
+  variables {
+    handle                 = "rds/orders-db"
+    own_security_group_ids = ["sg-01", "sg-02", "sg-03", "sg-04"]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/rds/orders-db/security-groups"]
+      values = ["{\"handle\":\"rds/orders-db\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"slot_limit\":5}"]
+    }
+  }
+
+  assert {
+    condition     = output.own_security_groups_allowed == 4
+    error_message = "a limit of five less Xshield's one group leaves four"
+  }
+}
+
+# Before Xshield has discovered the limit, nothing is checked and the room is unknown.
+run "without_a_limit_nothing_is_checked" {
+  command = plan
+
+  variables {
+    handle                 = "rds/orders-db"
+    own_security_group_ids = ["sg-01", "sg-02", "sg-03", "sg-04", "sg-05", "sg-06"]
+  }
+
+  assert {
+    condition     = output.own_security_groups_allowed == null && output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
+    error_message = "an entry without a limit returns its groups and leaves the room unknown"
+  }
+}

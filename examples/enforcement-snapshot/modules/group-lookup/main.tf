@@ -18,6 +18,12 @@ variable "handle" {
   type        = string
 }
 
+variable "own_security_group_ids" {
+  description = "The resource's own security group IDs, which it carries beside Xshield's. When given, the plan fails if together they are more than AWS allows on the resource, rather than AWS failing the apply. Leave null to skip the check."
+  type        = list(string)
+  default     = null
+}
+
 variable "directory_prefix" {
   description = "SSM path the enforcement workspace writes the directory under."
   type        = string
@@ -48,6 +54,7 @@ locals {
     ? nonsensitive(data.aws_ssm_parameters_by_path.entry.values[index(data.aws_ssm_parameters_by_path.entry.names, local.parameter_name)])
     : jsonencode({ handle = local.handle, security_group_ids = [] })
   )
+  slot_limit = try(local.entry.slot_limit, null)
 }
 
 # Warns rather than fails: a resource the same plan creates has no entry until
@@ -67,4 +74,13 @@ output "security_group_ids" {
     condition     = local.entry.handle == local.handle
     error_message = "The directory entry at ${local.parameter_name} is for ${local.entry.handle}, not ${local.handle}. Only the enforcement workspace should write under ${var.directory_prefix}."
   }
+  precondition {
+    condition     = var.own_security_group_ids == null || local.slot_limit == null || length(coalesce(var.own_security_group_ids, [])) + length(local.entry.security_group_ids) <= coalesce(local.slot_limit, 0)
+    error_message = "${local.handle} would carry ${length(coalesce(var.own_security_group_ids, []))} security groups of its own and ${length(local.entry.security_group_ids)} of Xshield's, more than the ${coalesce(local.slot_limit, 0)} AWS allows on it. Remove one of its own groups, or raise the quota where AWS allows it."
+  }
+}
+
+output "own_security_groups_allowed" {
+  description = "How many security groups of its own the resource can carry beside Xshield's: the limit AWS sets for it, as Xshield last discovered it, less the groups this lookup returns. Null until Xshield has discovered the limit."
+  value       = local.slot_limit == null ? null : max(local.slot_limit - length(local.entry.security_group_ids), 0)
 }

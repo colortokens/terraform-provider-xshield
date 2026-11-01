@@ -18,6 +18,8 @@ It creates, from `xshield_enforcement_snapshot`:
 
 While Xshield has published nothing for the account and region, it creates nothing, not even the receipt, and the plan shows no change. If the account already holds security groups Xshield rendered for a pipeline, the plan fails instead: Xshield never unpublishes an account, so that means the provider is reading another tenant or endpoint, and applying would remove them. The check reads groups with `ec2:DescribeSecurityGroups`.
 
+An interface that filled up since Xshield last discovered it cannot take a new group, and AWS would refuse the apply. So an attachment the last receipt does not hold goes only on an interface with room for every new group, against the limit Xshield discovered. Any other is left out with a warning naming the interface and its instance, the receipt leaves it out, and Xshield refuses the workload once discovery shows the interface full. Only those interfaces are read, with `ec2:DescribeNetworkInterfaces`.
+
 Resource keys are instance IDs and handles, so a plan names the workload each change is for.
 
 ## Inputs
