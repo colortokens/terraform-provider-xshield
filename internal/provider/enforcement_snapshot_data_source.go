@@ -254,14 +254,22 @@ type wireSnapshot struct {
 			SecurityGroup *string `json:"securityGroup"`
 			AttachedBy    string  `json:"attachedBy"`
 		} `json:"assets"`
-		Withdrawing          []string                           `json:"withdrawing"`
-		CustomerGroupChanges map[string]wireCustomerGroupChange `json:"customerGroupChanges"`
+		Withdrawing []string `json:"withdrawing"`
 	} `json:"aws"`
+}
+
+// wireCustomerGroupChanges is what Xshield takes out of the customer's own groups, published apart
+// from the snapshot, by "<vpcId>/<groupName>".
+type wireCustomerGroupChanges struct {
+	CloudAccountID string                             `json:"cloudAccountId"`
+	Region         string                             `json:"region"`
+	Version        string                             `json:"version"`
+	Groups         map[string]wireCustomerGroupChange `json:"customerGroupChanges"`
 }
 
 // supportedSnapshotSchema is the snapshot format this provider renders. A newer
 // format may carry resources this provider would silently leave out.
-const supportedSnapshotSchema = "2"
+const supportedSnapshotSchema = "3"
 
 func renderable(snap wireSnapshot) error {
 	if snap.SchemaVersion != supportedSnapshotSchema {

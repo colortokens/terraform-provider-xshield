@@ -38,29 +38,6 @@
         }
       }
     },
-    "customerGroupChanges": {
-      "vpc-1/web": {
-        "changeSets": [
-          {
-            "id": "cs-1",
-            "moves": [
-              {
-                "cidrIpv4": "0.0.0.0/0",
-                "cidrIpv6": null,
-                "direction": "ingress",
-                "fromPort": 443,
-                "ipProtocol": "tcp",
-                "prefixListId": null,
-                "referencedSecurityGroupId": null,
-                "toPort": 443
-              }
-            ],
-            "state": "attaching"
-          }
-        ],
-        "revoke": []
-      }
-    },
     "directory": {
       "lambda/reports": {
         "handle": "lambda/reports",
@@ -1013,6 +990,6 @@
   "cloudAccountId": "123456789012",
   "cloudProvider": "aws",
   "region": "us-east-1",
-  "schemaVersion": "2",
-  "version": "56b1d26c370e11102ac3e144ac55b0cfbaf3f32fb9c73f05dca7b2b9d69e57b436633eb064c2a21e0ceb79014024c21256e93e16153f22aa4ad4952cbec171fc"
+  "schemaVersion": "3",
+  "version": "7a53d80b1140851b2772b62e05da206672802716a0583829eca862c39b1bb7ec6848228ac55fb0992f0bf7a9b13327a77a5f5a17e8c4efd3d6b840aea01e1581"
 }

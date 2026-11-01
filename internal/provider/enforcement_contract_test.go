@@ -156,7 +156,7 @@ func withVersion(m enforcementSnapshotDataSourceModel, v string) enforcementSnap
 func TestSnapshotOfAnotherFormatIsRefusedRatherThanAppliedInPart(t *testing.T) {
 	t.Parallel()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
-	snap.SchemaVersion = "3"
+	snap.SchemaVersion = "4"
 	if err := renderable(snap); err == nil || !strings.Contains(err.Error(), "Upgrade the xshield provider") {
 		t.Errorf("a newer snapshot schema was accepted: %v", err)
 	}

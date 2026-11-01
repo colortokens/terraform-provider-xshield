@@ -14,6 +14,12 @@ Applies Full control to one of your own security groups when a Terraform pipelin
 
 ```terraform
 # Route a group you own through Xshield's Full control: declare the rules that come back.
+# Values known before the plan: an attribute of a resource in this configuration would defer the
+# data source to the apply, and its rules could not drive for_each.
+variable "vpc_id" {
+  type = string
+}
+
 locals {
   web_ingress_rules = {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
@@ -24,7 +30,7 @@ locals {
 data "xshield_security_group_rules" "web" {
   cloud_account_id = "123456789012"
   region           = "us-east-1"
-  vpc_id           = aws_vpc.main.id
+  vpc_id           = var.vpc_id
   group_name       = "web"
 
   ingress = local.web_ingress_rules
@@ -32,7 +38,7 @@ data "xshield_security_group_rules" "web" {
 
 resource "aws_security_group" "web" {
   name   = "web"
-  vpc_id = aws_vpc.main.id
+  vpc_id = var.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "web" {
@@ -65,15 +71,15 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
 
 - `egress` (Attributes Map) The egress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_egress_rule`. (see [below for nested schema](#nestedatt--egress))
 - `ingress` (Attributes Map) The ingress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_ingress_rule`. (see [below for nested schema](#nestedatt--ingress))
-- `version` (String) Pins a snapshot version. When omitted, the version Xshield expects is read.
 
 ### Read-Only
 
 - `egress_rules` (Map of Object) The declared egress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_egress_rule`, not the input. (see [below for nested schema](#nestedatt--egress_rules))
 - `ingress_rules` (Map of Object) The declared ingress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_ingress_rule`, not the input. (see [below for nested schema](#nestedatt--ingress_rules))
 - `pending` (List of String) The declared rules an approved change will leave out once every workload that keeps them carries its cohort.
-- `published` (Boolean) False while Xshield has published nothing for this account and region; every declared rule then comes back unchanged and `version` is null. Any other failure to read the snapshot fails the plan.
+- `published` (Boolean) False while Xshield has published nothing for this account and region; every declared rule then comes back unchanged and `version` is null. Any other failure to read the changes fails the plan.
 - `revoked` (List of String) The declared rules left out, as `ingress/<key>` or `egress/<key>`.
+- `version` (String) Version of the changes to customer groups Xshield published for the account and region, which it publishes apart from the enforcement snapshot, so a released change needs no enforcement apply.
 
 <a id="nestedatt--egress"></a>
 ### Nested Schema for `egress`

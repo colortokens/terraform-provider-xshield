@@ -213,7 +213,7 @@ func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 
 func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	t.Parallel()
-	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusNotFound, xshieldNotPublished}})
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusNotFound, xshieldNotPublished}})
 	ruleType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
 		"ip_protocol": tftypes.String, "from_port": tftypes.Number, "to_port": tftypes.Number,
 		"cidr_ipv4": tftypes.String, "cidr_ipv6": tftypes.String, "prefix_list_id": tftypes.String,
@@ -240,6 +240,43 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	}
 	if slices.ContainsFunc(*requested, func(p string) bool { return strings.HasSuffix(p, "/expected") }) {
 		t.Errorf("requested %v: a team's rules filter read the expected version, which Xshield records as the enforcement pipeline's last check", *requested)
+	}
+}
+
+// A released change reaches the group's own workspace from the changes Xshield publishes apart from the
+// snapshot, without the enforcement pipeline applying anything.
+func TestDeclaredRulesLoseWhatAReleasedChangeRevokes(t *testing.T) {
+	t.Parallel()
+	released, err := json.Marshal(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusOK, string(released)}})
+	ruleType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+		"ip_protocol": tftypes.String, "from_port": tftypes.Number, "to_port": tftypes.Number,
+		"cidr_ipv4": tftypes.String, "cidr_ipv6": tftypes.String, "prefix_list_id": tftypes.String,
+		"referenced_security_group_id": tftypes.String, "description": tftypes.String, "tags": tftypes.Map{ElementType: tftypes.String},
+	}}
+	rule := tftypes.NewValue(ruleType, map[string]tftypes.Value{
+		"ip_protocol": tftypes.NewValue(tftypes.String, "tcp"), "from_port": tftypes.NewValue(tftypes.Number, 443),
+		"to_port": tftypes.NewValue(tftypes.Number, 443), "cidr_ipv4": tftypes.NewValue(tftypes.String, "0.0.0.0/0"),
+		"cidr_ipv6": tftypes.NewValue(tftypes.String, nil), "prefix_list_id": tftypes.NewValue(tftypes.String, nil),
+		"referenced_security_group_id": tftypes.NewValue(tftypes.String, nil), "description": tftypes.NewValue(tftypes.String, "https"),
+		"tags": tftypes.NewValue(tftypes.Map{ElementType: tftypes.String}, nil),
+	})
+	args := pointArgs()
+	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
+	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
+	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
+	var m securityGroupRulesDataSourceModel
+	if ok, errs := readDataSource(t, &securityGroupRulesDataSource{api: api}, args, &m); !ok {
+		t.Fatalf("read failed: %s", errs)
+	}
+	if _, kept := m.IngressRules["https_public"]; kept || !m.Published.ValueBool() || len(m.Revoked) != 1 || m.Revoked[0].ValueString() != "ingress/https_public" {
+		t.Errorf("kept %v revoked %v, want the broad rule left out", m.IngressRules, m.Revoked)
+	}
+	if slices.ContainsFunc(*requested, func(p string) bool { return strings.Contains(p, "/versions/") || strings.HasSuffix(p, "/status") }) {
+		t.Errorf("requested %v: the rules filter reads the published changes alone, never a snapshot", *requested)
 	}
 }
 

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/netip"
 	"strings"
 
@@ -103,11 +104,12 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 			"region":           schema.StringAttribute{Required: true, MarkdownDescription: "AWS region the group is in."},
 			"vpc_id":           schema.StringAttribute{Required: true, MarkdownDescription: "VPC the group is in."},
 			"group_name":       schema.StringAttribute{Required: true, MarkdownDescription: "The group's name."},
-			"version": schema.StringAttribute{Optional: true, Computed: true,
-				MarkdownDescription: "Pins a snapshot version. When omitted, the version Xshield expects is read."},
+			"version": schema.StringAttribute{Computed: true,
+				MarkdownDescription: "Version of the changes to customer groups Xshield published for the account and region, which it " +
+					"publishes apart from the enforcement snapshot, so a released change needs no enforcement apply."},
 			"published": schema.BoolAttribute{Computed: true,
 				MarkdownDescription: "False while Xshield has published nothing for this account and region; every declared rule " +
-					"then comes back unchanged and `version` is null. Any other failure to read the snapshot fails the plan."},
+					"then comes back unchanged and `version` is null. Any other failure to read the changes fails the plan."},
 			"ingress":       declared("ingress"),
 			"egress":        declared("egress"),
 			"ingress_rules": kept("ingress"),
@@ -142,23 +144,28 @@ func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.
 		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
-	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, false, &resp.Diagnostics)
-	if !ok {
+	account, region := data.CloudAccountID.ValueString(), data.Region.ValueString()
+	var changes wireCustomerGroupChanges
+	err := d.api.get(ctx, d.api.endpoint(cloudAWS, account, region, "customergroupchanges"), &changes)
+	published := !isAPIRefusal(err, http.StatusNotFound, codeNotPublished)
+	if err != nil && published {
+		resp.Diagnostics.AddError("Cannot read the changes Xshield made to customer groups in "+account+"/"+region,
+			err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")
 		return
 	}
 	var change *wireCustomerGroupChange
-	data.Published, data.Version = types.BoolValue(snap != nil), types.StringNull()
-	if snap != nil {
-		data.Version = types.StringValue(snap.Version)
-		change = groupChangeOf(*snap, data.VPCID.ValueString(), data.GroupName.ValueString())
+	data.Published, data.Version = types.BoolValue(published), types.StringNull()
+	if published {
+		data.Version = types.StringValue(changes.Version)
+		change = groupChangeOf(changes, data.VPCID.ValueString(), data.GroupName.ValueString())
 	}
 	filterDeclaredRules(&data, change)
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
 // groupChangeOf finds the group by name and VPC; nil when no approved change applies to it.
-func groupChangeOf(snap wireSnapshot, vpcID, name string) *wireCustomerGroupChange {
-	if change, ok := snap.AWS.CustomerGroupChanges[vpcID+"/"+name]; ok {
+func groupChangeOf(changes wireCustomerGroupChanges, vpcID, name string) *wireCustomerGroupChange {
+	if change, ok := changes.Groups[vpcID+"/"+name]; ok {
 		return &change
 	}
 	return nil

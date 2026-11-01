@@ -38,12 +38,12 @@ func keysOf(values []types.String) []string {
 }
 
 // narrowed is the fixture after every member was shown to carry its cohort.
-func narrowed(snap wireSnapshot) wireSnapshot {
-	change := snap.AWS.CustomerGroupChanges["vpc-1/web"]
+func narrowed(changes wireCustomerGroupChanges) wireCustomerGroupChanges {
+	change := changes.Groups["vpc-1/web"]
 	change.ChangeSets[0].State = "narrowing"
 	change.Revoke = change.ChangeSets[0].Moves
-	snap.AWS.CustomerGroupChanges["vpc-1/web"] = change
-	return snap
+	changes.Groups["vpc-1/web"] = change
+	return changes
 }
 
 func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
@@ -72,7 +72,7 @@ func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 func TestRulesFilterKeepsARuleUntilEveryMemberCarriesItsCohort(t *testing.T) {
 	t.Parallel()
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(loadJSON[wireSnapshot](t, "snapshot.json"), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json"), "vpc-1", "web"))
 
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"https_all", "ssh_office"}) {
 		t.Errorf("kept %v, want every declared rule while the cohort is attaching", got)
@@ -88,7 +88,7 @@ func TestRulesFilterKeepsARuleUntilEveryMemberCarriesItsCohort(t *testing.T) {
 func TestRulesFilterLeavesOutTheMovedRuleByItsContent(t *testing.T) {
 	t.Parallel()
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "web"))
 
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"ssh_office"}) {
 		t.Errorf("kept %v, want the broad 443 rule left out though it was declared with protocol 6", got)
@@ -105,7 +105,7 @@ func TestRulesFilterReturnsAnotherGroupUnchanged(t *testing.T) {
 	t.Parallel()
 	data := webRules()
 	data.GroupName = types.StringValue("db")
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "db"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "db"))
 
 	if len(data.IngressRules) != 2 || len(data.EgressRules) != 1 || len(data.Revoked) != 0 || len(data.Pending) != 0 {
 		t.Errorf("kept %v and %v, revoked %v, want everything kept", sortedKeys(data.IngressRules), sortedKeys(data.EgressRules), keysOf(data.Revoked))
@@ -164,7 +164,7 @@ func TestRulesFilterModelFitsTheDataSourceSchema(t *testing.T) {
 	var resp datasource.SchemaResponse
 	(&securityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
-	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireSnapshot](t, "snapshot.json")), "vpc-1", "web"))
+	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "web"))
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {
 		t.Errorf("the model does not fit the schema, so every plan would fail: %v", diags)
