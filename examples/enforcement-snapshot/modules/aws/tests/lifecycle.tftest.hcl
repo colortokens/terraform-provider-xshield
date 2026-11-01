@@ -36,7 +36,7 @@ mock_provider "xshield" {
     }
   }
   mock_data "xshield_enforcement_status" {
-    defaults = { applied_attachments = {} }
+    defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
 

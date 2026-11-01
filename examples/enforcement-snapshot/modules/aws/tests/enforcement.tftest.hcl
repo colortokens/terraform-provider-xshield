@@ -95,7 +95,7 @@ mock_provider "xshield" {
     }
   }
   mock_data "xshield_enforcement_status" {
-    defaults = { applied_attachments = {} }
+    defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
 
@@ -228,6 +228,21 @@ run "applied_attachment_stays_on_a_full_interface" {
   assert {
     condition     = length(data.aws_network_interface.receiving) == 0 && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
     error_message = "an attachment the last receipt holds is neither read again nor left out"
+  }
+}
+
+# An attachment a hand-over offers is already on its interface, so a full interface keeps it.
+run "handed_over_attachment_stays_on_a_full_interface" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this[0]
+    values = { applied_attachments = {}, handover_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0abc" } }
+  }
+
+  assert {
+    condition     = length(data.aws_network_interface.receiving) == 0 && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
+    error_message = "an attachment a hand-over offers is neither read nor left out"
   }
 }
 

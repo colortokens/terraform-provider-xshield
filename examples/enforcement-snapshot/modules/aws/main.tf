@@ -112,10 +112,11 @@ locals {
 }
 
 # An interface that filled up since Xshield last discovered it has no room for a
-# new group, and AWS would refuse the apply. So an attachment the last receipt does
-# not hold goes only on an interface with room for every new group: the others are
-# left out with a warning, the receipt leaves them out, and Xshield refuses the
-# workload once discovery shows the interface full. Only those interfaces are read.
+# new group, and AWS would refuse the apply. So an attachment neither the last
+# receipt holds nor a hand-over offers goes only on an interface with room for every
+# new group: the others are left out with a warning, the receipt leaves them out, and
+# Xshield refuses the workload once discovery shows the interface full. Only those
+# interfaces are read.
 data "xshield_enforcement_status" "this" {
   count = length(local.attachments) > 0 ? 1 : 0
 
@@ -124,8 +125,8 @@ data "xshield_enforcement_status" "this" {
 }
 
 locals {
-  applied_attachments = try(keys(data.xshield_enforcement_status.this[0].applied_attachments), [])
-  new_attachments     = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !contains(local.applied_attachments, key) }
+  held_attachments = concat(try(keys(data.xshield_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_enforcement_status.this[0].handover_attachments), []))
+  new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !contains(local.held_attachments, key) }
 }
 
 data "aws_network_interface" "receiving" {
