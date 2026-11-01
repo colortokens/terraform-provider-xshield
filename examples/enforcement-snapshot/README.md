@@ -56,7 +56,7 @@ The role the workspace assumes needs only these actions; `enforcement-role/` cre
 | Groups and rules | `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:AuthorizeSecurityGroupEgress`, `ec2:RevokeSecurityGroupIngress`, `ec2:RevokeSecurityGroupEgress`, `ec2:ModifySecurityGroupRules`, `ec2:CreateTags`, `ec2:DeleteTags` |
 | Instance attachments | `ec2:ModifyNetworkInterfaceAttribute` |
 | Reads | `ec2:DescribeSecurityGroups`, `ec2:DescribeSecurityGroupRules`, `ec2:DescribeNetworkInterfaces` |
-| Directory | `ssm:PutParameter`, `ssm:DeleteParameter`, `ssm:GetParameter`, `ssm:AddTagsToResource`, `ssm:RemoveTagsFromResource`, `ssm:ListTagsForResource` on `arn:aws:ssm:*:*:parameter/colortokens/*`, and `ssm:DescribeParameters`, which takes no parameter ARN |
+| Directory | `ssm:PutParameter`, `ssm:DeleteParameter`, `ssm:GetParameter`, `ssm:GetParametersByPath`, `ssm:AddTagsToResource`, `ssm:RemoveTagsFromResource`, `ssm:ListTagsForResource` on `arn:aws:ssm:*:*:parameter/colortokens/*`, and `ssm:DescribeParameters`, which takes no parameter ARN |
 
 Deleting a group that an AWS-managed interface still references, such as one Lambda has not yet removed, fails until AWS removes that interface; the next apply then succeeds. Grant `ec2:DetachNetworkInterface` and `ec2:DeleteNetworkInterface` if you would rather Terraform removed such interfaces itself.
 

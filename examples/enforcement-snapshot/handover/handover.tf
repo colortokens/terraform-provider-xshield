@@ -1,7 +1,8 @@
 # Takes over an account from connector delivery without creating its groups again: the plan imports
 # the groups, rules and attachments the cloud connector created, which stay in place and enforced, and
-# adds only what the connector never wrote. Add this file to the enforcement workspace for the first
-# apply after the account moves to pipeline delivery, then delete it.
+# the directory parameters an earlier spell on pipeline delivery left, and adds only what is missing.
+# Add this file to the enforcement workspace for the first apply after the account moves to pipeline
+# delivery, then delete it.
 data "aws_caller_identity" "handover" {}
 data "aws_region" "handover" {}
 
@@ -36,5 +37,16 @@ import {
 import {
   for_each = data.xshield_enforcement_status.handover.handover_attachments
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
+  id       = each.value
+}
+
+data "aws_ssm_parameters_by_path" "handover" {
+  path      = "/colortokens/v1"
+  recursive = true
+}
+
+import {
+  for_each = { for k, d in data.xshield_enforcement_snapshot.handover.directory : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
+  to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

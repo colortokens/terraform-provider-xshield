@@ -132,6 +132,7 @@ data "aws_iam_policy_document" "enforcement" {
       "ssm:PutParameter",
       "ssm:DeleteParameter",
       "ssm:GetParameter",
+      "ssm:GetParametersByPath",
       "ssm:AddTagsToResource",
       "ssm:RemoveTagsFromResource",
       "ssm:ListTagsForResource",
