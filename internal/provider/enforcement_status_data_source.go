@@ -66,6 +66,9 @@ type enforcementStatusDataSourceModel struct {
 	AppliedGroups       types.Map           `tfsdk:"applied_security_groups"`
 	AppliedRules        types.Map           `tfsdk:"applied_rules"`
 	AppliedAttachments  types.Map           `tfsdk:"applied_attachments"`
+	HandOverGroups      types.Map           `tfsdk:"handover_security_groups"`
+	HandOverRules       types.Map           `tfsdk:"handover_rules"`
+	HandOverAttachments types.Map           `tfsdk:"handover_attachments"`
 }
 
 func (d *enforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -92,7 +95,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"state": str("`converged` when the latest receipt matches the expected snapshot, `waiting` when it does but a " +
 				"Full control change still waits on another workspace's apply or on discovery, which its `changeSetHeld` notices " +
 				"name, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied " +
-				"yet, `unpublished` when Xshield has published nothing to apply."),
+				"yet, `unpublished` when Xshield has published nothing to apply, `handedOver` when the account moved to connector " +
+				"delivery, and the cloud connector keeps the groups the pipeline created."),
 			"expected_version": str("Version Xshield expects to be enforced, the hash of everything it asks for."),
 			"applied_version":  str("Version in the latest apply receipt. Null when nothing has been applied."),
 			"applied_at":       str("When the latest receipt was recorded."),
@@ -120,6 +124,11 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"applied_rules": appliedIDs("security group rule ID", "`aws_vpc_security_group_ingress_rule.this`, for a key with `/in/`, or "+
 				"`aws_vpc_security_group_egress_rule.this`, for a key with `/out/`"),
 			"applied_attachments": appliedIDs("attachment import ID, `<network interface ID>_<security group ID>`",
+				"`aws_network_interface_sg_attachment.this`"),
+			"handover_security_groups": handOverIDs("security group ID", "`aws_security_group.this`"),
+			"handover_rules": handOverIDs("security group rule ID", "`aws_vpc_security_group_ingress_rule.this`, for a key with `/in/`, or "+
+				"`aws_vpc_security_group_egress_rule.this`, for a key with `/out/`"),
+			"handover_attachments": handOverIDs("attachment import ID, `<network interface ID>_<security group ID>`",
 				"`aws_network_interface_sg_attachment.this`"),
 			"drift_evaluated": schema.BoolAttribute{Computed: true, Description: "Whether drift could be evaluated: it " +
 				"needs an applied receipt and a cloud connector observation taken after it. An observation older than the " +
@@ -179,7 +188,8 @@ type wireStatus struct {
 		Group     string `json:"group"`
 		Message   string `json:"message"`
 	} `json:"notices"`
-	Drift *wireDrift `json:"drift"`
+	Drift    *wireDrift             `json:"drift"`
+	HandOver *wireRenderedResources `json:"handOver"`
 }
 
 type wireDrift struct {
@@ -235,6 +245,13 @@ func appliedIDs(what, resource string) schema.MapAttribute {
 		what + " of each resource the enforcement module created, keyed as the module keys " + resource + ". Empty before the first receipt."}
 }
 
+func handOverIDs(what, resource string) schema.MapAttribute {
+	return schema.MapAttribute{Computed: true, ElementType: types.StringType, MarkdownDescription: "Before the first receipt of an " +
+		"account moved from connector delivery: the " + what + " of each resource the cloud connector created that the expected " +
+		"snapshot names, keyed as the module keys " + resource + ", so the enforcement workspace imports it rather than creating it " +
+		"again. Empty otherwise."}
+}
+
 func stringMap(m map[string]string) types.Map {
 	values := make(map[string]attr.Value, len(m))
 	for k, v := range m {
@@ -261,6 +278,11 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 		applied = st.Applied.Resources
 	}
 	data.AppliedGroups, data.AppliedRules, data.AppliedAttachments = stringMap(applied.SecurityGroups), stringMap(applied.Rules), stringMap(applied.Attachments)
+	handOver := wireRenderedResources{}
+	if st.HandOver != nil {
+		handOver = *st.HandOver
+	}
+	data.HandOverGroups, data.HandOverRules, data.HandOverAttachments = stringMap(handOver.SecurityGroups), stringMap(handOver.Rules), stringMap(handOver.Attachments)
 	data.LastCheckedAt = optionalString(st.LastCheckedAt)
 	data.PendingSince = optionalString(st.PendingSince)
 	data.PendingRulesAdded, data.PendingRulesRemoved, data.PendingGroups, data.PendingAttachments = []types.String{}, []types.String{}, []types.String{}, []types.String{}

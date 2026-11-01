@@ -282,6 +282,8 @@ func renderable(snap wireSnapshot) error {
 	return nil
 }
 
+const codeHandedOver = "handedOver"
+
 type wireExpected struct {
 	Version string `json:"version"`
 }
@@ -319,6 +321,12 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 	if heartbeat || !isPinned {
 		expected, published, err := expectedVersion(ctx, api, account, region, heartbeat)
 		switch {
+		case isAPIRefusal(err, http.StatusConflict, codeHandedOver):
+			diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery",
+				"The cloud connector now keeps the groups, rules and attachments this workspace created, so applying would remove "+
+					"what it enforces. Replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as "+
+					"the provider's enforcement-snapshot/leave example shows, then stop running this workspace.")
+			return nil, false
 		case err != nil:
 			diags.AddError("Cannot resolve the snapshot Xshield expects for "+account+"/"+region,
 				err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")

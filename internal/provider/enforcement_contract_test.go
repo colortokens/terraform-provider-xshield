@@ -249,3 +249,24 @@ func TestRefusedReceiptSaysWhatToChange(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// Until its first receipt, an account moved from connector delivery gets the connector's IDs to import.
+func TestStatusMapsTheHandOverForImport(t *testing.T) {
+	t.Parallel()
+	var data enforcementStatusDataSourceModel
+	setStatus(&data, wireStatus{State: "unapplied", HandOver: &wireRenderedResources{
+		SecurityGroups: map[string]string{"i-web": "sg-0web"},
+		Rules:          map[string]string{"i-web/in/tcp/443/0.0.0.0/0": "sgr-in"},
+		Attachments:    map[string]string{"i-web/eni-web": "eni-web_sg-0web"},
+	}})
+	if got := data.HandOverGroups.Elements()["i-web"]; got == nil || got.String() != `"sg-0web"` {
+		t.Errorf("hand-over groups %v", data.HandOverGroups)
+	}
+	if len(data.HandOverRules.Elements()) != 1 || len(data.HandOverAttachments.Elements()) != 1 {
+		t.Errorf("hand-over rules %v attachments %v", data.HandOverRules, data.HandOverAttachments)
+	}
+	setStatus(&data, wireStatus{State: "converged"})
+	if data.HandOverGroups.IsNull() || len(data.HandOverGroups.Elements()) != 0 {
+		t.Errorf("hand-over %v once the pipeline owns the account, want an empty map", data.HandOverGroups)
+	}
+}

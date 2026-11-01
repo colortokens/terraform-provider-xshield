@@ -326,3 +326,19 @@ func readTestdata(t *testing.T, name string) string {
 	}
 	return string(raw)
 }
+
+// A handed-over account stops the plan, saying how to keep its resources, rather than planning their removal.
+func TestEnforcementPlanStopsOnceTheAccountIsHandedOver(t *testing.T) {
+	t.Parallel()
+	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{
+		"/expected": {http.StatusConflict, `{"status":409,"code":"handedOver","message":"handed over"}`},
+	})
+	var m enforcementSnapshotDataSourceModel
+	ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m)
+	if ok || !strings.Contains(errs, "moved 123456789012/us-east-1 to connector delivery") || !strings.Contains(errs, "destroy = false") {
+		t.Errorf("ok=%v %q, want the plan stopped with how to keep the resources", ok, errs)
+	}
+	if slices.ContainsFunc(*requested, func(p string) bool { return strings.Contains(p, "/versions/") }) {
+		t.Errorf("requested %v: no snapshot is read once the account is handed over", *requested)
+	}
+}
