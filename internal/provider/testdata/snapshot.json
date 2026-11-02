@@ -77,7 +77,7 @@
       "i-app-1/out/tcp/443/198.51.100.0/24": {
         "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -95,7 +95,7 @@
       "i-app-1/out/tcp/443/203.0.113.0/24": {
         "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -113,7 +113,7 @@
       "i-app-2/out/tcp/443/198.51.100.0/24": {
         "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -131,7 +131,7 @@
       "i-app-2/out/tcp/443/203.0.113.0/24": {
         "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -149,7 +149,7 @@
       "i-db-1/out/tcp/443/198.51.100.0/24": {
         "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -167,7 +167,7 @@
       "i-db-1/out/tcp/443/203.0.113.0/24": {
         "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -185,7 +185,7 @@
       "i-db-2/out/tcp/443/198.51.100.0/24": {
         "cidrIpv4": "198.51.100.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -203,7 +203,7 @@
       "i-db-2/out/tcp/443/203.0.113.0/24": {
         "cidrIpv4": "203.0.113.0/24",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-saas r=760572cfaf7891c9",
+        "description": "ColorTokens authored enforce [Template saas]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -239,7 +239,7 @@
       "i-app-1/in/tcp/443/0.0.0.0/0": {
         "cidrIpv4": "0.0.0.0/0",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-web r=d4344eaf868b3a0d",
+        "description": "ColorTokens authored enforce [Template web]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -257,7 +257,7 @@
       "i-app-1/in/tcp/443/::/0": {
         "cidrIpv4": null,
         "cidrIpv6": "::/0",
-        "description": "ColorTokens authored enforce t=tmpl-web r=d4344eaf868b3a0d",
+        "description": "ColorTokens authored enforce [Template web]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -275,7 +275,7 @@
       "i-app-1/in/tcp/8080/10.0.0.0/8": {
         "cidrIpv4": "10.0.0.0/8",
         "cidrIpv6": null,
-        "description": "ColorTokens test-specific test t=tmpl-admin r=51b2d0381efb2053",
+        "description": "ColorTokens test-specific test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -293,7 +293,7 @@
       "i-app-1/in/tcp/8080/172.16.0.0/12": {
         "cidrIpv4": "172.16.0.0/12",
         "cidrIpv6": null,
-        "description": "ColorTokens test-wide test t=tmpl-admin r=eb0df47bef362037",
+        "description": "ColorTokens test-wide test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -311,7 +311,7 @@
       "i-app-1/in/tcp/8080/192.168.0.0/16": {
         "cidrIpv4": "192.168.0.0/16",
         "cidrIpv6": null,
-        "description": "ColorTokens test-wide test t=tmpl-admin r=eb0df47bef362037",
+        "description": "ColorTokens test-wide test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -329,7 +329,7 @@
       "i-app-1/in/tcp/8443/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -347,7 +347,7 @@
       "i-app-1/in/tcp/8443/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -365,7 +365,7 @@
       "i-app-1/in/tcp/8443/10.20.2.21/32": {
         "cidrIpv4": "10.20.2.21/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -383,7 +383,7 @@
       "i-app-1/in/tcp/8443/10.20.2.22/32": {
         "cidrIpv4": "10.20.2.22/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -401,7 +401,7 @@
       "i-app-2/in/tcp/443/0.0.0.0/0": {
         "cidrIpv4": "0.0.0.0/0",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-web r=d4344eaf868b3a0d",
+        "description": "ColorTokens authored enforce [Template web]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -419,7 +419,7 @@
       "i-app-2/in/tcp/443/::/0": {
         "cidrIpv4": null,
         "cidrIpv6": "::/0",
-        "description": "ColorTokens authored enforce t=tmpl-web r=d4344eaf868b3a0d",
+        "description": "ColorTokens authored enforce [Template web]",
         "fromPort": 443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -437,7 +437,7 @@
       "i-app-2/in/tcp/8080/10.0.0.0/8": {
         "cidrIpv4": "10.0.0.0/8",
         "cidrIpv6": null,
-        "description": "ColorTokens test-specific test t=tmpl-admin r=51b2d0381efb2053",
+        "description": "ColorTokens test-specific test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -455,7 +455,7 @@
       "i-app-2/in/tcp/8080/172.16.0.0/12": {
         "cidrIpv4": "172.16.0.0/12",
         "cidrIpv6": null,
-        "description": "ColorTokens test-wide test t=tmpl-admin r=eb0df47bef362037",
+        "description": "ColorTokens test-wide test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -473,7 +473,7 @@
       "i-app-2/in/tcp/8080/192.168.0.0/16": {
         "cidrIpv4": "192.168.0.0/16",
         "cidrIpv6": null,
-        "description": "ColorTokens test-wide test t=tmpl-admin r=eb0df47bef362037",
+        "description": "ColorTokens test-wide test [Template admin]",
         "fromPort": 8080,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -491,7 +491,7 @@
       "i-app-2/in/tcp/8443/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -509,7 +509,7 @@
       "i-app-2/in/tcp/8443/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -527,7 +527,7 @@
       "i-app-2/in/tcp/8443/10.20.2.21/32": {
         "cidrIpv4": "10.20.2.21/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -545,7 +545,7 @@
       "i-app-2/in/tcp/8443/10.20.2.22/32": {
         "cidrIpv4": "10.20.2.22/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -563,7 +563,7 @@
       "i-db-1/in/tcp/5432/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -581,7 +581,7 @@
       "i-db-1/in/tcp/5432/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -599,7 +599,7 @@
       "i-db-1/in/tcp/8443/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -617,7 +617,7 @@
       "i-db-1/in/tcp/8443/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -635,7 +635,7 @@
       "i-db-1/in/tcp/8443/10.20.2.21/32": {
         "cidrIpv4": "10.20.2.21/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -653,7 +653,7 @@
       "i-db-1/in/tcp/8443/10.20.2.22/32": {
         "cidrIpv4": "10.20.2.22/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -671,7 +671,7 @@
       "i-db-2/in/tcp/5432/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -689,7 +689,7 @@
       "i-db-2/in/tcp/5432/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -707,7 +707,7 @@
       "i-db-2/in/tcp/8443/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -725,7 +725,7 @@
       "i-db-2/in/tcp/8443/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -743,7 +743,7 @@
       "i-db-2/in/tcp/8443/10.20.2.21/32": {
         "cidrIpv4": "10.20.2.21/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -761,7 +761,7 @@
       "i-db-2/in/tcp/8443/10.20.2.22/32": {
         "cidrIpv4": "10.20.2.22/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-pci r=8775ee0a3e0df791",
+        "description": "ColorTokens authored enforce [Template pci]",
         "fromPort": 8443,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -779,7 +779,7 @@
       "i-db-2/in/tcp/9999/10.1.2.3/32": {
         "cidrIpv4": "10.1.2.3/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-batch r=633e20e97beede57",
+        "description": "ColorTokens authored enforce [Template batch]",
         "fromPort": 9999,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -797,7 +797,7 @@
       "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-aurora r=c6b5f50f5e3b63be",
+        "description": "ColorTokens authored enforce [Template aurora]",
         "fromPort": 3306,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -815,7 +815,7 @@
       "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-aurora r=c6b5f50f5e3b63be",
+        "description": "ColorTokens authored enforce [Template aurora]",
         "fromPort": 3306,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -833,7 +833,7 @@
       "rds/orders-db/in/tcp/5432/10.20.1.11/32": {
         "cidrIpv4": "10.20.1.11/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -851,7 +851,7 @@
       "rds/orders-db/in/tcp/5432/10.20.1.12/32": {
         "cidrIpv4": "10.20.1.12/32",
         "cidrIpv6": null,
-        "description": "ColorTokens authored enforce t=tmpl-db r=130952efea4f7d35",
+        "description": "ColorTokens authored enforce [Template db]",
         "fromPort": 5432,
         "ipProtocol": "tcp",
         "prefixListId": null,
@@ -991,5 +991,5 @@
   "cloudProvider": "aws",
   "region": "us-east-1",
   "schemaVersion": "3",
-  "version": "bdd3d87872b455e649c812e414965f2d631df639029b6e5377f1161adf80350ba109ec046a588872a319ff3319e66a4bf07297c8c9eeab10a13597326fec964b"
+  "version": "b061afc5473e0168e8494d851d04805ea4b2a9205b173fd99ead96f533d5dc565be99cc68a5591be18f5e39a5ce6600f146965e5b77789f133f5359d69987eb5"
 }

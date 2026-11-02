@@ -43,25 +43,25 @@ mock_provider "xshield" {
         "i-0a1/in/tcp/443/0.0.0.0/0" = {
           security_group = "i-0a1", ip_protocol = "tcp", from_port = 443, to_port = 443
           cidr_ipv4      = "0.0.0.0/0", cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = null
-          description    = "ColorTokens authored enforce t=tmpl-web r=321b0542e7696510"
+          description    = "ColorTokens authored enforce [Web servers]"
           tags           = { ManagedBy = "ColorTokens", "ct:origin" = "authored", "ct:mode" = "enforce", "ct:template" = "tmpl-web", "ct:rule" = "321b0542e7696510" }
         }
         "i-0a1/in/tcp/443/::/0" = {
           security_group = "i-0a1", ip_protocol = "tcp", from_port = 443, to_port = 443
           cidr_ipv4      = null, cidr_ipv6 = "::/0", prefix_list_id = null, referenced_security_group_id = null
-          description    = "ColorTokens authored enforce t=tmpl-web r=321b0542e7696510"
+          description    = "ColorTokens authored enforce [Web servers]"
           tags           = { ManagedBy = "ColorTokens", "ct:origin" = "authored", "ct:mode" = "enforce", "ct:template" = "tmpl-web", "ct:rule" = "321b0542e7696510" }
         }
         "i-0a1/in/-1/any/10.0.0.0/8" = {
           security_group = "i-0a1", ip_protocol = "-1", from_port = null, to_port = null
           cidr_ipv4      = "10.0.0.0/8", cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = null
-          description    = "ColorTokens authored enforce t=tmpl-all r=9c0e1f2a3b4c5d6e"
+          description    = "ColorTokens authored enforce [All traffic]"
           tags           = { ManagedBy = "ColorTokens", "ct:origin" = "authored", "ct:mode" = "enforce", "ct:template" = "tmpl-all", "ct:rule" = "9c0e1f2a3b4c5d6e" }
         }
         "rds/orders-db/in/tcp/5432/10.20.1.11/32" = {
           security_group = "rds/orders-db", ip_protocol = "tcp", from_port = 5432, to_port = 5432
           cidr_ipv4      = "10.20.1.11/32", cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = null
-          description    = "ColorTokens authored enforce t=tmpl-db r=a1b2c3d4e5f60718"
+          description    = "ColorTokens authored enforce [Databases]"
           tags           = { ManagedBy = "ColorTokens", "ct:origin" = "authored", "ct:mode" = "enforce", "ct:template" = "tmpl-db", "ct:rule" = "a1b2c3d4e5f60718" }
         }
       }
@@ -69,7 +69,7 @@ mock_provider "xshield" {
         "i-0a1/out/tcp/443/pl-0a1b2c3d" = {
           security_group = "i-0a1", ip_protocol = "tcp", from_port = 443, to_port = 443
           cidr_ipv4      = null, cidr_ipv6 = null, prefix_list_id = "pl-0a1b2c3d", referenced_security_group_id = null
-          description    = "ColorTokens authored enforce t=tmpl-saas r=0f1e2d3c4b5a6978"
+          description    = "ColorTokens authored enforce [SaaS endpoints]"
           tags           = { ManagedBy = "ColorTokens", "ct:origin" = "authored", "ct:mode" = "enforce", "ct:template" = "tmpl-saas", "ct:rule" = "0f1e2d3c4b5a6978" }
         }
       }

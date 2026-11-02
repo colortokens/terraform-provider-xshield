@@ -64,7 +64,7 @@ func TestSnapshotMapsEveryRuleAttributeAndKeepsNullsNull(t *testing.T) {
 		v4.CIDRIPv4.ValueString() != "0.0.0.0/0" || !v4.CIDRIPv6.IsNull() || !v4.PrefixListID.IsNull() {
 		t.Errorf("IPv4 rule %+v", v4)
 	}
-	if !strings.HasPrefix(v4.Description.ValueString(), "ColorTokens authored enforce t=tmpl-web r=") || v4.Tags["ct:mode"] != "enforce" {
+	if v4.Description.ValueString() != "ColorTokens authored enforce [Template web]" || v4.Tags["ct:template"] != "tmpl-web" || v4.Tags["ct:mode"] != "enforce" {
 		t.Errorf("rule description %q tags %v, want the connector's", v4.Description.ValueString(), v4.Tags)
 	}
 	if v6 := m.IngressRules["i-app-1/in/tcp/443/::/0"]; v6.CIDRIPv6.ValueString() != "::/0" || !v6.CIDRIPv4.IsNull() {
