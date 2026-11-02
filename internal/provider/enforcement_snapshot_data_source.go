@@ -108,7 +108,7 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 			"`ip_protocol`: `tcp`, `udp`, `icmp`, `icmpv6`, `-1` for all traffic, or a protocol number. "+
 			"`from_port`, `to_port`: the port range, or the ICMP type and code (`-1` for all). Null for a protocol without ports. "+
 			"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the source; exactly one is set. "+
-			"`referenced_security_group_id` is set only on a Full control cohort's copy of a customer rule that names a group. "+
+			"`referenced_security_group_id` is set on a Full control cohort's copy of a customer rule that names a group, and on a rule that names another workload's Xshield group in place of its private addresses. "+
 			"`description`, `tags`: the rule description and tags the cloud connector writes.")
 	}
 	resp.Schema = schema.Schema{
