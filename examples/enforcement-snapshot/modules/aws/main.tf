@@ -76,6 +76,14 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   description                  = each.value.description
   referenced_security_group_id = each.value.referenced_security_group_id
   tags                         = merge(var.tags, each.value.tags)
+
+  # A group's new rules go in before its old ones come out, so access a change keeps is never
+  # dropped in between, and a rule AWS refuses leaves the old ones in place. Where old and new
+  # together would pass the account's rules per security group, Xshield takes out first the old
+  # rules no new one replaces, and the new ones go in at the next apply.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "this" {
@@ -91,6 +99,10 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   description                  = each.value.description
   referenced_security_group_id = each.value.referenced_security_group_id
   tags                         = merge(var.tags, each.value.tags)
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # An instance's interfaces go with the instance, often before discovery tells
