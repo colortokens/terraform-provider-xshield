@@ -112,8 +112,12 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
 					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType, "message": types.StringType,
 				}},
-				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A workload with a refusal " +
-					"carries no Xshield group until the cause is fixed. " +
+				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A refusal leaves a workload " +
+					"as it was: one that carries an Xshield group keeps it, with the rules last applied, and one that carries " +
+					"none gets none until the cause is fixed. A contained workload's group stays off its interfaces until the " +
+					"containment is reverted. A `groupRefused` group that fits once changed, but not while it changes, is the " +
+					"one exception: the rules its change removes and no new rule replaces come out first, and its new rules " +
+					"go in at the next apply if they then fit. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. " +
 					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
