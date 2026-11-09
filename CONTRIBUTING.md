@@ -28,9 +28,9 @@ Every pull request must keep `make build`, `make test`, `make vet` and the
 formatting check green. These are enforced by the `Test` GitHub Actions
 workflow.
 
-Note that `docs/` is currently maintained by hand and has diverged from the
-provider schemas, so `make docs` will overwrite the curated descriptions. Until
-the two are reconciled, edit the affected page alongside the schema change.
+`docs/` is generated from the schema descriptions and `examples/` by
+`make docs`. Change the schema or example, then regenerate; do not edit a page
+by hand.
 
 ## Tests
 
@@ -61,12 +61,11 @@ existing asset and then update it.
 
 The enforcement snapshot tests need an account and region whose policy delivery
 is Terraform pipeline. The `xshield_enforcement_receipt` test sends receipts with
-placeholder AWS IDs, so use an account that no real pipeline applies. To run
-these tests without a tenant, start
-`examples/enforcement-snapshot/demo-server/serve.py`, set `XSHIELD_SERVER_URL`
-to it, the account and region to `123456789012` and `us-east-1`, the API key
-variables to any values with `XSHIELD_PRIVATE_KEY_PATH` naming any RSA key, and
-run `TF_ACC=1 go test ./internal/provider/ -run 'TestAcc(Enforcement|SecurityGroupRules)'`.
+placeholder AWS IDs, so use an account that no real pipeline applies. Without a
+tenant, the unit tests in `internal/provider` cover each snapshot, status,
+receipt and customer group change request against a local stand-in, and the
+module tests under
+`examples/enforcement-snapshot/modules/aws/tests` mock both providers.
 
 The full acceptance suite runs nightly against a matrix of Terraform versions in
 the `Nightly acceptance tests` workflow.

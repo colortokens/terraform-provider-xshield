@@ -91,6 +91,20 @@ Understanding the tenant, so policy can be written without the portal:
 | [`xshield_deployment_simulation`](docs/data-sources/deployment_simulation.md) | What firewall rules would one asset end up running? |
 | [`xshield_work_request`](docs/data-sources/work_request.md) | Did that asynchronous change finish? |
 
+## Enforcing AWS policy through your own pipeline
+
+When an AWS account's policy delivery is Terraform pipeline, your pipeline creates the security
+groups Xshield renders instead of the cloud connector. Start with
+[examples/enforcement-snapshot](examples/enforcement-snapshot/README.md), whose modules use these:
+
+| Resource or data source | Does |
+| --- | --- |
+| [`xshield_enforcement_snapshot`](docs/data-sources/enforcement_snapshot.md) | Fetches the groups, rules and attachments Xshield expects in one account and region. |
+| [`xshield_enforcement_receipt`](docs/resources/enforcement_receipt.md) | Reports which AWS resource was created for each key in the snapshot. |
+| [`xshield_enforcement_status`](docs/data-sources/enforcement_status.md) | Says whether the account has converged, and what drift the cloud connector sees. |
+| [`xshield_security_group_changes`](docs/data-sources/security_group_changes.md) | Lists your own groups that an approved Full control change applies to. |
+| [`xshield_security_group_rules`](docs/data-sources/security_group_rules.md) | Returns the rules to declare for one of those groups, with the approved change applied. |
+
 ## Running the provider locally
 
 With a local build, through `dev_overrides`:

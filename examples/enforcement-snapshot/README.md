@@ -15,7 +15,6 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
 | `handover/` | Import blocks that take over the groups the cloud connector created, when an account moves to pipeline delivery. |
 | `leave/` | A `removed` block that hands the account's groups to the cloud connector, when an account moves back to connector delivery. |
-| `demo-server/` | A stand-in for the Xshield API, to try all of this without a tenant. |
 | `connector-managed/` | The other way: author policy in HCL and let the Xshield connector enforce it. |
 
 ## Quickstart
@@ -116,15 +115,7 @@ Copy `monitor/` into any workspace, or run it on a schedule. It alerts when Xshi
 
 ## Try it locally
 
-No tenant or AWS account needed for the stand-in and the module tests.
-
-```bash
-python3 demo-server/serve.py
-```
-
-The stand-in serves the sample snapshot in `demo-server/` and checks receipts as Xshield does, so a configuration that leaves a resource out fails there first.
-
-To run the module tests, which mock both providers, build the provider from this repository and point Terraform at it. Run these from this directory:
+The module tests mock both providers, so they need no tenant or AWS account. Build the provider from this repository and point Terraform at it. Run these from this directory:
 
 ```bash
 (cd ../.. && go build -o examples/enforcement-snapshot/bin/ .) && sed "s|/absolute/path/to/examples/enforcement-snapshot|$PWD|" dev.tfrc > .dev.tfrc

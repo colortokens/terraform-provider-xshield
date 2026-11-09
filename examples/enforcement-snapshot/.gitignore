@@ -1,9 +1,9 @@
-# never commit: local provider build, provider caches, generated demo key
+# never commit: local provider build, provider caches, private keys
 bin/
 .terraform/
 *.tfstate
 *.tfstate.*
-demo-signing-key.pem
+*.pem
 .dev.tfrc
 .terraform.lock.hcl
 policies/sentinel/.sentinel/
