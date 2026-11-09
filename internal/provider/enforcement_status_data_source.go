@@ -6,9 +6,11 @@ import (
 	"net/http"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -46,6 +48,7 @@ type noticeModel struct {
 }
 
 type enforcementStatusDataSourceModel struct {
+	Cloud               types.String        `tfsdk:"cloud"`
 	CloudAccountID      types.String        `tfsdk:"cloud_account_id"`
 	Region              types.String        `tfsdk:"region"`
 	Published           types.Bool          `tfsdk:"published"`
@@ -88,6 +91,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"It reads only, so it can run inside a `check` block. Where checks are evaluated on a schedule, such as HCP " +
 			"Terraform continuous validation, that alerts on drift and stalled pipelines without anyone running an apply.",
 		Attributes: map[string]schema.Attribute{
+			"cloud": schema.StringAttribute{Optional: true, Computed: true, Validators: []validator.String{stringvalidator.OneOf(cloudAWS)},
+				Description: "Cloud to report on. Only `aws` is supported, and it is the default."},
 			"cloud_account_id": schema.StringAttribute{Required: true, Description: "Cloud account to report on."},
 			"region":           schema.StringAttribute{Required: true, Description: "Region to report on."},
 			"published": schema.BoolAttribute{Computed: true, Description: "False while Xshield has published nothing for this " +
@@ -220,13 +225,16 @@ func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
+	if data.Cloud.IsNull() {
+		data.Cloud = types.StringValue(cloudAWS)
+	}
 	account, region := data.CloudAccountID.ValueString(), data.Region.ValueString()
 
 	data.DriftFindings = []driftFindingModel{}
 	data.DriftEvaluated = types.BoolValue(false)
 	data.DriftObservedAt = types.StringNull()
 	var st wireStatus
-	err := d.api.get(ctx, d.api.endpoint(cloudAWS, account, region, "status"), &st)
+	err := d.api.get(ctx, d.api.endpoint(data.Cloud.ValueString(), account, region, "status"), &st)
 	if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
 		setUnpublished(&data)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

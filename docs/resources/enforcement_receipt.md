@@ -55,6 +55,7 @@ resource "xshield_enforcement_receipt" "this" {
 ### Optional
 
 - `attachments` (Map of String) Attachment ID created for each key in the snapshot's `interface_attachments`.
+- `cloud` (String) Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.
 
 ### Read-Only
 
@@ -69,7 +70,7 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Import by account and region. This adopts the receipt Xshield currently holds,
+# Import an AWS account's receipt by account and region. This adopts the receipt Xshield currently holds,
 # which recovers a lost state file without sending a new receipt.
 terraform import xshield_enforcement_receipt.this "123456789012/us-east-1"
 ```

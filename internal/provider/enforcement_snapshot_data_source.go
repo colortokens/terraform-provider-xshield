@@ -277,8 +277,8 @@ type wireCustomerGroupChanges struct {
 	Groups         map[string]wireCustomerGroupChange `json:"customerGroupChanges"`
 }
 
-// supportedSnapshotSchema is the snapshot format this provider renders. A newer
-// format may carry resources this provider would silently leave out.
+// supportedSnapshotSchema is the AWS plan format this provider renders. Another cloud's plan carries a version of
+// its own, so adding one never changes this; a newer AWS format may carry resources this provider would leave out.
 const supportedSnapshotSchema = "3"
 
 func renderable(snap wireSnapshot) error {

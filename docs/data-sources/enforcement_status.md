@@ -47,6 +47,10 @@ check "xshield_enforcement" {
 - `cloud_account_id` (String) Cloud account to report on.
 - `region` (String) Region to report on.
 
+### Optional
+
+- `cloud` (String) Cloud to report on. Only `aws` is supported, and it is the default.
+
 ### Read-Only
 
 - `applied_at` (String) When the latest receipt was recorded.

@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -31,6 +34,7 @@ type enforcementReceiptResource struct {
 
 type enforcementReceiptResourceModel struct {
 	ID              types.String `tfsdk:"id"`
+	Cloud           types.String `tfsdk:"cloud"`
 	CloudAccountID  types.String `tfsdk:"cloud_account_id"`
 	Region          types.String `tfsdk:"region"`
 	Workspace       types.String `tfsdk:"workspace"`
@@ -65,6 +69,14 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Receipt identifier assigned by Xshield.",
+			},
+			"cloud": schema.StringAttribute{
+				Optional:      true,
+				Computed:      true,
+				Default:       stringdefault.StaticString(cloudAWS),
+				Validators:    []validator.String{stringvalidator.OneOf(cloudAWS)},
+				Description:   "Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.",
+				PlanModifiers: replace,
 			},
 			"cloud_account_id": schema.StringAttribute{
 				Required:      true,
@@ -190,7 +202,7 @@ func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcement
 		ReceiptID string    `json:"receiptId"`
 		AppliedAt time.Time `json:"appliedAt"`
 	}
-	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
+	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
 	if err := r.api.post(ctx, endpoint, body, http.StatusCreated, &created); err != nil {
 		diags.AddError("Xshield did not accept the apply receipt", err.Error()+"\n\n"+receiptAdvice(err))
 		return
@@ -232,9 +244,14 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// State written before the attribute existed holds no cloud, and every such receipt was for AWS.
+	if data.Cloud.IsNull() {
+		data.Cloud = types.StringValue(cloudAWS)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud"), cloudAWS)...)
+	}
 
 	var status wireConvergence
-	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
+	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
 		resp.Diagnostics.AddWarning("Cannot confirm Xshield still holds this apply receipt", err.Error())
 		return
@@ -290,14 +307,16 @@ func (r *enforcementReceiptResource) Delete(ctx context.Context, req resource.De
 	// A receipt is a historical record; Xshield keeps it after the resource goes.
 }
 
-// ImportState takes "<cloud_account_id>/<region>" and adopts the receipt
-// Xshield currently holds for it.
+// ImportState takes "<cloud_account_id>/<region>" for an AWS account and adopts
+// the receipt Xshield currently holds for it. An id with more parts is refused,
+// so one that names the cloud first can be added without changing this one.
 func (r *enforcementReceiptResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	account, region, ok := strings.Cut(req.ID, "/")
-	if !ok || account == "" || region == "" {
+	if !ok || account == "" || region == "" || strings.Contains(region, "/") {
 		resp.Diagnostics.AddError("Invalid import id", fmt.Sprintf("expected <cloud_account_id>/<region>, got %q", req.ID))
 		return
 	}
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud"), cloudAWS)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud_account_id"), account)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("region"), region)...)
 }
