@@ -81,7 +81,7 @@ func (s *Xshield) DoRaw(ctx context.Context, method, url string, body []byte, ma
 	if err != nil {
 		return RawResponse{}, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.ContentLength > maxBody {
 		return RawResponse{}, &ResponseTooLargeError{Limit: maxBody, ContentLength: res.ContentLength}
