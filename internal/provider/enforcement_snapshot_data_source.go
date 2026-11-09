@@ -214,14 +214,24 @@ type wireRuleMatch struct {
 	ReferencedSecurityGroupID *string `json:"referencedSecurityGroupId"`
 }
 
-// wireCustomerGroupChange is a Full control change to one of the customer's own groups.
+// wireCustomerGroupChange is a Full control change to one of the customer's own groups; GroupID is its AWS id.
 type wireCustomerGroupChange struct {
-	Revoke     []wireRuleMatch `json:"revoke"`
-	ChangeSets []struct {
-		ID    string          `json:"id"`
-		State string          `json:"state"`
-		Moves []wireRuleMatch `json:"moves"`
-	} `json:"changeSets"`
+	GroupID    string               `json:"groupId"`
+	Revoke     []wireRuleMatch      `json:"revoke"`
+	ChangeSets []wireGroupChangeSet `json:"changeSets"`
+}
+
+type wireGroupChangeSet struct {
+	ID    string          `json:"id"`
+	State string          `json:"state"`
+	Moves []wireMovedRule `json:"moves"`
+}
+
+// wireMovedRule.KeptByEveryMember is what every member of the group keeps of the moved rule; a server that does not
+// send it leaves it empty, so any traffic of the moved rule counts as taken from some member.
+type wireMovedRule struct {
+	wireRuleMatch
+	KeptByEveryMember []wireRuleMatch `json:"keptByEveryMember"`
 }
 
 type wireSnapshot struct {

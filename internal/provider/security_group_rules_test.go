@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -41,7 +42,10 @@ func keysOf(values []types.String) []string {
 func narrowed(changes wireCustomerGroupChanges) wireCustomerGroupChanges {
 	change := changes.Groups["vpc-1/web"]
 	change.ChangeSets[0].State = "narrowing"
-	change.Revoke = change.ChangeSets[0].Moves
+	change.Revoke = nil
+	for _, m := range change.ChangeSets[0].Moves {
+		change.Revoke = append(change.Revoke, m.wireRuleMatch)
+	}
 	changes.Groups["vpc-1/web"] = change
 	return changes
 }
@@ -98,6 +102,24 @@ func TestRulesFilterLeavesOutTheMovedRuleByItsContent(t *testing.T) {
 	}
 	if got := sortedKeys(data.EgressRules); !slices.Equal(got, []string{"https_out"}) {
 		t.Errorf("egress kept %v, want the same rule outbound kept: only the ingress rule moved", got)
+	}
+}
+
+// A rule declared without tags comes back without tags, so a rule adopted with an import block,
+// which AWS reads back with null tags, plans no update.
+func TestRulesFilterReturnsTagsAsDeclared(t *testing.T) {
+	t.Parallel()
+	data := webRules()
+	tagged := declaredRule("tcp", 22, "10.0.0.0/8")
+	tagged.Tags = types.MapValueMust(types.StringType, map[string]attr.Value{"owner": types.StringValue("netops")})
+	data.Ingress["ssh_office"] = tagged
+	filterDeclaredRules(data, nil)
+
+	if tags := data.IngressRules["https_all"].Tags; !tags.IsNull() {
+		t.Errorf("tags %v, want null as declared", tags)
+	}
+	if tags := data.IngressRules["ssh_office"].Tags; !tags.Equal(tagged.Tags) {
+		t.Errorf("tags %v, want %v as declared", tags, tagged.Tags)
 	}
 }
 

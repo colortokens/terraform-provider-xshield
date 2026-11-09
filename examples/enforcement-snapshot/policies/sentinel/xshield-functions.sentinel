@@ -1,0 +1,185 @@
+# Shared by the Xshield Full control policies. Data sources are read from the state the plan read them into.
+
+import "tfplan/v2" as tfplan
+import "tfstate/v2" as tfstate
+import "strings"
+
+rule_types = ["aws_vpc_security_group_ingress_rule", "aws_vpc_security_group_egress_rule"]
+
+peer_names = ["cidr_ipv4", "cidr_ipv6", "prefix_list_id", "referenced_security_group_id"]
+
+rules_sources = filter tfstate.resources as _, r {
+	r.mode is "data" and r.type is "xshield_security_group_rules"
+}
+
+rule_changes = filter tfplan.resource_changes as _, rc {
+	rc.type in rule_types
+}
+
+protocol_names = {"6": "tcp", "17": "udp", "1": "icmp", "58": "icmpv6", "all": "-1"}
+
+canonical_protocol = func(protocol) {
+	p = strings.to_lower(protocol)
+	return protocol_names[p] else p
+}
+
+traffic = func(sg_rule) {
+	t = {"protocol": canonical_protocol(sg_rule.ip_protocol)}
+	for peer_names as name {
+		t[name] = sg_rule[name] else null
+	}
+	if t.protocol is not "-1" {
+		t["from_port"] = sg_rule.from_port else null
+		t["to_port"] = sg_rule.to_port else null
+	}
+	return t
+}
+
+had = func(sg_rule, group, want) {
+	return sg_rule is not null and (sg_rule.security_group_id else null) is group and traffic(sg_rule) == want
+}
+
+had_before = func(type, group, want) {
+	return any rule_changes as _, other {
+		other.type is type and "delete" in other.change.actions and had(other.change.before else null, group, want)
+	}
+}
+
+# adds: the change gives the group the traffic, rather than keeping a rule it already had under another key or address.
+adds = func(rc, group, want) {
+	after = rc.change.after else null
+	if not had(after, group, want) {
+		return false
+	}
+	if "create" in rc.change.actions {
+		return not had_before(rc.type, group, want)
+	}
+	if rc.change.actions == ["update"] {
+		return not had(rc.change.before else null, group, want)
+	}
+	return false
+}
+
+has_after = func(type, group, want) {
+	return any rule_changes as _, other {
+		other.type is type and "create" in other.change.actions and had(other.change.after else null, group, want)
+	}
+}
+
+removes = func(rc, group, want) {
+	if not had(rc.change.before else null, group, want) {
+		return false
+	}
+	if "delete" in rc.change.actions {
+		return not has_after(rc.type, group, want)
+	}
+	if rc.change.actions == ["update"] {
+		return not had(rc.change.after else null, group, want)
+	}
+	return false
+}
+
+split_rule = func(key) {
+	parts = strings.split(key, "/")
+	return [parts[0], strings.join(parts[1:], "/")]
+}
+
+peer_word = {"ingress": "from", "egress": "to"}
+
+ports_of = func(t) {
+	if t.protocol is "-1" {
+		return "all traffic"
+	}
+	if t.from_port is null or t.from_port is -1 {
+		return t.protocol
+	}
+	if t.from_port is t.to_port {
+		return t.protocol + " " + string(t.from_port)
+	}
+	return t.protocol + " " + string(t.from_port) + "-" + string(t.to_port)
+}
+
+peer_of = func(sg_rule) {
+	for peer_names as name {
+		if (sg_rule[name] else null) is not null {
+			return sg_rule[name]
+		}
+	}
+	return ""
+}
+
+describe = func(direction, sg_rule) {
+	return ports_of(traffic(sg_rule)) + " " + peer_word[direction] + " " + peer_of(sg_rule)
+}
+
+reopened_access = func() {
+	found = []
+	for rules_sources as _, source {
+		group = source.values.security_group_id else null
+		if group is null {
+			continue
+		}
+		for source.values.reopens else [] as reopen {
+			parts = split_rule(reopen["rule"])
+			declared = source.values[parts[0]][parts[1]] else null
+			if declared is null {
+				continue
+			}
+			want = traffic(declared)
+			for rule_changes as address, rc {
+				if rc.type is "aws_vpc_security_group_" + parts[0] + "_rule" and adds(rc, group, want) {
+					append(found, address + " adds " + describe(parts[0], declared) + " to security group " + source.values.group_name +
+						" (" +
+						group +
+						"). Every workload in the group gets this rule's traffic, and Xshield change set " +
+						reopen.change_set +
+						" takes some of it from some of the group's workloads. Give a workload this access through its Xshield policy " +
+						"instead, which gives it to that workload alone.")
+				}
+			}
+		}
+	}
+	return found
+}
+
+revert_waiting = func() {
+	found = []
+	for rules_sources as _, source {
+		for source.values.undeclared_restores else [] as restore {
+			append(found, "Xshield is reverting change set " + restore.change_set + " on security group " + source.values.group_name +
+				" (" +
+				source.values.security_group_id +
+				") and waits for this workspace to declare " +
+				describe(restore.direction, restore) +
+				" again. Until it does, Xshield keeps the access every workload in the group has now. Declare the rule through " +
+				"xshield_security_group_rules to end the wait.")
+		}
+	}
+	return found
+}
+
+removed_early = func() {
+	found = []
+	for rules_sources as _, source {
+		group = source.values.security_group_id else null
+		if group is null {
+			continue
+		}
+		for source.values.undeclared_pending else [] as pending {
+			want = traffic(pending)
+			for rule_changes as address, rc {
+				if rc.type is "aws_vpc_security_group_" + pending.direction + "_rule" and removes(rc, group, want) {
+					append(found, address + " takes " + describe(pending.direction, pending) + " out of security group " +
+						source.values.group_name +
+						" (" +
+						group +
+						") before Xshield change set " +
+						pending.change_set +
+						" is ready for it. Until every workload that keeps this traffic carries its cohort group, those workloads lose " +
+						"it. Declare the rule again through xshield_security_group_rules; Xshield leaves it out itself once it is safe.")
+				}
+			}
+		}
+	}
+	return found
+}

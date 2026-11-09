@@ -12,6 +12,7 @@
               "direction": "ingress",
               "fromPort": 443,
               "ipProtocol": "tcp",
+              "keptByEveryMember": [],
               "prefixListId": null,
               "referencedSecurityGroupId": null,
               "toPort": 443
@@ -20,9 +21,10 @@
           "state": "attaching"
         }
       ],
+      "groupId": "sg-web",
       "revoke": []
     }
   },
   "region": "us-east-1",
-  "version": "0a3f5989c65e9fab7513803d7a518b259458f527b18dcc71480111077ba699903b185a347bba9e4bd601d5060c987c0421cc68a855f5f6e88df0170f5c75305e"
+  "version": "163e3e2f969222356d0ceab0a265f0b687abf07a6b1954c2cc1347a0ff1405537bd5ca758e5fa08c46e13eae4973377243766f13b3116a274d5b432bf802d4f8"
 }

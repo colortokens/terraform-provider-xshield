@@ -30,6 +30,12 @@ variable "directory_prefix" {
   default     = "/colortokens/v1"
 }
 
+variable "warn_when_unlisted" {
+  description = "Warn on every plan while Xshield lists no entry for the resource, to find a handle that names a resource Xshield does not know. Off by default, as a resource Xshield gives nothing to attach has no entry either."
+  type        = bool
+  default     = false
+}
+
 # Reads the handle's own path rather than one parameter, so a resource Xshield
 # lists no entry for, as in an account with nothing published, gets no group
 # instead of a failed plan.
@@ -57,11 +63,11 @@ locals {
   slot_limit = try(local.entry.slot_limit, null)
 }
 
-# Warns rather than fails: a resource the same plan creates has no entry until
-# Xshield discovers it, and its plan must still go ahead.
+# Warns rather than fails when asked to: a resource the same plan creates has no
+# entry until Xshield discovers it, and its plan must still go ahead.
 check "directory_entry" {
   assert {
-    condition     = local.found
+    condition     = local.found || !var.warn_when_unlisted
     error_message = "Xshield lists no entry for ${local.handle} at ${local.parameter_name}. This is expected on the run that creates the resource, until Xshield has discovered it and the enforcement workspace has applied, and while Xshield's policy gives the resource nothing to attach. Otherwise, compare the handle with the enforcement module's directory output, and look for the resource among the assetRefused and groupRefused notices of the xshield_enforcement_status data source."
   }
 }

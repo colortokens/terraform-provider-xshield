@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/netip"
 	"strings"
 
@@ -40,24 +39,36 @@ type sgrRuleModel struct {
 }
 
 type securityGroupRulesDataSourceModel struct {
-	CloudAccountID types.String            `tfsdk:"cloud_account_id"`
-	Region         types.String            `tfsdk:"region"`
-	VPCID          types.String            `tfsdk:"vpc_id"`
-	GroupName      types.String            `tfsdk:"group_name"`
-	Version        types.String            `tfsdk:"version"`
-	Published      types.Bool              `tfsdk:"published"`
-	Ingress        map[string]sgrRuleModel `tfsdk:"ingress"`
-	Egress         map[string]sgrRuleModel `tfsdk:"egress"`
-	IngressRules   map[string]sgrRuleModel `tfsdk:"ingress_rules"`
-	EgressRules    map[string]sgrRuleModel `tfsdk:"egress_rules"`
-	Revoked        []types.String          `tfsdk:"revoked"`
-	Pending        []types.String          `tfsdk:"pending"`
+	CloudAccountID     types.String            `tfsdk:"cloud_account_id"`
+	Region             types.String            `tfsdk:"region"`
+	VPCID              types.String            `tfsdk:"vpc_id"`
+	GroupName          types.String            `tfsdk:"group_name"`
+	Version            types.String            `tfsdk:"version"`
+	Published          types.Bool              `tfsdk:"published"`
+	Ingress            map[string]sgrRuleModel `tfsdk:"ingress"`
+	Egress             map[string]sgrRuleModel `tfsdk:"egress"`
+	IngressRules       map[string]sgrRuleModel `tfsdk:"ingress_rules"`
+	EgressRules        map[string]sgrRuleModel `tfsdk:"egress_rules"`
+	Revoked            []types.String          `tfsdk:"revoked"`
+	Pending            []types.String          `tfsdk:"pending"`
+	SecurityGroupID    types.String            `tfsdk:"security_group_id"`
+	Reopens            []sgrReopenModel        `tfsdk:"reopens"`
+	UndeclaredRestores []sgrMoveModel          `tfsdk:"undeclared_restores"`
+	UndeclaredPending  []sgrMoveModel          `tfsdk:"undeclared_pending"`
 }
 
 var sgrRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
 	"ip_protocol": types.StringType, "from_port": types.Int64Type, "to_port": types.Int64Type,
 	"cidr_ipv4": types.StringType, "cidr_ipv6": types.StringType, "prefix_list_id": types.StringType,
 	"referenced_security_group_id": types.StringType, "description": types.StringType, "tags": esTagsType,
+}}
+
+var sgrReopenType = types.ObjectType{AttrTypes: map[string]attr.Type{"rule": types.StringType, "change_set": types.StringType}}
+
+var sgrMoveType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	"direction": types.StringType, "ip_protocol": types.StringType, "from_port": types.Int64Type, "to_port": types.Int64Type,
+	"cidr_ipv4": types.StringType, "cidr_ipv6": types.StringType, "prefix_list_id": types.StringType,
+	"referenced_security_group_id": types.StringType, "change_set": types.StringType,
 }}
 
 func (d *securityGroupRulesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -98,7 +109,10 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 			"Pass the rules the group's code declares, and declare the rules that come back. When no approved change applies to the " +
 			"group, every rule comes back unchanged. When Xshield narrows a broad rule, the rule is left out once every workload that " +
 			"still needs it carries its `ct-cohort-` group, so no workload loses access part-way. Rules are matched by their content, " +
-			"and the group by its name and VPC, so neither your code nor this data source needs AWS rule IDs.",
+			"and the group by its name and VPC, so neither your code nor this data source needs AWS rule IDs. Read it only for a " +
+			"group `xshield_security_group_changes` lists: another group plans without it, even where its VPC or rules are values " +
+			"the plan learns only at apply. A group it is read for needs its VPC and every declared rule known when the plan " +
+			"runs, so a rule naming a security group the same plan creates goes in after that group is applied.",
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id": schema.StringAttribute{Required: true, MarkdownDescription: "AWS account the group is in."},
 			"region":           schema.StringAttribute{Required: true, MarkdownDescription: "AWS region the group is in."},
@@ -118,6 +132,24 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 				MarkdownDescription: "The declared rules left out, as `ingress/<key>` or `egress/<key>`."},
 			"pending": schema.ListAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "The declared rules an approved change will leave out once every workload that keeps them carries its cohort."},
+			"security_group_id": schema.StringAttribute{Computed: true,
+				MarkdownDescription: "The group's AWS ID while an approved change applies to it, and null otherwise. The optional policy " +
+					"checks use it to find the group's rules in a plan."},
+			"reopens": schema.ListAttribute{Computed: true, ElementType: sgrReopenType,
+				MarkdownDescription: "The declared rules that give a workload in the group traffic an approved change takes from it, each as " +
+					"`rule` (`ingress/<key>` or `egress/<key>`) with the `change_set` it undoes part of. Every workload in the group gets a " +
+					"rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending` or " +
+					"`revoked` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule " +
+					"naming a security group or prefix list is compared only with moved rules naming the same one."},
+			"undeclared_restores": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
+				MarkdownDescription: "The rules a revert puts back that the group no longer declares, each with the `change_set` being " +
+					"reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them " +
+					"to end it."},
+			"undeclared_pending": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
+				MarkdownDescription: "The rules an approved change will leave out once every workload that keeps them carries its cohort, " +
+					"which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a " +
+					"plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out " +
+					"once it is safe. A rule a change already leaves out is not listed."},
 		},
 	}
 }
@@ -144,13 +176,8 @@ func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.
 		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
-	account, region := data.CloudAccountID.ValueString(), data.Region.ValueString()
-	var changes wireCustomerGroupChanges
-	err := d.api.get(ctx, d.api.endpoint(cloudAWS, account, region, "customergroupchanges"), &changes)
-	published := !isAPIRefusal(err, http.StatusNotFound, codeNotPublished)
-	if err != nil && published {
-		resp.Diagnostics.AddError("Cannot read the changes Xshield made to customer groups in "+account+"/"+region,
-			err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")
+	changes, published, diags := d.api.publishedGroupChanges(ctx, data.CloudAccountID.ValueString(), data.Region.ValueString())
+	if resp.Diagnostics.Append(diags...); diags.HasError() {
 		return
 	}
 	var change *wireCustomerGroupChange
@@ -175,6 +202,11 @@ func groupChangeOf(changes wireCustomerGroupChanges, vpcID, name string) *wireCu
 func filterDeclaredRules(data *securityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
 	data.IngressRules, data.EgressRules = map[string]sgrRuleModel{}, map[string]sgrRuleModel{}
 	data.Revoked, data.Pending = []types.String{}, []types.String{}
+	data.SecurityGroupID, data.Reopens = types.StringNull(), []sgrReopenModel{}
+	data.UndeclaredRestores, data.UndeclaredPending = []sgrMoveModel{}, []sgrMoveModel{}
+	if change != nil && change.GroupID != "" {
+		data.SecurityGroupID = types.StringValue(change.GroupID)
+	}
 	for _, dir := range []struct {
 		name     string
 		declared map[string]sgrRuleModel
@@ -189,17 +221,23 @@ func filterDeclaredRules(data *securityGroupRulesDataSourceModel, change *wireCu
 			if change != nil && pendingMove(dir.name, rule, change) {
 				data.Pending = append(data.Pending, types.StringValue(dir.name+"/"+key))
 			}
-			if rule.Tags.IsNull() || rule.Tags.IsUnknown() {
-				rule.Tags = types.MapValueMust(types.StringType, map[string]attr.Value{})
+			if change != nil {
+				if changeSet := reopenedBy(dir.name, rule, change); changeSet != "" {
+					data.Reopens = append(data.Reopens, sgrReopenModel{Rule: types.StringValue(dir.name + "/" + key), ChangeSet: types.StringValue(changeSet)})
+				}
 			}
 			dir.kept[key] = rule
 		}
+	}
+	if change != nil {
+		data.UndeclaredRestores = undeclaredMoves(data, change, changeSetRestoring)
+		data.UndeclaredPending = undeclaredMoves(data, change, changeSetAttaching)
 	}
 }
 
 func pendingMove(direction string, rule sgrRuleModel, change *wireCustomerGroupChange) bool {
 	for _, cs := range change.ChangeSets {
-		if cs.State == "attaching" && matchesAny(direction, rule, cs.Moves) {
+		if cs.State == changeSetAttaching && matchesAnyMove(direction, rule, cs.Moves) {
 			return true
 		}
 	}

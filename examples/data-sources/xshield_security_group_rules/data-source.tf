@@ -1,8 +1,18 @@
-# Route a group you own through Xshield's Full control: declare the rules that come back.
-# Values known before the plan: an attribute of a resource in this configuration would defer the
-# data source to the apply, and its rules could not drive for_each.
-variable "vpc_id" {
-  type = string
+# Route a group you own through Xshield's Full control. Read the account's changes once; a group they do not
+# list keeps the rules its code declares without reading them from Xshield, so its VPC and rules may be values
+# the plan learns only at apply, as in a configuration that creates them.
+data "xshield_security_group_changes" "this" {
+  cloud_account_id = "123456789012"
+  region           = "us-east-1"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_security_group" "web" {
+  name   = "web"
+  vpc_id = aws_vpc.main.id
 }
 
 locals {
@@ -10,33 +20,33 @@ locals {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
     ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
   }
+
+  web_vpcs_changed = lookup(data.xshield_security_group_changes.this.groups, aws_security_group.web.name, [])
+  web_changed      = length(local.web_vpcs_changed) > 0 ? contains(local.web_vpcs_changed, aws_vpc.main.id) : false
 }
 
 data "xshield_security_group_rules" "web" {
-  cloud_account_id = "123456789012"
-  region           = "us-east-1"
-  vpc_id           = var.vpc_id
-  group_name       = "web"
+  count = local.web_changed ? 1 : 0
+
+  cloud_account_id = data.xshield_security_group_changes.this.cloud_account_id
+  region           = data.xshield_security_group_changes.this.region
+  vpc_id           = aws_vpc.main.id
+  group_name       = aws_security_group.web.name
 
   ingress = local.web_ingress_rules
 }
 
-resource "aws_security_group" "web" {
-  name   = "web"
-  vpc_id = var.vpc_id
+locals {
+  web_revoked = local.web_changed ? data.xshield_security_group_rules.web[0].revoked : []
 }
 
+# Keeps your own rule blocks: only the rules Xshield has left out drop from for_each.
 resource "aws_vpc_security_group_ingress_rule" "web" {
-  for_each = data.xshield_security_group_rules.web.ingress_rules
+  for_each = { for key, rule in local.web_ingress_rules : key => rule if !contains(local.web_revoked, "ingress/${key}") }
 
-  security_group_id            = aws_security_group.web.id
-  ip_protocol                  = each.value.ip_protocol
-  from_port                    = each.value.from_port
-  to_port                      = each.value.to_port
-  cidr_ipv4                    = each.value.cidr_ipv4
-  cidr_ipv6                    = each.value.cidr_ipv6
-  prefix_list_id               = each.value.prefix_list_id
-  referenced_security_group_id = each.value.referenced_security_group_id
-  description                  = each.value.description
-  tags                         = each.value.tags
+  security_group_id = aws_security_group.web.id
+  ip_protocol       = each.value.ip_protocol
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  cidr_ipv4         = each.value.cidr_ipv4
 }

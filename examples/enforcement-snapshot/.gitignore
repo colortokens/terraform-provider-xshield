@@ -6,3 +6,4 @@ bin/
 demo-signing-key.pem
 .dev.tfrc
 .terraform.lock.hcl
+policies/sentinel/.sentinel/

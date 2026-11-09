@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/retry"
@@ -59,6 +60,30 @@ func (a cloudSnapshotAPI) post(ctx context.Context, endpoint string, in any, wan
 	return a.do(ctx, http.MethodPost, endpoint, body, wantStatus, out)
 }
 
+// customerGroupChangesReads holds one read per provider configuration, account and region for the run: every
+// customer group's data source in a workspace reads the same document, and one read gives them all one version.
+var customerGroupChangesReads sync.Map
+
+type customerGroupChangesKey struct {
+	client          *sdk.Xshield
+	account, region string
+}
+
+type customerGroupChangesRead struct {
+	once    sync.Once
+	changes wireCustomerGroupChanges
+	err     error
+}
+
+func (a cloudSnapshotAPI) customerGroupChanges(ctx context.Context, account, region string) (wireCustomerGroupChanges, error) {
+	value, _ := customerGroupChangesReads.LoadOrStore(customerGroupChangesKey{client: a.client, account: account, region: region}, &customerGroupChangesRead{})
+	read := value.(*customerGroupChangesRead)
+	read.once.Do(func() {
+		read.err = a.get(ctx, a.endpoint(cloudAWS, account, region, "customergroupchanges"), &read.changes)
+	})
+	return read.changes, read.err
+}
+
 type snapshotAPIError struct {
 	Method, Endpoint string
 	Status           int
@@ -81,6 +106,15 @@ func (e *snapshotAPIError) Error() string {
 
 func (a cloudSnapshotAPI) do(ctx context.Context, method, endpoint string, body []byte, wantStatus int, out any) error {
 	res, err := a.client.DoRaw(ctx, method, endpoint, body, maxSnapshotResponseBytes, snapshotFallbackRetry)
+	var tooLarge *sdk.ResponseTooLargeError
+	if errors.As(err, &tooLarge) {
+		unchanged := ""
+		if method == http.MethodGet {
+			unchanged = " Nothing was read or changed."
+		}
+		return fmt.Errorf("%s %s: %w.%s This account and region's policy is larger than one workspace can read; "+
+			"report it to ColorTokens support with this message", method, endpoint, err, unchanged)
+	}
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, endpoint, err)
 	}

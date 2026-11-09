@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -210,5 +211,54 @@ func TestReceiptTimeReadsTheSameWhenCreatedAndWhenImported(t *testing.T) {
 	}
 	if !created.AppliedAt.Equal(imported.AppliedAt) || created.AppliedAt.ValueString() != served {
 		t.Errorf("created %s, imported %s; want both %s", created.AppliedAt, imported.AppliedAt, served)
+	}
+}
+
+// A snapshot over the provider's limit fails saying so, not as JSON cut off at the limit.
+func TestASnapshotOverTheLimitFailsSayingSo(t *testing.T) {
+	t.Parallel()
+	api, _, _ := newSnapshotTestAPI(t, http.StatusOK, `{"rules":"`+strings.Repeat("x", maxSnapshotResponseBytes)+`"}`)
+
+	var snapshot map[string]any
+	err := api.get(context.Background(), api.endpoint(cloudAWS, "123456789012", "us-east-1", "snapshot"), &snapshot)
+
+	if err == nil {
+		t.Fatal("read a snapshot over the limit")
+	}
+	for _, want := range []string{"/123456789012/us-east-1/snapshot", "over the 32 MiB this provider reads", "Nothing was read or changed"} {
+		if !strings.Contains(err.Error(), want) && !strings.Contains(err.Error(), strings.Replace(want, "over the", "larger than the", 1)) {
+			t.Errorf("error %q does not say %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "JSON") {
+		t.Errorf("error %q reads as malformed JSON", err)
+	}
+}
+
+func TestCustomerGroupChangesAreReadOncePerAccountAndRegion(t *testing.T) {
+	t.Parallel()
+	api, recorder, _ := newSnapshotTestAPI(t, http.StatusOK, `{"version":"v1","customerGroupChanges":{"vpc-1/web":{}}}`)
+
+	var readers sync.WaitGroup
+	for range 20 {
+		readers.Go(func() {
+			if changes, err := api.customerGroupChanges(context.Background(), "123456789012", "us-east-1"); err != nil || changes.Version != "v1" {
+				t.Errorf("got version %q and error %v, want v1", changes.Version, err)
+			}
+		})
+	}
+	readers.Wait()
+	if _, err := api.customerGroupChanges(context.Background(), "123456789012", "us-west-2"); err != nil {
+		t.Fatal(err)
+	}
+
+	var paths []string
+	for _, r := range recorder.requests {
+		paths = append(paths, r.path)
+	}
+	want := []string{"/api/policies/cloudsnapshots/aws/123456789012/us-east-1/customergroupchanges",
+		"/api/policies/cloudsnapshots/aws/123456789012/us-west-2/customergroupchanges"}
+	if !slices.Equal(paths, want) {
+		t.Errorf("requested %v, want each account and region once: %v", paths, want)
 	}
 }

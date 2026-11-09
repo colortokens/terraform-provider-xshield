@@ -1,0 +1,13 @@
+# Fails a plan that adds a rule giving a group's workloads traffic an approved Xshield change takes from some of them.
+
+import "xshield"
+
+violations = xshield.reopened_access()
+
+for violations as message {
+	print(message)
+}
+
+main = rule {
+	length(violations) is 0
+}

@@ -13,11 +13,21 @@ Applies Full control to one of your own security groups when a Terraform pipelin
 ## Example Usage
 
 ```terraform
-# Route a group you own through Xshield's Full control: declare the rules that come back.
-# Values known before the plan: an attribute of a resource in this configuration would defer the
-# data source to the apply, and its rules could not drive for_each.
-variable "vpc_id" {
-  type = string
+# Route a group you own through Xshield's Full control. Read the account's changes once; a group they do not
+# list keeps the rules its code declares without reading them from Xshield, so its VPC and rules may be values
+# the plan learns only at apply, as in a configuration that creates them.
+data "xshield_security_group_changes" "this" {
+  cloud_account_id = "123456789012"
+  region           = "us-east-1"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_security_group" "web" {
+  name   = "web"
+  vpc_id = aws_vpc.main.id
 }
 
 locals {
@@ -25,35 +35,35 @@ locals {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
     ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
   }
+
+  web_vpcs_changed = lookup(data.xshield_security_group_changes.this.groups, aws_security_group.web.name, [])
+  web_changed      = length(local.web_vpcs_changed) > 0 ? contains(local.web_vpcs_changed, aws_vpc.main.id) : false
 }
 
 data "xshield_security_group_rules" "web" {
-  cloud_account_id = "123456789012"
-  region           = "us-east-1"
-  vpc_id           = var.vpc_id
-  group_name       = "web"
+  count = local.web_changed ? 1 : 0
+
+  cloud_account_id = data.xshield_security_group_changes.this.cloud_account_id
+  region           = data.xshield_security_group_changes.this.region
+  vpc_id           = aws_vpc.main.id
+  group_name       = aws_security_group.web.name
 
   ingress = local.web_ingress_rules
 }
 
-resource "aws_security_group" "web" {
-  name   = "web"
-  vpc_id = var.vpc_id
+locals {
+  web_revoked = local.web_changed ? data.xshield_security_group_rules.web[0].revoked : []
 }
 
+# Keeps your own rule blocks: only the rules Xshield has left out drop from for_each.
 resource "aws_vpc_security_group_ingress_rule" "web" {
-  for_each = data.xshield_security_group_rules.web.ingress_rules
+  for_each = { for key, rule in local.web_ingress_rules : key => rule if !contains(local.web_revoked, "ingress/${key}") }
 
-  security_group_id            = aws_security_group.web.id
-  ip_protocol                  = each.value.ip_protocol
-  from_port                    = each.value.from_port
-  to_port                      = each.value.to_port
-  cidr_ipv4                    = each.value.cidr_ipv4
-  cidr_ipv6                    = each.value.cidr_ipv6
-  prefix_list_id               = each.value.prefix_list_id
-  referenced_security_group_id = each.value.referenced_security_group_id
-  description                  = each.value.description
-  tags                         = each.value.tags
+  security_group_id = aws_security_group.web.id
+  ip_protocol       = each.value.ip_protocol
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  cidr_ipv4         = each.value.cidr_ipv4
 }
 ```
 
@@ -78,7 +88,11 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
 - `ingress_rules` (Map of Object) The declared ingress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_ingress_rule`, not the input. (see [below for nested schema](#nestedatt--ingress_rules))
 - `pending` (List of String) The declared rules an approved change will leave out once every workload that keeps them carries its cohort.
 - `published` (Boolean) False while Xshield has published nothing for this account and region; every declared rule then comes back unchanged and `version` is null. Any other failure to read the changes fails the plan.
+- `reopens` (List of Object) The declared rules that give a workload in the group traffic an approved change takes from it, each as `rule` (`ingress/<key>` or `egress/<key>`) with the `change_set` it undoes part of. Every workload in the group gets a rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending` or `revoked` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule naming a security group or prefix list is compared only with moved rules naming the same one. (see [below for nested schema](#nestedatt--reopens))
 - `revoked` (List of String) The declared rules left out, as `ingress/<key>` or `egress/<key>`.
+- `security_group_id` (String) The group's AWS ID while an approved change applies to it, and null otherwise. The optional policy checks use it to find the group's rules in a plan.
+- `undeclared_pending` (List of Object) The rules an approved change will leave out once every workload that keeps them carries its cohort, which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out once it is safe. A rule a change already leaves out is not listed. (see [below for nested schema](#nestedatt--undeclared_pending))
+- `undeclared_restores` (List of Object) The rules a revert puts back that the group no longer declares, each with the `change_set` being reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them to end it. (see [below for nested schema](#nestedatt--undeclared_restores))
 - `version` (String) Version of the changes to customer groups Xshield published for the account and region, which it publishes apart from the enforcement snapshot, so a released change needs no enforcement apply.
 
 <a id="nestedatt--egress"></a>
@@ -148,4 +162,45 @@ Read-Only:
 - `prefix_list_id` (String)
 - `referenced_security_group_id` (String)
 - `tags` (Map of String)
+- `to_port` (Number)
+
+
+<a id="nestedatt--reopens"></a>
+### Nested Schema for `reopens`
+
+Read-Only:
+
+- `change_set` (String)
+- `rule` (String)
+
+
+<a id="nestedatt--undeclared_pending"></a>
+### Nested Schema for `undeclared_pending`
+
+Read-Only:
+
+- `change_set` (String)
+- `cidr_ipv4` (String)
+- `cidr_ipv6` (String)
+- `direction` (String)
+- `from_port` (Number)
+- `ip_protocol` (String)
+- `prefix_list_id` (String)
+- `referenced_security_group_id` (String)
+- `to_port` (Number)
+
+
+<a id="nestedatt--undeclared_restores"></a>
+### Nested Schema for `undeclared_restores`
+
+Read-Only:
+
+- `change_set` (String)
+- `cidr_ipv4` (String)
+- `cidr_ipv6` (String)
+- `direction` (String)
+- `from_port` (Number)
+- `ip_protocol` (String)
+- `prefix_list_id` (String)
+- `referenced_security_group_id` (String)
 - `to_port` (Number)

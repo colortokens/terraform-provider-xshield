@@ -17,6 +17,22 @@ type RawResponse struct {
 	Body       []byte
 }
 
+// ResponseTooLargeError is a response body over the caller's limit. No part of the body is returned:
+// a body cut at the limit would only fail later as malformed JSON.
+type ResponseTooLargeError struct {
+	Limit int64
+	// ContentLength is the size the server declared, or -1 when it declared none.
+	ContentLength int64
+}
+
+func (e *ResponseTooLargeError) Error() string {
+	size := "larger than"
+	if e.ContentLength > 0 {
+		size = fmt.Sprintf("%d MiB, over", (e.ContentLength+(1<<20)-1)>>20)
+	}
+	return fmt.Sprintf("the response is %s the %d MiB this provider reads", size, e.Limit>>20)
+}
+
 func (s *Xshield) ServerURL() string {
 	url, _ := s.sdkConfiguration.GetServerDetails()
 	return url
@@ -67,9 +83,15 @@ func (s *Xshield) DoRaw(ctx context.Context, method, url string, body []byte, ma
 	}
 	defer res.Body.Close()
 
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody))
+	if res.ContentLength > maxBody {
+		return RawResponse{}, &ResponseTooLargeError{Limit: maxBody, ContentLength: res.ContentLength}
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
 	if err != nil {
 		return RawResponse{}, fmt.Errorf("reading response: %w", err)
+	}
+	if int64(len(raw)) > maxBody {
+		return RawResponse{}, &ResponseTooLargeError{Limit: maxBody, ContentLength: res.ContentLength}
 	}
 	return RawResponse{StatusCode: res.StatusCode, Body: raw}, nil
 }
