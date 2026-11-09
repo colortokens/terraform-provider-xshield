@@ -60,8 +60,6 @@ run "returns_nothing_without_an_entry" {
     condition     = output.security_group_ids == []
     error_message = "a resource Xshield lists no entry for attaches nothing, and its plan does not fail"
   }
-
-  expect_failures = [check.directory_entry]
 }
 
 run "ignores_other_parameters_under_the_handle" {
@@ -81,8 +79,6 @@ run "ignores_other_parameters_under_the_handle" {
     condition     = output.security_group_ids == []
     error_message = "only the security-groups parameter is read"
   }
-
-  expect_failures = [check.directory_entry]
 }
 
 run "rejects_handle_without_kind" {
@@ -113,12 +109,13 @@ run "refuses_entry_for_another_handle" {
   expect_failures = [output.security_group_ids]
 }
 
-# A resource the plan creates has no entry yet: the plan warns and goes ahead.
+# Asked to, the plan warns about a handle with no entry yet and goes ahead.
 run "warns_without_an_entry" {
   command = plan
 
   variables {
-    handle = "rds/orders-dbb"
+    handle             = "rds/orders-dbb"
+    warn_when_unlisted = true
   }
 
   override_data {
