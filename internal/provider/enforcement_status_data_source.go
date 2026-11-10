@@ -44,7 +44,18 @@ type noticeModel struct {
 	AssetID   types.String `tfsdk:"asset_id"`
 	AssetName types.String `tfsdk:"asset_name"`
 	Group     types.String `tfsdk:"group"`
+	Since     types.String `tfsdk:"since"`
 	Message   types.String `tfsdk:"message"`
+}
+
+type wireNotice struct {
+	Code      string `json:"code"`
+	Reason    string `json:"reason"`
+	AssetID   string `json:"assetId"`
+	AssetName string `json:"assetName"`
+	Group     string `json:"group"`
+	Since     string `json:"since"`
+	Message   string `json:"message"`
 }
 
 type enforcementStatusDataSourceModel struct {
@@ -115,7 +126,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"notices": schema.ListAttribute{
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
-					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType, "message": types.StringType,
+					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType,
+					"since": types.StringType, "message": types.StringType,
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A refusal leaves a workload " +
 					"as it was: one that carries an Xshield group keeps it, with the rules last applied, and one that carries " +
@@ -123,10 +135,15 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"containment is reverted. A `groupRefused` group that fits once changed, but not while it changes, is the " +
 					"one exception: the rules its change removes and no new rule replaces come out first, and its new rules " +
 					"go in at the next apply if they then fit. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. " +
+					"A `portNotNarrowed` notice is about a port still deployed in Xshield on a workload whose customer security " +
+					"group a reverted Full control change no longer narrows: the group again allows more than the port's " +
+					"policy, until the port is deployed again and its change approved, or undeployed. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld` or `portNotNarrowed`. " +
+					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` and `portNotNarrowed` the change set's ID. " +
 					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
+					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
+					"for `portNotNarrowed`, when the revert was requested; null for every other code. " +
 					"`message`: what happened and what it means for the workload.",
 			},
 			"applied_security_groups": appliedIDs("security group ID", "`aws_security_group.this`"),
@@ -189,14 +206,7 @@ type wireStatus struct {
 		RulesRemoved        []string `json:"rulesRemoved"`
 		AttachmentsAdded    []string `json:"attachmentsAdded"`
 	} `json:"pendingDelta"`
-	Notices []struct {
-		Code      string `json:"code"`
-		Reason    string `json:"reason"`
-		AssetID   string `json:"assetId"`
-		AssetName string `json:"assetName"`
-		Group     string `json:"group"`
-		Message   string `json:"message"`
-	} `json:"notices"`
+	Notices  []wireNotice           `json:"notices"`
 	Drift    *wireDrift             `json:"drift"`
 	HandOver *wireRenderedResources `json:"handOver"`
 }
@@ -307,7 +317,8 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.Notices = []noticeModel{}
 	for _, n := range st.Notices {
 		data.Notices = append(data.Notices, noticeModel{Code: types.StringValue(n.Code), Reason: optionalString(n.Reason),
-			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Message: types.StringValue(n.Message)})
+			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Since: optionalString(n.Since),
+			Message: types.StringValue(n.Message)})
 	}
 }
 

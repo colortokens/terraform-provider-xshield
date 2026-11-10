@@ -16,25 +16,29 @@ It reads only, so it can run inside a `check` block. Where checks are evaluated 
 ## Example Usage
 
 ```terraform
-# Alert on drift, stalled pipelines and workloads Xshield could not enforce.
-# Checks run on every plan and, where the platform evaluates them on a
-# schedule, between runs too.
-check "xshield_enforcement" {
-  data "xshield_enforcement_status" "this" {
-    cloud_account_id = "123456789012"
-    region           = "us-east-1"
-  }
+# Report enforcement problems in one account and region as named checks.
+# examples/enforcement-snapshot/monitor is the full version: every problem,
+# each limit as a variable, and a fail_on list that stops a plan.
+data "xshield_enforcement_status" "this" {
+  cloud_account_id = "123456789012"
+  region           = "us-east-1"
+}
 
+check "xshield_drift_high" {
   assert {
     condition = length([for f in data.xshield_enforcement_status.this.drift_findings : f if f.severity == "high"]) == 0
-    error_message = join("\n", [
-      for f in data.xshield_enforcement_status.this.drift_findings : "${f.kind} ${f.resource}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
-    ])
+    error_message = join("\n", concat(["Xshield sees high-severity drift:"], [
+      for f in data.xshield_enforcement_status.this.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
+    ]))
   }
+}
 
+check "xshield_apply_overdue" {
   assert {
-    condition     = data.xshield_enforcement_status.this.state != "pending" || timecmp(timeadd(data.xshield_enforcement_status.this.pending_since, "24h"), plantimestamp()) > 0
-    error_message = "Approved policy has waited more than 24 hours for an enforcement run."
+    # coalesce keeps a null time out of timeadd while nothing is pending.
+    condition = (data.xshield_enforcement_status.this.state != "pending" ||
+    timecmp(timeadd(coalesce(data.xshield_enforcement_status.this.pending_since, plantimestamp()), "24h"), plantimestamp()) > 0)
+    error_message = "Approved Xshield policy has waited more than 24 hours for an enforcement run: ${length(data.xshield_enforcement_status.this.pending_rules_added)} rule(s) to add, ${length(data.xshield_enforcement_status.this.pending_rules_removed)} to remove."
   }
 }
 ```
@@ -66,7 +70,7 @@ check "xshield_enforcement" {
 - `handover_rules` (Map of String) Before the first receipt of an account moved from connector delivery: the security group rule ID of each resource the cloud connector created that the expected snapshot names, keyed as the module keys `aws_vpc_security_group_ingress_rule.this`, for a key with `/in/`, or `aws_vpc_security_group_egress_rule.this`, for a key with `/out/`, so the enforcement workspace imports it rather than creating it again. Empty otherwise.
 - `handover_security_groups` (Map of String) Before the first receipt of an account moved from connector delivery: the security group ID of each resource the cloud connector created that the expected snapshot names, keyed as the module keys `aws_security_group.this`, so the enforcement workspace imports it rather than creating it again. Empty otherwise.
 - `last_checked_at` (String) When an enforcement plan last resolved the expected version. A stale value means the pipeline has stopped running, whatever the convergence state says.
-- `notices` (List of Object) What Xshield could not enforce in the latest version, and why. A refusal leaves a workload as it was: one that carries an Xshield group keeps it, with the rules last applied, and one that carries none gets none until the cause is fixed. A contained workload's group stays off its interfaces until the containment is reverted. A `groupRefused` group that fits once changed, but not while it changes, is the one exception: the rules its change removes and no new rule replaces come out first, and its new rules go in at the next apply if they then fit. `code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing` or `changeSetHeld`. `reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` the change set's ID. `asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. `asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. `message`: what happened and what it means for the workload. (see [below for nested schema](#nestedatt--notices))
+- `notices` (List of Object) What Xshield could not enforce in the latest version, and why. A refusal leaves a workload as it was: one that carries an Xshield group keeps it, with the rules last applied, and one that carries none gets none until the cause is fixed. A contained workload's group stays off its interfaces until the containment is reverted. A `groupRefused` group that fits once changed, but not while it changes, is the one exception: the rules its change removes and no new rule replaces come out first, and its new rules go in at the next apply if they then fit. A `portNotNarrowed` notice is about a port still deployed in Xshield on a workload whose customer security group a reverted Full control change no longer narrows: the group again allows more than the port's policy, until the port is deployed again and its change approved, or undeployed. `code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld` or `portNotNarrowed`. `reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` and `portNotNarrowed` the change set's ID. `asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. `asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. `since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; for `portNotNarrowed`, when the revert was requested; null for every other code. `message`: what happened and what it means for the workload. (see [below for nested schema](#nestedatt--notices))
 - `pending_attachments_added` (List of String) Keys of interface attachments the next enforcement run will create.
 - `pending_rules_added` (List of String) Keys of rules the next enforcement run will add.
 - `pending_rules_removed` (List of String) Keys of rules the next enforcement run will remove.
@@ -100,3 +104,4 @@ Read-Only:
 - `group` (String)
 - `message` (String)
 - `reason` (String)
+- `since` (String)

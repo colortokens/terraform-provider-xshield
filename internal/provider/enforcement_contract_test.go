@@ -171,14 +171,9 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	st := loadJSON[wireStatus](t, "status.json")
-	st.Notices = append(st.Notices, struct {
-		Code      string `json:"code"`
-		Reason    string `json:"reason"`
-		AssetID   string `json:"assetId"`
-		AssetName string `json:"assetName"`
-		Group     string `json:"group"`
-		Message   string `json:"message"`
-	}{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "no Xshield group can be written for this workload as it stands"})
+	st.Notices = append(st.Notices,
+		wireNotice{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "no Xshield group can be written for this workload as it stands"},
+		wireNotice{Code: "changeSetHeld", Reason: "cs-1", Group: "vpc-1/web", Since: "2026-11-01T09:00:00Z", Message: "the change waits for the workspace that owns web to apply"})
 
 	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
@@ -195,9 +190,12 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		len(attachments) != len(st.Applied.Resources.Attachments) || len(groups) == 0 {
 		t.Errorf("applied IDs %d groups %d rules %d attachments, want every resource the receipt records", len(groups), len(rules), len(attachments))
 	}
-	if len(data.Notices) != 1 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() ||
-		data.Notices[0].AssetName.ValueString() != "rds/db-1" {
+	if len(data.Notices) != 2 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() ||
+		data.Notices[0].AssetName.ValueString() != "rds/db-1" || !data.Notices[0].Since.IsNull() {
 		t.Errorf("notices %+v", data.Notices)
+	}
+	if len(data.Notices) == 2 && (data.Notices[1].Since.ValueString() != "2026-11-01T09:00:00Z" || data.Notices[1].Group.ValueString() != "vpc-1/web") {
+		t.Errorf("waiting notice %+v, want its group and since when it has waited", data.Notices[1])
 	}
 	kinds := []string{}
 	for _, f := range data.DriftFindings {

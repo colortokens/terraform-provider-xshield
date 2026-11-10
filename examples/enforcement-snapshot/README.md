@@ -11,7 +11,7 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
 | `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own for its Xshield group. |
-| `monitor/` | A `check` block that alerts on drift, stalled pipelines and refused workloads. |
+| `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
 | `handover/` | Import blocks that take over the groups the cloud connector created, when an account moves to pipeline delivery. |
 | `leave/` | A `removed` block that hands the account's groups to the cloud connector, when an account moves back to connector delivery. |
@@ -111,7 +111,28 @@ resource "aws_network_interface" "web" {
 
 ### 4. Monitor
 
-Copy `monitor/` into any workspace, or run it on a schedule. It alerts when Xshield sees high-severity drift, when approved policy has waited more than a day for an apply, and when a workload could not be enforced, naming the workload and the reason.
+Run `monitor/` as a workspace of its own, on a schedule. It reads the status of one account and region and reports each thing that is wrong as a named check, in words a reviewer without portal access can act on.
+
+| Problem | Reported when |
+|---|---|
+| `drift_high` | The cloud differs from what was applied and access may be wider than approved. |
+| `workload_not_enforced` | Xshield could not write a group for a workload. The message names it and the reason. |
+| `apply_overdue` | Newer approved policy has waited longer than `max_apply_age` (24h) for an enforcement run. The message counts and lists what is waiting. |
+| `never_applied` | Published policy has never been applied, for longer than `max_apply_age`. |
+| `owner_apply_overdue` | A Full control change has waited longer than `max_owner_apply_age` (24h) for the workspace that owns a customer security group. |
+| `pipeline_stopped` | No enforcement plan has run for longer than `max_run_gap` (72h). Raise it if that pipeline runs only on a change. |
+| `drift_not_evaluated` | Xshield has not looked for drift since the last apply, for longer than `max_unobserved_age` (24h). No finding then means nobody looked. |
+| `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. |
+| `drift_medium` | The cloud differs in a way the next enforcement apply restores. Not warned by default. |
+| `unpublished` | Xshield has published nothing here: the wrong tenant, or an account that is not onboarded. Not warned by default. |
+
+Every check only warns, so the monitor never blocks a pipeline unless you ask it to. Choose what it warns about with `warn_on`. Name a problem in `fail_on` and the plan stops on it, with the same message, and no OPA or Sentinel:
+
+```hcl
+fail_on = ["drift_high", "never_applied"]
+```
+
+The `problems` output carries the same report by name, for a job that posts it somewhere. The workspace manages no resources, so `-detailed-exitcode` says nothing about it. To learn from an exit code whether approved policy is applied, plan the *enforcement* workspace on a schedule with `-detailed-exitcode`: 2 means it has something to apply, which is approved policy not yet applied or a resource it manages changed in the cloud.
 
 ## Try it locally
 
