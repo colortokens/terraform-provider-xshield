@@ -48,6 +48,15 @@ data "aws_security_groups" "rendered" {
   }
 }
 
+# With nothing published the plan reads "No changes", which looks the same as an account whose policy the
+# provider cannot see, so the run says which it is.
+check "xshield_published" {
+  assert {
+    condition     = local.snap.published
+    error_message = "Xshield has published nothing for ${local.account_id}/${local.region}, so this run creates nothing and sends no receipt. If the account should have policy, check in Xshield that it is set to pipeline delivery and has a deployed policy, and check that the xshield provider's endpoint and API key are for the tenant that owns the account."
+  }
+}
+
 resource "aws_security_group" "this" {
   for_each = local.snap.security_groups
 

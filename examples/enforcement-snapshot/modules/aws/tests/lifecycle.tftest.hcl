@@ -43,6 +43,8 @@ mock_provider "xshield" {
 run "nothing_published_creates_nothing" {
   command = apply
 
+  expect_failures = [check.xshield_published]
+
   assert {
     condition = alltrue([
       length(aws_security_group.this) == 0,
@@ -278,7 +280,7 @@ run "refuses_to_remove_groups_when_nothing_is_published" {
     values = { ids = ["sg-0aaa", "sg-0bbb"] }
   }
 
-  expect_failures = [data.aws_security_groups.rendered[0]]
+  expect_failures = [check.xshield_published, data.aws_security_groups.rendered[0]]
 }
 
 run "off_removes_everything_and_still_confirms" {
