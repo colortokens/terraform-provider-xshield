@@ -105,8 +105,8 @@ func pointArgs() map[string]tftypes.Value {
 func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testing.T) {
 	t.Parallel()
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/expected": {http.StatusNotFound, xshieldNotPublished}})
-	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
+	var m awsEnforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("an account with nothing published must plan, not fail: %s", errs)
 	}
 	if m.Published.ValueBool() || !m.Version.IsNull() {
@@ -131,8 +131,8 @@ func TestSnapshotForAnotherAccountIsRefused(t *testing.T) {
 		"/expected":                {http.StatusOK, `{"version":"` + testVersion + `"}`},
 		"/versions/" + testVersion: {http.StatusOK, other},
 	})
-	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok || !strings.Contains(errs, "another account or region") {
+	var m awsEnforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok || !strings.Contains(errs, "another account or region") {
 		t.Errorf("ok=%v %q, want the snapshot for 210987654321 refused", ok, errs)
 	}
 }
@@ -143,8 +143,8 @@ func TestPublishedSnapshotSaysSo(t *testing.T) {
 		"/expected":                {http.StatusOK, `{"version":"` + testVersion + `"}`},
 		"/versions/" + testVersion: {http.StatusOK, readTestdata(t, "snapshot.json")},
 	})
-	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
+	var m awsEnforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatal(errs)
 	}
 	served := loadJSON[wireSnapshot](t, "snapshot.json")
@@ -167,8 +167,8 @@ func TestAnyOtherFailureToReadTheSnapshotFailsThePlan(t *testing.T) {
 		"expected version gone":    {"/expected": {http.StatusOK, `{"version":"` + testVersion + `"}`}},
 	} {
 		api, _ := newRoutedSnapshotAPI(t, routes)
-		var m enforcementSnapshotDataSourceModel
-		if ok, _ := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok {
+		var m awsEnforcementSnapshotDataSourceModel
+		if ok, _ := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m); ok {
 			t.Errorf("%s: the plan went ahead with %+v", name, m)
 		}
 	}
@@ -184,8 +184,8 @@ func TestPinnedEnforcementReadStillRecordsTheCheck(t *testing.T) {
 	})
 	args := pointArgs()
 	args["version"] = tftypes.NewValue(tftypes.String, served.Version)
-	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); !ok {
+	var m awsEnforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, args, &m); !ok {
 		t.Fatal(errs)
 	}
 	if m.Version.ValueString() != served.Version {
@@ -205,8 +205,8 @@ func TestPinnedVersionMustExistEvenWhenNothingIsPublished(t *testing.T) {
 	})
 	args := pointArgs()
 	args["version"] = tftypes.NewValue(tftypes.String, pinned)
-	var m enforcementSnapshotDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version "+pinned) {
+	var m awsEnforcementSnapshotDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, args, &m); ok || !strings.Contains(errs, "version "+pinned) {
 		t.Errorf("a pin to a version Xshield does not hold must fail, naming it; got ok=%v %q", ok, errs)
 	}
 }
@@ -230,8 +230,8 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
 	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
-	var m securityGroupRulesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupRulesDataSource{api: api}, args, &m); !ok {
+	var m awsSecurityGroupRulesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &m); !ok {
 		t.Fatalf("a group's own pipeline must plan while nothing is published: %s", errs)
 	}
 	kept, ok := m.IngressRules["https_public"]
@@ -268,8 +268,8 @@ func TestDeclaredRulesLoseWhatAReleasedChangeRevokes(t *testing.T) {
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
 	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
-	var m securityGroupRulesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupRulesDataSource{api: api}, args, &m); !ok {
+	var m awsSecurityGroupRulesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &m); !ok {
 		t.Fatalf("read failed: %s", errs)
 	}
 	if _, kept := m.IngressRules["https_public"]; kept || !m.Published.ValueBool() || len(m.Revoked) != 1 || m.Revoked[0].ValueString() != "ingress/https_public" {
@@ -333,8 +333,8 @@ func TestEnforcementPlanStopsOnceTheAccountIsHandedOver(t *testing.T) {
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{
 		"/expected": {http.StatusConflict, `{"status":409,"code":"handedOver","message":"handed over"}`},
 	})
-	var m enforcementSnapshotDataSourceModel
-	ok, errs := readDataSource(t, &enforcementSnapshotDataSource{api: api}, pointArgs(), &m)
+	var m awsEnforcementSnapshotDataSourceModel
+	ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m)
 	if ok || !strings.Contains(errs, "moved 123456789012/us-east-1 to connector delivery") || !strings.Contains(errs, "destroy = false") {
 		t.Errorf("ok=%v %q, want the plan stopped with how to keep the resources", ok, errs)
 	}

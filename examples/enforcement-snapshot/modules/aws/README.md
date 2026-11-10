@@ -8,12 +8,12 @@ module "xshield_enforcement" {
 }
 ```
 
-It creates, from `xshield_enforcement_snapshot`:
+It creates, from `xshield_aws_enforcement_snapshot`:
 
 - one `aws_security_group` per workload, named and tagged as the Xshield cloud connector names its own, so the connector recognises it;
 - one `aws_vpc_security_group_ingress_rule` or `_egress_rule` per rule;
 - one `aws_network_interface_sg_attachment` per instance interface, which adds the group and keeps the interface's other groups;
-- one `aws_ssm_parameter` per database, function or service, read by the `group-lookup` module;
+- one `aws_ssm_parameter` per database, function or service, read by the `aws-group-lookup` module;
 - the `xshield_enforcement_receipt` that tells Xshield what was applied.
 
 While Xshield has published nothing for the account and region, it creates nothing, not even the receipt, and the plan shows no change. If the account already holds security groups Xshield rendered for a pipeline, the plan fails instead: Xshield never unpublishes an account, so that means the provider is reading another tenant or endpoint, and applying would remove them. The check reads groups with `ec2:DescribeSecurityGroups`.

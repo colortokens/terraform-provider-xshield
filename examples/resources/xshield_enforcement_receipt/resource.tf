@@ -2,10 +2,10 @@
 # the ID of every resource the snapshot asks for, and reference them, so it is
 # sent only once they all exist.
 resource "xshield_enforcement_receipt" "this" {
-  cloud_account_id = data.xshield_enforcement_snapshot.this.cloud_account_id
-  region           = data.xshield_enforcement_snapshot.this.region
+  cloud_account_id = data.xshield_aws_enforcement_snapshot.this.cloud_account_id
+  region           = data.xshield_aws_enforcement_snapshot.this.region
   workspace        = "xshield-enforcement-123456789012-us-east-1"
-  snapshot_version = data.xshield_enforcement_snapshot.this.version
+  snapshot_version = data.xshield_aws_enforcement_snapshot.this.version
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(

@@ -9,7 +9,7 @@ rules_sources contains source if {
 	walk(plan.prior_state, [path, source])
 	path[count(path) - 2] == "resources"
 	source.mode == "data"
-	source.type == "xshield_security_group_rules"
+	source.type == "xshield_aws_security_group_rules"
 }
 
 rule_changes contains change if {

@@ -18,7 +18,7 @@ terraform {
 }
 
 variable "xshield_changes" {
-  description = "The account and region's xshield_security_group_changes data source, read once in the root module and passed to every group's module."
+  description = "The account and region's xshield_aws_security_group_changes data source, read once in the root module and passed to every group's module."
   type = object({
     cloud_account_id = string
     region           = string
@@ -79,7 +79,7 @@ locals {
   changed = length(local.vpcs_with_a_change) > 0 ? contains(local.vpcs_with_a_change, var.vpc_id) : false
 }
 
-data "xshield_security_group_rules" "this" {
+data "xshield_aws_security_group_rules" "this" {
   count = local.changed ? 1 : 0
 
   cloud_account_id = var.xshield_changes.cloud_account_id
@@ -92,8 +92,8 @@ data "xshield_security_group_rules" "this" {
 }
 
 locals {
-  ingress = local.changed ? data.xshield_security_group_rules.this[0].ingress_rules : var.ingress
-  egress  = local.changed ? data.xshield_security_group_rules.this[0].egress_rules : var.egress
+  ingress = local.changed ? data.xshield_aws_security_group_rules.this[0].ingress_rules : var.ingress
+  egress  = local.changed ? data.xshield_aws_security_group_rules.this[0].egress_rules : var.egress
 }
 
 resource "aws_vpc_security_group_ingress_rule" "this" {
@@ -133,12 +133,12 @@ output "changed" {
 
 output "revoked" {
   description = "Declared rules Xshield has left out, as ingress/<key> or egress/<key>."
-  value       = local.changed ? data.xshield_security_group_rules.this[0].revoked : []
+  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].revoked : []
 }
 
 output "pending" {
   description = "Declared rules an approved change will leave out once every workload that keeps them carries its cohort."
-  value       = local.changed ? data.xshield_security_group_rules.this[0].pending : []
+  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].pending : []
 }
 
 output "ingress_keys" {

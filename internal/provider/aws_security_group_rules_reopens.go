@@ -53,7 +53,7 @@ func reopenedBy(direction string, rule sgrRuleModel, change *wireCustomerGroupCh
 
 // undeclaredMoves are the moved rules of the change sets in the state that the group declares no longer. A rule the change
 // revokes stays out whatever the code declares, so a revert does not wait on it and removing it takes no access.
-func undeclaredMoves(data *securityGroupRulesDataSourceModel, change *wireCustomerGroupChange, state string) []sgrMoveModel {
+func undeclaredMoves(data *awsSecurityGroupRulesDataSourceModel, change *wireCustomerGroupChange, state string) []sgrMoveModel {
 	out := []sgrMoveModel{}
 	for _, cs := range change.ChangeSets {
 		if cs.State != state {

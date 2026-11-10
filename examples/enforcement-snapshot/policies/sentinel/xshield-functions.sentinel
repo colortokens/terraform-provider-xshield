@@ -9,7 +9,7 @@ rule_types = ["aws_vpc_security_group_ingress_rule", "aws_vpc_security_group_egr
 peer_names = ["cidr_ipv4", "cidr_ipv6", "prefix_list_id", "referenced_security_group_id"]
 
 rules_sources = filter tfstate.resources as _, r {
-	r.mode is "data" and r.type is "xshield_security_group_rules"
+	r.mode is "data" and r.type is "xshield_aws_security_group_rules"
 }
 
 rule_changes = filter tfplan.resource_changes as _, rc {
@@ -152,7 +152,7 @@ revert_waiting = func() {
 				") and waits for this workspace to declare " +
 				describe(restore.direction, restore) +
 				" again. Until it does, Xshield keeps the access every workload in the group has now. Declare the rule through " +
-				"xshield_security_group_rules to end the wait.")
+				"xshield_aws_security_group_rules to end the wait.")
 		}
 	}
 	return found
@@ -176,7 +176,7 @@ removed_early = func() {
 						") before Xshield change set " +
 						pending.change_set +
 						" is ready for it. Until every workload that keeps this traffic carries its cohort group, those workloads lose " +
-						"it. Declare the rule again through xshield_security_group_rules; Xshield leaves it out itself once it is safe.")
+						"it. Declare the rule again through xshield_aws_security_group_rules; Xshield leaves it out itself once it is safe.")
 				}
 			}
 		}

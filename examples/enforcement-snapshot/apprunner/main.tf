@@ -16,7 +16,7 @@ terraform {
 }
 
 module "orders_web_xshield" {
-  source = "../modules/group-lookup"
+  source = "../modules/aws-group-lookup"
   handle = "apprunner/orders-web"
 }
 

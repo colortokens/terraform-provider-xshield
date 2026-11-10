@@ -22,7 +22,7 @@ mock_provider "aws" {
 }
 
 mock_provider "xshield" {
-  mock_data "xshield_enforcement_snapshot" {
+  mock_data "xshield_aws_enforcement_snapshot" {
     defaults = {
       published             = false
       version               = null
@@ -64,7 +64,7 @@ run "first_version_applies_and_is_confirmed" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published = true
       version   = "v1"
@@ -114,7 +114,7 @@ run "changes_touch_only_what_changed" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published = true
       version   = "v2"
@@ -179,7 +179,7 @@ run "withdrawn_group_outlives_its_attachment" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published = true
       version   = "v3"
@@ -229,7 +229,7 @@ run "detached_group_is_removed_and_the_rest_stay" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published = true
       version   = "v4"
@@ -285,7 +285,7 @@ run "off_removes_everything_and_still_confirms" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published             = true
       version               = "v5"

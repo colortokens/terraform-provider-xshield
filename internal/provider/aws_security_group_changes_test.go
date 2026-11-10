@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
-// A group skips xshield_security_group_rules when the listing leaves it out, so the listing must hold exactly the
+// A group skips xshield_aws_security_group_rules when the listing leaves it out, so the listing must hold exactly the
 // groups that data source finds a change for, or a skipped group would keep a rule a change takes out.
 func TestChangedGroupsListExactlyTheGroupsARulesReadFindsAChangeFor(t *testing.T) {
 	t.Parallel()
@@ -34,8 +34,8 @@ func TestChangedGroupsListExactlyTheGroupsARulesReadFindsAChangeFor(t *testing.T
 func TestGroupChangesListNothingWhileNothingIsPublished(t *testing.T) {
 	t.Parallel()
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusNotFound, xshieldNotPublished}})
-	var m securityGroupChangesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupChangesDataSource{api: api}, pointArgs(), &m); !ok {
+	var m awsSecurityGroupChangesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupChangesDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("an account with nothing published must plan: %s", errs)
 	}
 	if m.Published.ValueBool() || !m.Version.IsNull() || m.Groups == nil || len(m.Groups) != 0 {
@@ -50,8 +50,8 @@ func TestGroupChangesAndEveryGroupsRulesShareOneRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusOK, string(released)}})
-	var listing securityGroupChangesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupChangesDataSource{api: api}, pointArgs(), &listing); !ok {
+	var listing awsSecurityGroupChangesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupChangesDataSource{api: api}, pointArgs(), &listing); !ok {
 		t.Fatalf("read failed: %s", errs)
 	}
 	if !listing.Published.ValueBool() || listing.Version.ValueString() == "" || !slices.Equal(listing.Groups["web"], []string{"vpc-1"}) || len(listing.Groups) != 1 {
@@ -60,8 +60,8 @@ func TestGroupChangesAndEveryGroupsRulesShareOneRead(t *testing.T) {
 	args := pointArgs()
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
-	var rules securityGroupRulesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupRulesDataSource{api: api}, args, &rules); !ok {
+	var rules awsSecurityGroupRulesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &rules); !ok {
 		t.Fatalf("read failed: %s", errs)
 	}
 	if rules.Version != listing.Version || len(*requested) != 1 {
@@ -72,8 +72,8 @@ func TestGroupChangesAndEveryGroupsRulesShareOneRead(t *testing.T) {
 func TestGroupChangesFailThePlanWhenXshieldCannotBeRead(t *testing.T) {
 	t.Parallel()
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusForbidden, `{"status":403,"message":"forbidden"}`}})
-	var m securityGroupChangesDataSourceModel
-	if ok, errs := readDataSource(t, &securityGroupChangesDataSource{api: api}, pointArgs(), &m); ok || !strings.Contains(errs, "Cannot read the changes Xshield made") {
+	var m awsSecurityGroupChangesDataSourceModel
+	if ok, errs := readDataSource(t, &awsSecurityGroupChangesDataSource{api: api}, pointArgs(), &m); ok || !strings.Contains(errs, "Cannot read the changes Xshield made") {
 		t.Errorf("ok=%v %q: a listing that cannot be read must fail the plan, as an empty one would keep every rule", ok, errs)
 	}
 }

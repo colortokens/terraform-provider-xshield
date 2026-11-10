@@ -244,7 +244,7 @@ func TestRulesFilterModelWithFindingsFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp datasource.SchemaResponse
-	(&securityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	(&awsSecurityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
 	data.Ingress["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
 	delete(data.Ingress, "https_all")

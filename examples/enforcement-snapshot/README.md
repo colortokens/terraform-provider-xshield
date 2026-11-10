@@ -5,8 +5,8 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | Directory | What it is |
 |--|--|
 | `modules/aws` | The enforcement module. One block per AWS account and region. |
-| `modules/group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
-| `modules/security-group-rules` | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
+| `modules/aws-group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
+| `modules/aws-security-group-rules` | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
@@ -66,7 +66,7 @@ The enforcement workspace attaches each instance's group itself. Terraform has n
 
 ```hcl
 module "orders_db_xshield" {
-  source = "colortokens/enforcement/xshield//modules/group-lookup"
+  source = "colortokens/enforcement/xshield//modules/aws-group-lookup"
   handle = "rds/orders-db"
 }
 
@@ -135,7 +135,7 @@ cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=fal
 | `This provider version cannot apply this snapshot` | Xshield publishes a newer snapshot format | Upgrade the `colortokens/xshield` provider |
 | `Xshield did not accept the apply receipt` | What was applied is not exactly what the snapshot lists | The details name the keys missing or unknown; use the enforcement module rather than hand-written resources |
 | `Cannot read the changes Xshield made to customer groups in A/R` | Xshield could not be reached as configured, or the API key's user cannot read cloud snapshots. An account and region with nothing published is not an error: every group keeps the rules its code declares | Check `XSHIELD_SERVER_URL` and the key's role |
-| `Invalid count argument` or `Invalid for_each argument` in a `security-group-rules` module | An approved Full control change applies to a group with this name, and the plan cannot know the group's VPC or one of its declared rules until apply: the same run creates the VPC or a group a rule references, or the module has a `depends_on` with pending changes. The plan stops rather than declare a rule Xshield has left out | Apply the new VPC or group first, for example with `-target`, then plan again; or drop the module's `depends_on`. A group no change applies to never stops here |
+| `Invalid count argument` or `Invalid for_each argument` in a `aws-security-group-rules` module | An approved Full control change applies to a group with this name, and the plan cannot know the group's VPC or one of its declared rules until apply: the same run creates the VPC or a group a rule references, or the module has a `depends_on` with pending changes. The plan stops rather than declare a rule Xshield has left out | Apply the new VPC or group first, for example with `-target`, then plan again; or drop the module's `depends_on`. A group no change applies to never stops here |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
 | Warning: `Xshield lists no entry for <handle>`, with `warn_when_unlisted` set | The resource is new and Xshield has not yet discovered it, Xshield's policy gives it nothing to attach, Xshield refuses it, or the handle is misspelt | Nothing for a new resource. Otherwise compare the handle with the enforcement module's `directory` output, and look for the resource among the `assetRefused` and `groupRefused` notices of `xshield_enforcement_status` |
 | `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |

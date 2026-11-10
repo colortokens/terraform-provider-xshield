@@ -1,7 +1,7 @@
 # Optional checks for groups under Full control
 
 When Xshield narrows one of your own security groups, the group's code keeps declaring its rules through
-`xshield_security_group_rules`. These checks catch three things that code can do and Xshield cannot see from its side:
+`xshield_aws_security_group_rules`. These checks catch three things that code can do and Xshield cannot see from its side:
 
 | Check | Reports | Default |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ rule the group already held, so both can be made blocking without stopping unrel
 revert-waiting check reports on every plan until the rule is declared again, so keep it advisory.
 
 The checks read the facts the data source reports, `reopens`, `undeclared_pending`, `undeclared_restores` and
-`security_group_id`, so they apply to rules declared through `xshield_security_group_rules` with
+`security_group_id`, so they apply to rules declared through `xshield_aws_security_group_rules` with
 `aws_vpc_security_group_ingress_rule` and `aws_vpc_security_group_egress_rule`. A rule naming a security group or prefix
 list is compared only with moved rules naming the same one.
 

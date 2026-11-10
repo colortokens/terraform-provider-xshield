@@ -316,10 +316,10 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		NewPolicyChangesDataSource,
 		NewWorkRequestDataSource,
 
-		newEnforcementSnapshotDataSource,
+		newAWSEnforcementSnapshotDataSource,
 		newEnforcementStatusDataSource,
-		newSecurityGroupChangesDataSource,
-		newSecurityGroupRulesDataSource,
+		newAWSSecurityGroupChangesDataSource,
+		newAWSSecurityGroupRulesDataSource,
 	}
 }
 

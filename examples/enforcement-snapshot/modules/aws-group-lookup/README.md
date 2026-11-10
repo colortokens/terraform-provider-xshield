@@ -1,10 +1,10 @@
-# group-lookup module
+# aws-group-lookup module
 
 Returns the Xshield security group a database, function or service must attach, for the workspace that owns it.
 
 ```hcl
 module "orders_db_xshield" {
-  source = "colortokens/enforcement/xshield//modules/group-lookup"
+  source = "colortokens/enforcement/xshield//modules/aws-group-lookup"
   handle = "rds/orders-db"
 }
 
@@ -22,7 +22,7 @@ Pass the resource's own groups as `own_security_group_ids` and the plan fails, n
 
 ```hcl
 module "orders_db_xshield" {
-  source                 = "colortokens/enforcement/xshield//modules/group-lookup"
+  source                 = "colortokens/enforcement/xshield//modules/aws-group-lookup"
   handle                 = "rds/orders-db"
   own_security_group_ids = [aws_security_group.orders_db.id]
 }

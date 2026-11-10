@@ -3,8 +3,8 @@ terraform_version = "1.17.1"
 outputs = {}
 
 resources = {
-	"module.api.data.xshield_security_group_rules.this": {
-		"address":        "module.api.data.xshield_security_group_rules.this",
+	"module.api.data.xshield_aws_security_group_rules.this": {
+		"address":        "module.api.data.xshield_aws_security_group_rules.this",
 		"depends_on":     [],
 		"deposed_key":    "",
 		"index":          null,
@@ -13,7 +13,7 @@ resources = {
 		"name":           "this",
 		"provider_name":  "registry.terraform.io/colortokens/xshield",
 		"tainted":        false,
-		"type":           "xshield_security_group_rules",
+		"type":           "xshield_aws_security_group_rules",
 		"values": {
 			"cloud_account_id": "111111111111",
 			"egress":           {},
@@ -276,8 +276,8 @@ resources = {
 			"to_port":  22,
 		},
 	},
-	"module.app.data.xshield_security_group_rules.this": {
-		"address":        "module.app.data.xshield_security_group_rules.this",
+	"module.app.data.xshield_aws_security_group_rules.this": {
+		"address":        "module.app.data.xshield_aws_security_group_rules.this",
 		"depends_on":     [],
 		"deposed_key":    "",
 		"index":          null,
@@ -286,7 +286,7 @@ resources = {
 		"name":           "this",
 		"provider_name":  "registry.terraform.io/colortokens/xshield",
 		"tainted":        false,
-		"type":           "xshield_security_group_rules",
+		"type":           "xshield_aws_security_group_rules",
 		"values": {
 			"cloud_account_id": "111111111111",
 			"egress":           {},
@@ -355,7 +355,7 @@ resources = {
 	"module.app.aws_vpc_security_group_ingress_rule.this[\"https_lb\"]": {
 		"address": "module.app.aws_vpc_security_group_ingress_rule.this[\"https_lb\"]",
 		"depends_on": [
-			"module.app.data.xshield_security_group_rules.this",
+			"module.app.data.xshield_aws_security_group_rules.this",
 		],
 		"deposed_key":    "",
 		"index":          "https_lb",
@@ -383,8 +383,8 @@ resources = {
 			"to_port":  443,
 		},
 	},
-	"module.db.data.xshield_security_group_rules.this": {
-		"address":        "module.db.data.xshield_security_group_rules.this",
+	"module.db.data.xshield_aws_security_group_rules.this": {
+		"address":        "module.db.data.xshield_aws_security_group_rules.this",
 		"depends_on":     [],
 		"deposed_key":    "",
 		"index":          null,
@@ -393,7 +393,7 @@ resources = {
 		"name":           "this",
 		"provider_name":  "registry.terraform.io/colortokens/xshield",
 		"tainted":        false,
-		"type":           "xshield_security_group_rules",
+		"type":           "xshield_aws_security_group_rules",
 		"values": {
 			"cloud_account_id": "111111111111",
 			"egress":           {},
@@ -452,7 +452,7 @@ resources = {
 	"module.db.aws_vpc_security_group_ingress_rule.this[\"mysql_app\"]": {
 		"address": "module.db.aws_vpc_security_group_ingress_rule.this[\"mysql_app\"]",
 		"depends_on": [
-			"module.db.data.xshield_security_group_rules.this",
+			"module.db.data.xshield_aws_security_group_rules.this",
 		],
 		"deposed_key":    "",
 		"index":          "mysql_app",
@@ -480,8 +480,8 @@ resources = {
 			"to_port":  3306,
 		},
 	},
-	"module.web.data.xshield_security_group_rules.this": {
-		"address":        "module.web.data.xshield_security_group_rules.this",
+	"module.web.data.xshield_aws_security_group_rules.this": {
+		"address":        "module.web.data.xshield_aws_security_group_rules.this",
 		"depends_on":     [],
 		"deposed_key":    "",
 		"index":          null,
@@ -490,7 +490,7 @@ resources = {
 		"name":           "this",
 		"provider_name":  "registry.terraform.io/colortokens/xshield",
 		"tainted":        false,
-		"type":           "xshield_security_group_rules",
+		"type":           "xshield_aws_security_group_rules",
 		"values": {
 			"cloud_account_id": "111111111111",
 			"egress":           {},
@@ -735,7 +735,7 @@ resources = {
 	"module.web.aws_vpc_security_group_ingress_rule.this[\"https_any\"]": {
 		"address": "module.web.aws_vpc_security_group_ingress_rule.this[\"https_any\"]",
 		"depends_on": [
-			"module.web.data.xshield_security_group_rules.this",
+			"module.web.data.xshield_aws_security_group_rules.this",
 		],
 		"deposed_key":    "",
 		"index":          "https_any",

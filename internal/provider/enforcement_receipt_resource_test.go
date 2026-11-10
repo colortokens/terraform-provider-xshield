@@ -23,13 +23,13 @@ func testAccPublishedEnforcementPoint(t *testing.T) (account, region string) {
 
 func testAccEnforcementReceiptConfig(account, region, workspace string) string {
 	return testAccConfig(fmt.Sprintf(`
-data "xshield_enforcement_snapshot" "test" {
+data "xshield_aws_enforcement_snapshot" "test" {
   cloud_account_id = %[1]q
   region           = %[2]q
 }
 
 locals {
-  snapshot = data.xshield_enforcement_snapshot.test
+  snapshot = data.xshield_aws_enforcement_snapshot.test
 }
 
 resource "xshield_enforcement_receipt" "test" {
@@ -66,7 +66,7 @@ func TestAccEnforcementReceiptResource(t *testing.T) {
 					statecheck.ExpectKnownValue("xshield_enforcement_receipt.test", tfjsonpath.New("applied_at"), knownvalue.NotNull()),
 					statecheck.CompareValuePairs(
 						"xshield_enforcement_receipt.test", tfjsonpath.New("snapshot_version"),
-						"data.xshield_enforcement_snapshot.test", tfjsonpath.New("version"),
+						"data.xshield_aws_enforcement_snapshot.test", tfjsonpath.New("version"),
 						compare.ValuesSame(),
 					),
 				},
@@ -88,7 +88,7 @@ func TestAccEnforcementReceiptResource(t *testing.T) {
 	})
 }
 
-func TestAccEnforcementSnapshotDataSource(t *testing.T) {
+func TestAccAWSEnforcementSnapshotDataSource(t *testing.T) {
 	account, region := testAccPublishedEnforcementPoint(t)
 
 	resource.Test(t, resource.TestCase{
@@ -97,28 +97,28 @@ func TestAccEnforcementSnapshotDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(fmt.Sprintf(`
-data "xshield_enforcement_snapshot" "expected" {
+data "xshield_aws_enforcement_snapshot" "expected" {
   cloud_account_id = %[1]q
   region           = %[2]q
 }
 
-data "xshield_enforcement_snapshot" "pinned" {
+data "xshield_aws_enforcement_snapshot" "pinned" {
   cloud_account_id = %[1]q
   region           = %[2]q
-  version          = data.xshield_enforcement_snapshot.expected.version
+  version          = data.xshield_aws_enforcement_snapshot.expected.version
 }
 `, account, region)),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue("data.xshield_enforcement_snapshot.expected", tfjsonpath.New("published"), knownvalue.Bool(true)),
-					statecheck.ExpectKnownValue("data.xshield_enforcement_snapshot.expected", tfjsonpath.New("version"), knownvalue.StringRegexp(versionPattern)),
+					statecheck.ExpectKnownValue("data.xshield_aws_enforcement_snapshot.expected", tfjsonpath.New("published"), knownvalue.Bool(true)),
+					statecheck.ExpectKnownValue("data.xshield_aws_enforcement_snapshot.expected", tfjsonpath.New("version"), knownvalue.StringRegexp(versionPattern)),
 					statecheck.CompareValuePairs(
-						"data.xshield_enforcement_snapshot.expected", tfjsonpath.New("version"),
-						"data.xshield_enforcement_snapshot.pinned", tfjsonpath.New("version"),
+						"data.xshield_aws_enforcement_snapshot.expected", tfjsonpath.New("version"),
+						"data.xshield_aws_enforcement_snapshot.pinned", tfjsonpath.New("version"),
 						compare.ValuesSame(),
 					),
 					statecheck.CompareValuePairs(
-						"data.xshield_enforcement_snapshot.expected", tfjsonpath.New("ingress_rules"),
-						"data.xshield_enforcement_snapshot.pinned", tfjsonpath.New("ingress_rules"),
+						"data.xshield_aws_enforcement_snapshot.expected", tfjsonpath.New("ingress_rules"),
+						"data.xshield_aws_enforcement_snapshot.pinned", tfjsonpath.New("ingress_rules"),
 						compare.ValuesSame(),
 					),
 				},
@@ -136,7 +136,7 @@ func TestAccEnforcementStatusDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(fmt.Sprintf(`
-data "xshield_enforcement_snapshot" "test" {
+data "xshield_aws_enforcement_snapshot" "test" {
   cloud_account_id = %[1]q
   region           = %[2]q
 }
@@ -151,7 +151,7 @@ data "xshield_enforcement_status" "test" {
 					statecheck.ExpectKnownValue("data.xshield_enforcement_status.test", tfjsonpath.New("state"), knownvalue.StringRegexp(regexp.MustCompile(`^(converged|pending|unapplied)$`))),
 					statecheck.CompareValuePairs(
 						"data.xshield_enforcement_status.test", tfjsonpath.New("expected_version"),
-						"data.xshield_enforcement_snapshot.test", tfjsonpath.New("version"),
+						"data.xshield_aws_enforcement_snapshot.test", tfjsonpath.New("version"),
 						compare.ValuesSame(),
 					),
 				},
@@ -160,7 +160,7 @@ data "xshield_enforcement_status" "test" {
 	})
 }
 
-func TestAccSecurityGroupRulesDataSource(t *testing.T) {
+func TestAccAWSSecurityGroupRulesDataSource(t *testing.T) {
 	account, region := testAccPublishedEnforcementPoint(t)
 
 	resource.Test(t, resource.TestCase{
@@ -169,7 +169,7 @@ func TestAccSecurityGroupRulesDataSource(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(fmt.Sprintf(`
-data "xshield_security_group_rules" "test" {
+data "xshield_aws_security_group_rules" "test" {
   cloud_account_id = %q
   region           = %q
   vpc_id           = "vpc-0123456789abcdef0"
@@ -184,9 +184,9 @@ data "xshield_security_group_rules" "test" {
 }
 `, account, region, acctest.RandomWithPrefix("tf-acc-group"))),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("published"), knownvalue.Bool(true)),
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("version"), knownvalue.NotNull()),
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("ingress_rules"), knownvalue.MapExact(map[string]knownvalue.Check{
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("published"), knownvalue.Bool(true)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("version"), knownvalue.NotNull()),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("ingress_rules"), knownvalue.MapExact(map[string]knownvalue.Check{
 						"https": knownvalue.ObjectPartial(map[string]knownvalue.Check{
 							"ip_protocol": knownvalue.StringExact("tcp"),
 							"from_port":   knownvalue.Int64Exact(443),
@@ -194,9 +194,9 @@ data "xshield_security_group_rules" "test" {
 							"cidr_ipv4":   knownvalue.StringExact("10.0.0.0/8"),
 						}),
 					})),
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("egress_rules"), knownvalue.MapSizeExact(1)),
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("revoked"), knownvalue.ListSizeExact(0)),
-					statecheck.ExpectKnownValue("data.xshield_security_group_rules.test", tfjsonpath.New("pending"), knownvalue.ListSizeExact(0)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("egress_rules"), knownvalue.MapSizeExact(1)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("revoked"), knownvalue.ListSizeExact(0)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("pending"), knownvalue.ListSizeExact(0)),
 				},
 			},
 		},

@@ -31,7 +31,7 @@ func loadJSON[T any](t *testing.T, name string) T {
 	return out
 }
 
-func sampleSnapshotModel(t *testing.T) enforcementSnapshotDataSourceModel {
+func sampleSnapshotModel(t *testing.T) awsEnforcementSnapshotDataSourceModel {
 	t.Helper()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
 	if err := renderable(snap); err != nil {
@@ -124,8 +124,8 @@ func TestEverySnapshotModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp datasource.SchemaResponse
-	(&enforcementSnapshotDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
-	for name, m := range map[string]enforcementSnapshotDataSourceModel{
+	(&awsEnforcementSnapshotDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	for name, m := range map[string]awsEnforcementSnapshotDataSourceModel{
 		"sample":      sampleSnapshotModel(t),
 		"empty":       snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot.json").emptied())),
 		"pinned":      withVersion(sampleSnapshotModel(t), testVersion),
@@ -148,7 +148,7 @@ func (s wireSnapshot) emptied() wireSnapshot {
 	return empty
 }
 
-func withVersion(m enforcementSnapshotDataSourceModel, v string) enforcementSnapshotDataSourceModel {
+func withVersion(m awsEnforcementSnapshotDataSourceModel, v string) awsEnforcementSnapshotDataSourceModel {
 	m.Version = types.StringValue(v)
 	return m
 }

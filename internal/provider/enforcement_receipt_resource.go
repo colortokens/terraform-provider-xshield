@@ -94,7 +94,7 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			},
 			"snapshot_version": schema.StringAttribute{
 				Required:    true,
-				Description: "Version of the snapshot that was applied, from `xshield_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.",
+				Description: "Version of the snapshot that was applied, from `xshield_aws_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.",
 			},
 			"security_groups": idMap("Security group ID created for each key in the snapshot's `security_groups`.", true),
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
@@ -180,7 +180,7 @@ func receiptAdvice(err error) string {
 			"every key the snapshot lists, and nothing else, or use the aws enforcement module, which does."
 	case http.StatusNotFound:
 		return "Xshield published no such version for this account and region. Pass snapshot_version from the same " +
-			"xshield_enforcement_snapshot the resources were created from."
+			"xshield_aws_enforcement_snapshot the resources were created from."
 	}
 	return "The resources were created; run apply again to send the receipt."
 }

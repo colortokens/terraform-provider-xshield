@@ -11,7 +11,7 @@ data "xshield_enforcement_status" "handover" {
   region           = data.aws_region.handover.region
 }
 
-data "xshield_enforcement_snapshot" "handover" {
+data "xshield_aws_enforcement_snapshot" "handover" {
   cloud_account_id = data.aws_caller_identity.handover.account_id
   region           = data.aws_region.handover.region
 }
@@ -23,13 +23,13 @@ import {
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if contains(keys(data.xshield_enforcement_snapshot.handover.ingress_rules), k) }
+  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if contains(keys(data.xshield_aws_enforcement_snapshot.handover.ingress_rules), k) }
   to       = module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if contains(keys(data.xshield_enforcement_snapshot.handover.egress_rules), k) }
+  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if contains(keys(data.xshield_aws_enforcement_snapshot.handover.egress_rules), k) }
   to       = module.xshield_enforcement.aws_vpc_security_group_egress_rule.this[each.key]
   id       = each.value
 }
@@ -46,7 +46,7 @@ data "aws_ssm_parameters_by_path" "handover" {
 }
 
 import {
-  for_each = { for k, d in data.xshield_enforcement_snapshot.handover.directory : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
+  for_each = { for k, d in data.xshield_aws_enforcement_snapshot.handover.directory : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

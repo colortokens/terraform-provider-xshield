@@ -27,6 +27,6 @@ output "security_group_ids" {
 }
 
 output "directory" {
-  description = "The SSM parameter each owning workspace's group-lookup reads, keyed by handle."
+  description = "The SSM parameter each owning workspace's aws-group-lookup reads, keyed by handle."
   value       = { for handle, entry in local.snap.directory : handle => entry.parameter_name }
 }

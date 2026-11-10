@@ -14,16 +14,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &enforcementSnapshotDataSource{}
-var _ datasource.DataSourceWithConfigure = &enforcementSnapshotDataSource{}
+var _ datasource.DataSource = &awsEnforcementSnapshotDataSource{}
+var _ datasource.DataSourceWithConfigure = &awsEnforcementSnapshotDataSource{}
 
-func newEnforcementSnapshotDataSource() datasource.DataSource {
-	return &enforcementSnapshotDataSource{}
+func newAWSEnforcementSnapshotDataSource() datasource.DataSource {
+	return &awsEnforcementSnapshotDataSource{}
 }
 
-// enforcementSnapshotDataSource only reads: the customer's pipeline performs
+// awsEnforcementSnapshotDataSource only reads: the customer's pipeline performs
 // every cloud write from what it returns.
-type enforcementSnapshotDataSource struct {
+type awsEnforcementSnapshotDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -66,7 +66,7 @@ type esAssetModel struct {
 	AttachedBy    types.String `tfsdk:"attached_by"`
 }
 
-type enforcementSnapshotDataSourceModel struct {
+type awsEnforcementSnapshotDataSourceModel struct {
 	CloudAccountID       types.String                    `tfsdk:"cloud_account_id"`
 	Region               types.String                    `tfsdk:"region"`
 	Published            types.Bool                      `tfsdk:"published"`
@@ -80,8 +80,8 @@ type enforcementSnapshotDataSourceModel struct {
 	Withdrawing          []types.String                  `tfsdk:"withdrawing"`
 }
 
-func (d *enforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_enforcement_snapshot"
+func (d *awsEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_enforcement_snapshot"
 }
 
 var (
@@ -96,7 +96,7 @@ var (
 // Schema declares the collections as maps of objects rather than nested
 // attributes: Terraform's test mocks cannot set a computed nested attribute,
 // and a team testing its own modules against this data source needs to.
-func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	objects := func(elem attr.Type, description string) schema.MapAttribute {
 		return schema.MapAttribute{Computed: true, ElementType: elem, MarkdownDescription: description}
 	}
@@ -156,7 +156,7 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 				"parameter_name": types.StringType, "handle": types.StringType, "security_groups": types.ListType{ElemType: types.StringType}, "tags": esTagsType,
 				"slot_limit": types.Int64Type,
 			}}, "One SSM parameter per database, function or service its own workspace attaches, keyed by handle. The "+
-				"`group-lookup` module reads it. An entry listing no group attaches nothing. "+
+				"`aws-group-lookup` module reads it. An entry listing no group attaches nothing. "+
 				"`parameter_name`: `/colortokens/v1/<handle>/security-groups`. "+
 				"`handle`: the resource's kind and name, such as `rds/orders-db` or `lambda/orders-api`. "+
 				"`security_groups`: keys, in `security_groups`, of the groups the resource attaches. "+
@@ -176,7 +176,7 @@ func (d *enforcementSnapshotDataSource) Schema(ctx context.Context, req datasour
 	}
 }
 
-func (d *enforcementSnapshotDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *awsEnforcementSnapshotDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -298,8 +298,8 @@ type wireExpected struct {
 	Version string `json:"version"`
 }
 
-func (d *enforcementSnapshotDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data enforcementSnapshotDataSourceModel
+func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data awsEnforcementSnapshotDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -381,8 +381,8 @@ func expectedVersion(ctx context.Context, api cloudSnapshotAPI, account, region 
 // snapshotModel never returns a nil map or list: an empty account still plans
 // cleanly, and an attribute that switched between null and empty would show
 // as a change on every plan.
-func snapshotModel(account, region types.String, snap *wireSnapshot) enforcementSnapshotDataSourceModel {
-	m := enforcementSnapshotDataSourceModel{
+func snapshotModel(account, region types.String, snap *wireSnapshot) awsEnforcementSnapshotDataSourceModel {
+	m := awsEnforcementSnapshotDataSourceModel{
 		CloudAccountID:       account,
 		Region:               region,
 		Published:            types.BoolValue(snap != nil),

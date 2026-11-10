@@ -13,16 +13,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &securityGroupRulesDataSource{}
-var _ datasource.DataSourceWithConfigure = &securityGroupRulesDataSource{}
+var _ datasource.DataSource = &awsSecurityGroupRulesDataSource{}
+var _ datasource.DataSourceWithConfigure = &awsSecurityGroupRulesDataSource{}
 
-func newSecurityGroupRulesDataSource() datasource.DataSource {
-	return &securityGroupRulesDataSource{}
+func newAWSSecurityGroupRulesDataSource() datasource.DataSource {
+	return &awsSecurityGroupRulesDataSource{}
 }
 
-// securityGroupRulesDataSource is how Full control reaches a customer's own group in pipeline
+// awsSecurityGroupRulesDataSource is how Full control reaches a customer's own group in pipeline
 // delivery: the group's code passes its rules through it and declares what comes back.
-type securityGroupRulesDataSource struct {
+type awsSecurityGroupRulesDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -38,7 +38,7 @@ type sgrRuleModel struct {
 	Tags                      types.Map    `tfsdk:"tags"`
 }
 
-type securityGroupRulesDataSourceModel struct {
+type awsSecurityGroupRulesDataSourceModel struct {
 	CloudAccountID     types.String            `tfsdk:"cloud_account_id"`
 	Region             types.String            `tfsdk:"region"`
 	VPCID              types.String            `tfsdk:"vpc_id"`
@@ -71,13 +71,13 @@ var sgrMoveType = types.ObjectType{AttrTypes: map[string]attr.Type{
 	"referenced_security_group_id": types.StringType, "change_set": types.StringType,
 }}
 
-func (d *securityGroupRulesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_security_group_rules"
+func (d *awsSecurityGroupRulesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_security_group_rules"
 }
 
 // Schema takes the declared rules as nested attributes, so a rule sets only what it uses, and
 // returns the rules to keep as a map of objects, which Terraform's test mocks can set.
-func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	declared := func(direction string) schema.MapNestedAttribute {
 		optional := func(description string) schema.StringAttribute {
 			return schema.StringAttribute{Optional: true, MarkdownDescription: description}
@@ -110,7 +110,7 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 			"group, every rule comes back unchanged. When Xshield narrows a broad rule, the rule is left out once every workload that " +
 			"still needs it carries its `ct-cohort-` group, so no workload loses access part-way. Rules are matched by their content, " +
 			"and the group by its name and VPC, so neither your code nor this data source needs AWS rule IDs. Read it only for a " +
-			"group `xshield_security_group_changes` lists: another group plans without it, even where its VPC or rules are values " +
+			"group `xshield_aws_security_group_changes` lists: another group plans without it, even where its VPC or rules are values " +
 			"the plan learns only at apply. A group it is read for needs its VPC and every declared rule known when the plan " +
 			"runs, so a rule naming a security group the same plan creates goes in after that group is applied.",
 		Attributes: map[string]schema.Attribute{
@@ -154,7 +154,7 @@ func (d *securityGroupRulesDataSource) Schema(ctx context.Context, req datasourc
 	}
 }
 
-func (d *securityGroupRulesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *awsSecurityGroupRulesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -166,8 +166,8 @@ func (d *securityGroupRulesDataSource) Configure(ctx context.Context, req dataso
 	d.api = cloudSnapshotAPI{client: client}
 }
 
-func (d *securityGroupRulesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data securityGroupRulesDataSourceModel
+func (d *awsSecurityGroupRulesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data awsSecurityGroupRulesDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -199,7 +199,7 @@ func groupChangeOf(changes wireCustomerGroupChanges, vpcID, name string) *wireCu
 }
 
 // filterDeclaredRules never returns a nil map or list, so an unchanged group plans cleanly.
-func filterDeclaredRules(data *securityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
+func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
 	data.IngressRules, data.EgressRules = map[string]sgrRuleModel{}, map[string]sgrRuleModel{}
 	data.Revoked, data.Pending = []types.String{}, []types.String{}
 	data.SecurityGroupID, data.Reopens = types.StringNull(), []sgrReopenModel{}

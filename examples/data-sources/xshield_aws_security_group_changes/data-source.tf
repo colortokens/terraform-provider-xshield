@@ -1,13 +1,13 @@
 # Read once per account and region, in the root module, and pass it to each group you route through Full control.
-data "xshield_security_group_changes" "this" {
+data "xshield_aws_security_group_changes" "this" {
   cloud_account_id = "123456789012"
   region           = "us-east-1"
 }
 
 module "web_rules" {
-  source = "colortokens/enforcement/xshield//modules/security-group-rules"
+  source = "colortokens/enforcement/xshield//modules/aws-security-group-rules"
 
-  xshield_changes   = data.xshield_security_group_changes.this
+  xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id
   group_name        = aws_security_group.web.name
   security_group_id = aws_security_group.web.id

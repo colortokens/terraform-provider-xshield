@@ -21,7 +21,7 @@ mock_provider "aws" {
 }
 
 mock_provider "xshield" {
-  mock_data "xshield_enforcement_snapshot" {
+  mock_data "xshield_aws_enforcement_snapshot" {
     defaults = {
       published = true
       version   = "v42"
@@ -271,7 +271,7 @@ run "refuses_another_accounts_snapshot" {
     values = { account_id = "111122223333" }
   }
 
-  expect_failures = [data.xshield_enforcement_snapshot.this]
+  expect_failures = [data.xshield_aws_enforcement_snapshot.this]
 }
 
 run "keeps_connector_tags" {
@@ -288,7 +288,7 @@ run "empty_snapshot_still_reports" {
   command = apply
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published             = true
       version               = "v43"
@@ -313,7 +313,7 @@ run "full_control_cohort_rule_names_its_group" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_snapshot.this
+    target = data.xshield_aws_enforcement_snapshot.this
     values = {
       published = true
       version   = "v44"

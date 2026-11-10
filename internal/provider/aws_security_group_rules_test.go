@@ -21,8 +21,8 @@ func declaredRule(protocol string, port int64, cidr string) sgrRuleModel {
 		ReferencedSecurityGroupID: types.StringNull(), Description: types.StringNull(), Tags: types.MapNull(types.StringType)}
 }
 
-func webRules() *securityGroupRulesDataSourceModel {
-	return &securityGroupRulesDataSourceModel{
+func webRules() *awsSecurityGroupRulesDataSourceModel {
+	return &awsSecurityGroupRulesDataSourceModel{
 		CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		VPCID: types.StringValue("vpc-1"), GroupName: types.StringValue("web"), Version: types.StringValue(testVersion),
 		Ingress: map[string]sgrRuleModel{"https_all": declaredRule("6", 443, "0.0.0.0/0"), "ssh_office": declaredRule("tcp", 22, "10.0.0.0/8")},
@@ -184,7 +184,7 @@ func TestRulesFilterModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp datasource.SchemaResponse
-	(&securityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	(&awsSecurityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
 	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "web"))
 	state := tfsdk.State{Schema: resp.Schema}

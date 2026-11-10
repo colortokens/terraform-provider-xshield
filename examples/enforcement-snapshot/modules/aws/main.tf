@@ -9,10 +9,10 @@ locals {
   account_id = coalesce(var.cloud_account_id, data.aws_caller_identity.current.account_id)
   region     = coalesce(var.region, data.aws_region.current.region)
   workspace  = coalesce(var.workspace, "xshield-enforcement-${local.account_id}-${local.region}")
-  snap       = data.xshield_enforcement_snapshot.this
+  snap       = data.xshield_aws_enforcement_snapshot.this
 }
 
-data "xshield_enforcement_snapshot" "this" {
+data "xshield_aws_enforcement_snapshot" "this" {
   cloud_account_id = local.account_id
   region           = local.region
   version          = var.snapshot_version
@@ -173,7 +173,7 @@ resource "aws_network_interface_sg_attachment" "this" {
 }
 
 # One parameter per database, function or service its own workspace attaches;
-# the group-lookup module reads it by handle.
+# the aws-group-lookup module reads it by handle.
 resource "aws_ssm_parameter" "directory" {
   for_each = local.snap.directory
 

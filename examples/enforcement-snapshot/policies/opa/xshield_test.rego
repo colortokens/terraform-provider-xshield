@@ -9,9 +9,9 @@ ssh := {"ip_protocol": "tcp", "from_port": 22, "to_port": 22, "cidr_ipv4": "10.0
 http := object.union(ssh, {"from_port": 80, "to_port": 80})
 
 source(facts) := {
-	"address": "module.web.data.xshield_security_group_rules.this",
+	"address": "module.web.data.xshield_aws_security_group_rules.this",
 	"mode": "data",
-	"type": "xshield_security_group_rules",
+	"type": "xshield_aws_security_group_rules",
 	"values": object.union(
 		{
 			"group_name": "web",
@@ -107,7 +107,7 @@ test_protocol_number_and_name_are_the_same_traffic if {
 test_a_revert_waiting_on_an_undeclared_rule_warns_on_any_plan if {
 	restore := object.union(ssh, {"direction": "ingress", "change_set": "cs-0"})
 	warnings := xshield_revert_waiting.warn with input as plan([], [], [restore])
-	warnings == {"Xshield is reverting change set cs-0 on security group web (sg-web) and waits for this workspace to declare tcp 22 from 10.0.0.0/8 again. Until it does, Xshield keeps the access every workload in the group has now. Declare the rule through xshield_security_group_rules to end the wait."}
+	warnings == {"Xshield is reverting change set cs-0 on security group web (sg-web) and waits for this workspace to declare tcp 22 from 10.0.0.0/8 again. Until it does, Xshield keeps the access every workload in the group has now. Declare the rule through xshield_aws_security_group_rules to end the wait."}
 }
 
 test_nothing_to_restore_no_warning if {
@@ -121,7 +121,7 @@ removed_early(changes) := denied if {
 }
 
 test_a_deleted_rule_a_change_still_needs_fails if {
-	removed_early([ingress("module.web.x[\"ssh\"]", ["delete"], in_group(ssh, "sg-web"), null)]) == {"module.web.x[\"ssh\"] takes tcp 22 from 10.0.0.0/8 out of security group web (sg-web) before Xshield change set cs-2 is ready for it. Until every workload that keeps this traffic carries its cohort group, those workloads lose it. Declare the rule again through xshield_security_group_rules; Xshield leaves it out itself once it is safe."}
+	removed_early([ingress("module.web.x[\"ssh\"]", ["delete"], in_group(ssh, "sg-web"), null)]) == {"module.web.x[\"ssh\"] takes tcp 22 from 10.0.0.0/8 out of security group web (sg-web) before Xshield change set cs-2 is ready for it. Until every workload that keeps this traffic carries its cohort group, those workloads lose it. Declare the rule again through xshield_aws_security_group_rules; Xshield leaves it out itself once it is safe."}
 }
 
 test_an_update_that_takes_the_traffic_out_fails if {

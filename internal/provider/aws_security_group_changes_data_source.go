@@ -14,20 +14,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &securityGroupChangesDataSource{}
-var _ datasource.DataSourceWithConfigure = &securityGroupChangesDataSource{}
+var _ datasource.DataSource = &awsSecurityGroupChangesDataSource{}
+var _ datasource.DataSourceWithConfigure = &awsSecurityGroupChangesDataSource{}
 
-func newSecurityGroupChangesDataSource() datasource.DataSource {
-	return &securityGroupChangesDataSource{}
+func newAWSSecurityGroupChangesDataSource() datasource.DataSource {
+	return &awsSecurityGroupChangesDataSource{}
 }
 
-// securityGroupChangesDataSource needs only the account and region, so the plan reads it even where a group's own
-// VPC or rules are not known until the apply, and a group it does not list never reads xshield_security_group_rules.
-type securityGroupChangesDataSource struct {
+// awsSecurityGroupChangesDataSource needs only the account and region, so the plan reads it even where a group's own
+// VPC or rules are not known until the apply, and a group it does not list never reads xshield_aws_security_group_rules.
+type awsSecurityGroupChangesDataSource struct {
 	api cloudSnapshotAPI
 }
 
-type securityGroupChangesDataSourceModel struct {
+type awsSecurityGroupChangesDataSourceModel struct {
 	CloudAccountID types.String        `tfsdk:"cloud_account_id"`
 	Region         types.String        `tfsdk:"region"`
 	Published      types.Bool          `tfsdk:"published"`
@@ -35,15 +35,15 @@ type securityGroupChangesDataSourceModel struct {
 	Groups         map[string][]string `tfsdk:"groups"`
 }
 
-func (d *securityGroupChangesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_security_group_changes"
+func (d *awsSecurityGroupChangesDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_security_group_changes"
 }
 
-func (d *securityGroupChangesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *awsSecurityGroupChangesDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Lists your own security groups that an approved Full control change applies to, in one account and region, " +
 			"when a Terraform pipeline delivers the account. Read it once, in the root module, and read " +
-			"`xshield_security_group_rules` only for a group it lists: every other group keeps the rules its code declares, and " +
+			"`xshield_aws_security_group_rules` only for a group it lists: every other group keeps the rules its code declares, and " +
 			"its plan shows nothing from Xshield. It needs only the account and region, so it is read when the plan starts, even " +
 			"in a configuration that creates the VPC or the security groups it lists.",
 		Attributes: map[string]schema.Attribute{
@@ -61,7 +61,7 @@ func (d *securityGroupChangesDataSource) Schema(ctx context.Context, req datasou
 	}
 }
 
-func (d *securityGroupChangesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *awsSecurityGroupChangesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -73,8 +73,8 @@ func (d *securityGroupChangesDataSource) Configure(ctx context.Context, req data
 	d.api = cloudSnapshotAPI{client: client}
 }
 
-func (d *securityGroupChangesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data securityGroupChangesDataSourceModel
+func (d *awsSecurityGroupChangesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data awsSecurityGroupChangesDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return

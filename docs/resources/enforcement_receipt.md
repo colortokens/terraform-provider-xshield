@@ -26,10 +26,10 @@ Destroying it removes it from state and leaves the receipt history in Xshield.
 # the ID of every resource the snapshot asks for, and reference them, so it is
 # sent only once they all exist.
 resource "xshield_enforcement_receipt" "this" {
-  cloud_account_id = data.xshield_enforcement_snapshot.this.cloud_account_id
-  region           = data.xshield_enforcement_snapshot.this.region
+  cloud_account_id = data.xshield_aws_enforcement_snapshot.this.cloud_account_id
+  region           = data.xshield_aws_enforcement_snapshot.this.region
   workspace        = "xshield-enforcement-123456789012-us-east-1"
-  snapshot_version = data.xshield_enforcement_snapshot.this.version
+  snapshot_version = data.xshield_aws_enforcement_snapshot.this.version
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(
@@ -49,7 +49,7 @@ resource "xshield_enforcement_receipt" "this" {
 - `region` (String) Region the snapshot was applied to.
 - `rules` (Map of String) Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.
 - `security_groups` (Map of String) Security group ID created for each key in the snapshot's `security_groups`.
-- `snapshot_version` (String) Version of the snapshot that was applied, from `xshield_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.
+- `snapshot_version` (String) Version of the snapshot that was applied, from `xshield_aws_enforcement_snapshot`; Xshield accepts a receipt only for a version it published.
 - `workspace` (String) Name of the enforcement workspace that applied it, as shown in Xshield.
 
 ### Optional
