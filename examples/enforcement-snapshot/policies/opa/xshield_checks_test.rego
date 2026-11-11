@@ -40,3 +40,10 @@ test_a_plan_with_no_checks_reports_nothing if {
 test_failed_checks_in_the_hcp_terraform_input_shape if {
 	count(xshield_checks.warn) == 1 with input as {"plan": {"checks": [failed_check("xshield_apply_overdue", "waited")]}}
 }
+
+test_a_check_the_plan_did_not_evaluate_reports_nothing if {
+	count(xshield_checks.warn) == 0 with input as {"checks": [
+		{"address": {"kind": "check", "name": "xshield_drift_high", "to_display": "check.xshield_drift_high"}, "status": "unknown"},
+		{"address": {"kind": "check", "name": "xshield_never_applied", "to_display": "check.xshield_never_applied"}, "status": "unknown", "instances": null},
+	]}
+}
