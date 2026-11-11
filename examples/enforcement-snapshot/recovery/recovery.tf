@@ -1,6 +1,11 @@
 # Rebuilds a lost enforcement state from the last receipt. Add this file to the enforcement workspace,
 # set snapshot_version = data.xshield_enforcement_status.recover.applied_version on the module, apply
 # once, then delete this file and the pin.
+#
+# The plan shows every resource as an import, nothing to add and nothing to destroy. It also shows an
+# in-place change on each security group and each directory parameter: an import cannot read a group's
+# revoke_rules_on_delete, and it reads a parameter into value where the module declares insecure_value,
+# so the parameter is written again with the value it holds. No group, rule or attachment changes.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
