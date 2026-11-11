@@ -4,7 +4,7 @@ Applies the AWS resources Xshield rendered for one account and region, and repor
 
 ```hcl
 module "xshield_enforcement" {
-  source = "colortokens/enforcement/xshield//modules/aws"
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
 }
 ```
 

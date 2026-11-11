@@ -20,7 +20,7 @@ data "xshield_aws_security_group_changes" "this" {
 }
 
 module "web_rules" {
-  source = "colortokens/enforcement/xshield//modules/aws-security-group-rules"
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id

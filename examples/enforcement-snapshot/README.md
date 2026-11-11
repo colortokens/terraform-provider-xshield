@@ -31,9 +31,11 @@ provider "aws" {
 provider "xshield" {} # credentials from XSHIELD_* environment variables
 
 module "xshield_enforcement" {
-  source = "colortokens/enforcement/xshield//modules/aws"
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
 }
 ```
+
+The modules ship in the provider's repository, under `examples/enforcement-snapshot/modules/`. Set `ref` to the tag of the provider release you run, so the module and the provider match.
 
 The module needs no inputs. It enforces the account and region the AWS provider is configured for, and refuses to apply a snapshot meant for any other. Each plan names the workload every change is for:
 
@@ -67,7 +69,7 @@ The enforcement workspace attaches each instance's group itself. Terraform has n
 
 ```hcl
 module "orders_db_xshield" {
-  source = "colortokens/enforcement/xshield//modules/aws-group-lookup"
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
   handle = "rds/orders-db"
 }
 
@@ -140,7 +142,7 @@ resource "aws_security_group" "web" {
 }
 
 module "web_rules" {
-  source = "colortokens/enforcement/xshield//modules/aws-security-group-rules"
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id
