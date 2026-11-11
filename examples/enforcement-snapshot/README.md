@@ -284,7 +284,7 @@ The module tests mock both providers, so they need no tenant or AWS account. Bui
 cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
 ```
 
-`modules/aws-group-lookup`, `modules/aws-security-group-rules` and `monitor/` have tests too. Run them the same way from their own directories; from `monitor/` the file is `../.dev.tfrc`.
+`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `monitor/`, `database/` and `apprunner/` have tests too. Run them the same way from their own directories; from `monitor/`, `database/` and `apprunner/` the file is `../.dev.tfrc`.
 
 ## What happens if
 
