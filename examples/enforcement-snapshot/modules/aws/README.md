@@ -26,6 +26,45 @@ A group's new rules are created before its old ones are removed, as the cloud co
 
 Resource keys are instance IDs and handles, so a plan names the workload each change is for.
 
+## Reading a change in words
+
+The `review` output says what the applied version holds, as a list of sentences. A plan shows only a root module's outputs, so export it from the root module:
+
+```hcl
+output "xshield_review" {
+  value = module.xshield_enforcement.review
+}
+```
+
+A plan then lists the sentences that change under `Changes to Outputs`. Here a change set adds a cohort group, and one rule's source narrows:
+
+```
+Changes to Outputs:
+  ~ xshield_review = [
+      + "Cohort group ct-cohort-0example is for i-0a1 and i-0b2. It keeps access that customer group sg-0example gives up under change set cs-example.",
+      + "Cohort group ct-cohort-0example allows all TCP except 80 from 10.20.0.0/16.",
+        "Group for i-0a1 is attached by this workspace to 1 network interface.",
+      - "Group for i-0a1 allows TCP 443 from 0.0.0.0/0 and ::/0 (template Web servers).",
+      + "Group for i-0a1 allows TCP 443 from 10.0.0.0/8 (template Web servers).",
+        "Group for i-0b2 is attached by this workspace to 1 network interface.",
+        # (2 unchanged elements hidden)
+        "Group for rds/orders-db allows TCP 5432 from 10.20.1.11/32 (template Databases).",
+      - "Version 8c2f41d09a3b holds 3 groups, 4 rules and 2 interface attachments for 111111111111/us-east-1.",
+      + "Version e91b0c55d2f4 holds 4 groups, 5 rules and 4 interface attachments for 111111111111/us-east-1.",
+    ]
+```
+
+Every sentence names its group, so it reads on its own when the plan hides the others.
+
+- The first sentence for a group says whose it is and who attaches it. A workload is named by its instance ID or its handle, which is the only name the snapshot holds for it. A cohort group names the workloads it is for, the ID of the customer group whose access it keeps, and the change set. A group being withdrawn says so.
+- Then comes one sentence for each set of ports the group allows: `from` its sources for ingress rules, `to` its destinations for egress rules. Ports read as `TCP 22`, `TCP 8000-8100`, `TCP 22, 80 and 443`, `all TCP`, or `all traffic` for every protocol. Ranges that run from port 0 to port 65535 and leave ports out between them read by what they leave out: 0-79 with 81-65535 is `all TCP except 80`.
+- A sentence names the rules' template in brackets, taken from the end of each rule's description. A rule that a workload's own group keeps for a change set names the customer group and the change set instead.
+- The last sentence counts the groups, rules and interface attachments. It starts with the first twelve characters of the version, so anything that changes the version changes at least that sentence.
+
+Two limits keep the output short enough to read. A sentence names five sources, destinations or workloads and counts the rest. The output describes `review_max_groups` groups, 50 unless you set it: cohort groups first, then the rest in key order. One sentence counts the groups past that number. A change these limits hide still changes the last sentence, and the plan's resource changes show it in full.
+
+While Xshield has published nothing, the output is one sentence that says so. For a version that holds nothing, it is the last sentence alone.
+
 ## Inputs
 
 | Name | Default | Description |
@@ -35,6 +74,7 @@ Resource keys are instance IDs and handles, so a plan names the workload each ch
 | `snapshot_version` | `null` | Pins a version for break-glass rollback. Xshield reports the account as pending while it is set. |
 | `workspace` | `xshield-enforcement-<account>-<region>` | Name Xshield shows for the workspace that applied a version. |
 | `tags` | `{}` | Added to every resource. `ManagedBy` and `ct:*` are reserved. |
+| `review_max_groups` | `50` | How many groups the `review` output describes in words. Groups past this number are counted, not described. |
 
 ## Outputs
 
@@ -43,6 +83,7 @@ Resource keys are instance IDs and handles, so a plan names the workload each ch
 | `published` | False while Xshield has published nothing for the account and region. |
 | `version` | Snapshot version applied. Null while nothing is published. |
 | `summary` | Counts of groups, rules and attachments, the handles owning workspaces attach, and groups being withdrawn. |
+| `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
 | `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
 | `directory` | The SSM parameter each owning workspace reads, keyed by handle. |
 

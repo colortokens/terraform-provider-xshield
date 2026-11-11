@@ -45,3 +45,8 @@ variable "enforcement_role_arn" {
 output "summary" {
   value = module.xshield_enforcement.summary
 }
+
+output "xshield_review" {
+  description = "What the applied version holds, in words. A plan lists the sentences that change."
+  value       = module.xshield_enforcement.review
+}
