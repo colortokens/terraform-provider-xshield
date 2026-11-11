@@ -12,6 +12,7 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
 | `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own for its Xshield group. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
+| `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
 | `handover/` | Import blocks that take over the groups the cloud connector created, when an account moves to pipeline delivery. |
 | `leave/` | A `removed` block that hands the account's groups to the cloud connector, when an account moves back to connector delivery. |
@@ -109,7 +110,64 @@ resource "aws_network_interface" "web" {
 }
 ```
 
-### 4. Monitor
+### 4. Full control: declare your own groups' rules through the rules module
+
+Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own, such as `0.0.0.0/0` on port 443. In pipeline delivery this goes through your code. The workspace that owns the group declares the group's rules through `modules/aws-security-group-rules`, and the module leaves a rule out once Xshield says it is safe to.
+
+In the workspace that owns the group:
+
+1. Configure the `xshield` provider as in step 1. The API key's user must be able to read cloud snapshots.
+2. Read `xshield_aws_security_group_changes` once, in the root module. It lists the groups in the account and region that an approved change applies to.
+3. Declare each group's rules through one module block, and pass that data source to every block.
+
+```hcl
+provider "xshield" {} # credentials from XSHIELD_* environment variables
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "xshield_aws_security_group_changes" "this" {
+  cloud_account_id = data.aws_caller_identity.current.account_id
+  region           = data.aws_region.current.region
+}
+
+resource "aws_security_group" "web" {
+  name   = "web"
+  vpc_id = aws_vpc.main.id
+}
+
+module "web_rules" {
+  source = "colortokens/enforcement/xshield//modules/aws-security-group-rules"
+
+  xshield_changes   = data.xshield_aws_security_group_changes.this
+  vpc_id            = aws_vpc.main.id
+  group_name        = aws_security_group.web.name
+  security_group_id = aws_security_group.web.id
+
+  ingress = {
+    https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
+    ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
+  }
+  egress = {
+    all = { ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }
+  }
+}
+```
+
+`ingress` and `egress` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules. Rules the workspace already manages as rule resources move into the module with `moved` blocks, to addresses such as `module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]`, so Terraform keeps them and creates nothing again.
+
+What a plan of this workspace shows:
+
+- A group no approved change applies to plans exactly as its code declares it. The module reads nothing from Xshield for that group.
+- When an approved change applies to the group, the module asks Xshield which declared rules to keep. A group is matched by its name and its VPC, so a group of the same name in another VPC is not affected.
+- A rule Xshield narrows stays in the plan until every workload that still needs it carries a `ct-cohort-` group that keeps that access. The enforcement workspace creates those groups, so run it first. The next plan of this workspace then removes the rule, and no workload loses access part-way.
+- Until this workspace has applied, the group keeps its broad rule. `xshield_enforcement_status` reads `waiting` while the change waits for this workspace, and the monitor reports `owner_apply_overdue` when the wait passes `max_owner_apply_age`.
+
+Keep every rule in the map, before and after Xshield leaves it out. If you delete a rule yourself before Xshield leaves it out, the workloads that still rely on it lose that traffic early. If the change is reverted, the rule comes back only while your code still declares it. Do not add a rule that gives back traffic a change took away: every workload in the group gets that traffic again.
+
+A plan of this workspace fails when Xshield cannot be reached. A plan that stops with `Invalid count argument` or `Invalid for_each argument` in the module is explained under [When something goes wrong](#when-something-goes-wrong). Policies that check the plans of workspaces that own such groups are provided by ColorTokens separately: see [`policies/`](policies/README.md).
+
+### 5. Monitor
 
 Run `monitor/` as a workspace of its own, on a schedule. It reads the status of one account and region and reports each thing that is wrong as a named check, in words a reviewer without portal access can act on.
 
@@ -134,6 +192,66 @@ fail_on = ["drift_high", "never_applied"]
 
 The `problems` output carries the same report by name, for a job that posts it somewhere. The workspace manages no resources, so `-detailed-exitcode` says nothing about it. To learn from an exit code whether approved policy is applied, plan the *enforcement* workspace on a schedule with `-detailed-exitcode`: 2 means it has something to apply, which is approved policy not yet applied or a resource it manages changed in the cloud.
 
+Where policy sets decide what blocks a run, use the example policy in [`policies/`](policies/README.md) in place of `fail_on`. [Exit codes and what stops a pipeline](#exit-codes-and-what-stops-a-pipeline) compares the choices.
+
+## Exit codes and what stops a pipeline
+
+Terraform reports a problem as a warning or as an error, and only an error stops a run.
+
+| Terraform reports | What it does to the run | Where these examples use it |
+|--|--|--|
+| A failed `check` block | A warning. The plan and the apply go ahead, and the exit code is the same as without it. | Every check in `monitor/`. `xshield_published` and `interfaces_have_room` in `modules/aws`. `directory_entry` in `modules/aws-group-lookup`. |
+| A failed precondition or postcondition | An error. The plan stops with exit code 1, so nothing is applied. | In `modules/aws`: a snapshot for another account or region, and groups in the account while nothing is published. In `modules/aws-group-lookup`: a handle without a kind, and more groups than the resource can carry. In `monitor/`: a problem named in `fail_on`. |
+| A failed variable validation, or an error from a provider | An error, as above. | A reserved tag key in `modules/aws`. A name `monitor/` does not know in `warn_on` or `fail_on`. Xshield cannot be reached. |
+
+`terraform plan -detailed-exitcode` tells a plan that has something to apply from one that has nothing:
+
+| Exit code | Meaning |
+|--|--|
+| 0 | The plan succeeded and has nothing to apply. |
+| 1 | The plan failed. |
+| 2 | The plan succeeded and has something to apply. |
+
+A failed check does not change these codes. A plan that only warns still returns 0 or 2.
+
+### The enforcement workspace
+
+Plan it on a schedule with `-detailed-exitcode`:
+
+- 2 means it has something to apply: approved policy that is not applied yet, or a resource it manages that changed in the cloud. Run the apply.
+- 0 means AWS holds what was last applied, as far as Terraform can see. A rule someone adds to an Xshield group is not a resource Terraform manages, so it never shows here. Only the monitor reports it, as `drift_high`.
+- 1 means the plan stopped. [When something goes wrong](#when-something-goes-wrong) lists the messages.
+
+A workspace that exports outputs, as `enforcement/` does, returns 2 on its first plan even while nothing is published, because the outputs are new. Apply once and it returns 0.
+
+### The monitor workspace
+
+The monitor manages no resources, so `-detailed-exitcode` says nothing about enforcement there, and every monitor check only warns. To stop a pipeline on a problem, choose one of these:
+
+- **`fail_on`.** The monitor's `problems` output has a precondition that fails while a problem named in `fail_on` is present. The plan then stops with exit code 1 and prints the message the check prints. A name in `fail_on` stops the plan even when `warn_on` leaves it out.
+- **The example policy.** [`policies/`](policies/README.md) holds one example policy, `xshield-checks`, for the workspace that runs the monitor, written for Sentinel and for OPA. It reads the check results Terraform records in the plan and reports every failed check whose name starts with `xshield_`. It ships advisory. Raise its enforcement level and any failed Xshield check stops the run. `warn_on` then chooses which problems can stop it, because a problem `warn_on` leaves out fails no check. Use it in place of `fail_on` where policy sets decide what blocks a run. Outside HCP Terraform and Terraform Enterprise, `opa eval --fail-defined` over the JSON plan exits non-zero when an Xshield check failed.
+- **The `problems` output.** It carries the same report by name, for a job of your own that reads it and decides.
+
+Policies for groups under Full control are provided by ColorTokens separately.
+
+## Stop enforcing
+
+`terraform destroy` on the enforcement workspace is not the way to stop enforcing. Neither is deleting the `module "xshield_enforcement"` block. Both delete Xshield's groups and tell Xshield nothing:
+
+- Xshield keeps the last receipt, so `xshield_enforcement_status` reads as it did before. The missing groups show only as drift findings, once the cloud connector observes the account.
+- Under Full control the `ct-cohort-` groups are deleted too. They keep the access a workload still needs after a broad rule left one of your own groups, so those workloads lose that access.
+- AWS refuses to delete a group that a database, function or service still carries, so the destroy can fail part-way.
+
+To stop enforcing, withdraw the policy in Xshield by undeploying it, for the workloads concerned or for the whole account. Keep the enforcement workspace and keep running it. Xshield publishes a version without the groups, and the workspace removes them:
+
+- An instance's group is detached and deleted by the enforcement run.
+- A database's, function's or service's group goes in two steps. First its directory entry stops listing the group, so the workspace that owns the resource detaches it on its next apply. Xshield lists the group as `withdrawing`, and keeps its rules, until it sees the group detached. A later version then drops the group, and the enforcement run deletes it.
+- When no group is left the run still sends its receipt, so Xshield knows the removal was applied.
+
+When the account moves to connector delivery, nothing is destroyed either. Follow `leave/`: its `removed` block makes Terraform stop managing the groups, rules, attachments and directory parameters, and leaves them in the account for the cloud connector.
+
+If `terraform destroy` was run by mistake, run the enforcement workspace again. It creates what the current version lists and sends a new receipt.
+
 ## Try it locally
 
 The module tests mock both providers, so they need no tenant or AWS account. Build the provider from this repository and point Terraform at it. Run these from this directory:
@@ -146,13 +264,43 @@ The module tests mock both providers, so they need no tenant or AWS account. Bui
 cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
 ```
 
+`modules/aws-group-lookup`, `modules/aws-security-group-rules` and `monitor/` have tests too. Run them the same way from their own directories; from `monitor/` the file is `../.dev.tfrc`.
+
+## What happens if
+
+Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and how to put it right. `state`, notices and drift findings are what `xshield_enforcement_status` returns. Names such as `drift_high` are the monitor's problems. The messages a plan prints are listed under [When something goes wrong](#when-something-goes-wrong).
+
+| What happens | In AWS | What Xshield shows | To put it right |
+|--|--|--|--|
+| Policy is approved in Xshield and the enforcement workspace has not run | No change. AWS keeps the policy last applied. | `state` is `pending`, or `unapplied` when nothing was applied before, with what is waiting and since when. The monitor reports `apply_overdue` or `never_applied` after `max_apply_age`. | Run the enforcement workspace. |
+| The enforcement pipeline stops running | No change. Nothing newly approved is applied. | `last_checked_at` stops moving, whatever `state` says. The monitor reports `pipeline_stopped` after `max_run_gap`. | Start the pipeline again. The monitor runs as a workspace of its own, so it still reports. |
+| Under Full control, the workspace that owns a group has not applied | The group keeps its broad rule, so the change is not in force for that group. No workload loses access. | `state` is `waiting`, and a `changeSetHeld` notice says what the change waits for. The monitor reports `owner_apply_overdue` after `max_owner_apply_age`. | Apply the workspace that owns the group. If it does not declare the group through `modules/aws-security-group-rules` yet, do step 4 first. |
+| A Full control change is reverted while a port it narrowed stays deployed | Your group again allows more than the port's policy. | A `portNotNarrowed` notice for each workload. The monitor reports `port_not_narrowed`. | Deploy the port again and approve its change, or undeploy the port. |
+| A workspace sets an instance's or an interface's security groups without `ignore_changes` | That workspace's next apply takes Xshield's groups off the instance or interface. Under Full control this can cut access a `ct-cohort-` group kept for the workload. | A `memberUnattached` drift finding of high severity. The monitor reports `drift_high`. | Add `ignore_changes` as in step 3, then run the enforcement workspace to attach the groups again. |
+| A lookup handle is misspelt | The resource gets no Xshield group. Nothing else changes. | Xshield reports the resource as `memberUnattached`. The monitor reports `drift_high`. | Correct the handle. Set `warn_when_unlisted = true` to have the plan warn when a handle has no entry. |
+| Resources are written by hand in place of `modules/aws` | Whatever the code declares is created. | Xshield refuses the receipt unless the resources are exactly the snapshot's, so the version is not recorded as applied. | Use `modules/aws`. |
+| The AWS provider points at another account or region than the snapshot is for | Nothing. The plan stops. | Nothing is applied or confirmed. | Point the AWS provider at the account and region the snapshot is for. |
+| Xshield has published nothing for the account and region: the account is not yet set to pipeline delivery, has no deployed policy, or the `xshield` provider points at another tenant | Nothing is created and no receipt is sent. The run warns through the `xshield_published` check. If the account already holds groups Xshield rendered, the plan stops and does not remove them. | The tenant the provider reads shows `state` as `unpublished`. The monitor reports `unpublished` only when `warn_on` names it. A tenant that does hold policy for the account sees no run, so that policy keeps waiting. | Check in Xshield that the account is set to pipeline delivery and has a deployed policy. Check `XSHIELD_SERVER_URL` and the API key. |
+| Xshield cannot be reached, or refuses the API key | Nothing. The enforcement plan fails, and so does the plan of every workspace that uses `modules/aws-security-group-rules`. A workspace that uses only `modules/aws-group-lookup` is not affected: the lookup reads only SSM. | Nothing changes. | Check `XSHIELD_SERVER_URL` and the key's role, then run again. |
+| `terraform destroy` is run on the enforcement workspace, or its module block is deleted | Xshield's groups are taken off instances and deleted, with their rules and directory parameters. Under Full control, workloads lose the access their `ct-cohort-` groups kept. | Nothing at first: Xshield keeps the last receipt. Drift findings follow once the cloud connector observes the account. | Run the enforcement workspace again. To stop enforcing, see [Stop enforcing](#stop-enforcing). |
+| The enforcement workspace's state is lost | Nothing changes. The groups stay in place. | Nothing changes. Xshield still holds the last receipt. | Before any other apply, follow `recovery/`: its import blocks rebuild the state from the last receipt. |
+| The account moves to connector delivery and the enforcement workspace still runs | Nothing. The plan stops with `Xshield moved <account>/<region> to connector delivery`. | `state` is `handedOver`. | Replace the module block with `leave/leave.tf`, apply once, then stop running the workspace. |
+| A rule is removed from an Xshield group outside Terraform | The traffic the rule allowed is blocked until the next enforcement apply puts the rule back. | A `ruleMissing` drift finding of medium severity. The monitor reports `drift_medium`, which it does not warn about by default. | Run the enforcement workspace. |
+| A rule is added to an Xshield group outside Terraform | The rule stays, and access is wider than approved. Terraform does not manage the rule, so no enforcement run removes it. | A `ruleUnmanaged` drift finding of high severity. The monitor reports `drift_high`. | Remove the rule by hand. |
+| AWS refuses a rule during an enforcement apply | The apply fails. The group keeps its old rules, because new rules are created before old ones are removed. | No receipt is sent, so the version is not recorded as applied. | Fix what AWS refused, then run the workspace again. |
+| A workload has no room for another security group, or its group would pass the quota of rules per security group | Nothing new is written for that workload. One that carries an Xshield group keeps it, with the rules last applied. One that carries none gets none. | An `assetRefused` or `groupRefused` notice with the reason, such as `NO_FREE_SLOT`. The monitor reports `workload_not_enforced`. | Free a slot on the workload's interfaces, or raise the quota. For a group over the rule quota, see `modules/aws/README.md`. |
+| `snapshot_version` pins a version | The pinned version stays applied. | Xshield reports the account as `pending` while the pin is in place. | Remove the pin when the rollback is over. |
+| The cloud connector has not observed the account since the last apply | Nothing. | `drift_evaluated` is false and no drift finding is listed, which means nobody looked. The monitor reports `drift_not_evaluated` after `max_unobserved_age`. | Check that the cloud connector's discovery is running. |
+
 ## When something goes wrong
 
 | You see | It means | Do |
 |--|--|--|
 | `This snapshot is for A/R, but the AWS provider is configured for B/S` | The AWS provider points at another account or region than `cloud_account_id` or `region` | Point the AWS provider at the account the snapshot is for, or drop the inputs to use the provider's |
 | `Cannot resolve the snapshot Xshield expects` | Xshield could not be reached as configured, or the API key's user cannot read cloud snapshots. An account with nothing published is not an error: the plan shows no change | Check `XSHIELD_SERVER_URL` and the key's role |
-| `Xshield has published nothing for A/R, yet the account holds security groups Xshield rendered` | The provider reads another tenant or endpoint than the one that published the groups | Point the provider back at that tenant; to remove the groups on purpose, remove the module |
+| Warning: `Xshield has published nothing for A/R, so this run creates nothing and sends no receipt` | The account is not yet set to pipeline delivery, has no deployed policy, or the provider reads another tenant or endpoint | If the account should have policy, check in Xshield that it is set to pipeline delivery and has a deployed policy, and check `XSHIELD_SERVER_URL` and the API key |
+| `Xshield has published nothing for A/R, yet the account holds security groups Xshield rendered` | The provider reads another tenant or endpoint than the one that published the groups | Point the provider back at that tenant. Removing the module, as the message offers, deletes the groups and tells Xshield nothing, as `terraform destroy` does: to stop enforcing, see [Stop enforcing](#stop-enforcing) |
+| `Xshield moved A/R to connector delivery` | The account's delivery is now the cloud connector, which keeps the groups this workspace created | Replace the module block with `leave/leave.tf`, apply once, then stop running the workspace |
 | `This provider version cannot apply this snapshot` | Xshield publishes a newer snapshot format | Upgrade the `colortokens/xshield` provider |
 | `Xshield did not accept the apply receipt` | What was applied is not exactly what the snapshot lists | The details name the keys missing or unknown; use the enforcement module rather than hand-written resources |
 | `Cannot read the changes Xshield made to customer groups in A/R` | Xshield could not be reached as configured, or the API key's user cannot read cloud snapshots. An account and region with nothing published is not an error: every group keeps the rules its code declares | Check `XSHIELD_SERVER_URL` and the key's role |

@@ -105,6 +105,12 @@ groups Xshield renders instead of the cloud connector. Start with
 | [`xshield_aws_security_group_changes`](docs/data-sources/aws_security_group_changes.md) | Lists your own groups that an approved Full control change applies to. |
 | [`xshield_aws_security_group_rules`](docs/data-sources/aws_security_group_rules.md) | Returns the rules to declare for one of those groups, with the approved change applied. |
 
+[examples/enforcement-snapshot/policies](examples/enforcement-snapshot/policies/README.md) holds one example
+policy, `xshield-checks`, for the workspace that runs the
+[monitor](examples/enforcement-snapshot/monitor), which reports each enforcement problem as a named check. The
+policy reports every failed Xshield check of a plan, and stops a run on them once you raise its enforcement
+level. Policies for groups under Full control are provided by ColorTokens separately.
+
 ## Running the provider locally
 
 With a local build, through `dev_overrides`:
