@@ -1,0 +1,25 @@
+# Reports every problem an Xshield check of the plan raised, with the check's own message. Only a failed check
+# carries problems.
+
+import "tfplan/v2" as tfplan
+import "strings"
+
+violations = []
+
+for (tfplan.raw.checks else []) as check {
+	if check.address.kind is "check" and strings.has_prefix(check.address.name, "xshield_") {
+		for check.instances as instance {
+			for (instance.problems else []) as problem {
+				append(violations, check.address.to_display + ": " + problem.message)
+			}
+		}
+	}
+}
+
+for violations as message {
+	print(message)
+}
+
+main = rule {
+	length(violations) is 0
+}

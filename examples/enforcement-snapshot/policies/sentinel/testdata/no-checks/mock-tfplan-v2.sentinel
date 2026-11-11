@@ -1,0 +1,11 @@
+terraform_version = "1.17.1"
+
+variables = {}
+
+planned_values = {"outputs": {}, "resources": {}}
+
+output_changes = {}
+
+resource_changes = {}
+
+raw = {}
