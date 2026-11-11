@@ -9,8 +9,8 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `modules/aws-security-group-rules` | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
-| `database/` | A workspace that owns an RDS instance and attaches its Xshield group. |
-| `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own for its Xshield group. |
+| `database/` | A workspace that owns an RDS instance and attaches the group Xshield gave it beside its own. It declares none of Xshield's rules. |
+| `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own that carries the group Xshield gave it beside its own. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
 | `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
@@ -65,12 +65,16 @@ Deleting a group that an AWS-managed interface still references, such as one Lam
 
 ### 2. Databases, functions and services: the workspace that owns them attaches the group
 
-The enforcement workspace attaches each instance's group itself. Terraform has no separate attachment for an RDS instance, Aurora cluster, Lambda function, Managed Flink application or App Runner service, so the workspace that owns one adds its group to the resource's own list:
+The enforcement workspace attaches each instance's group itself. Terraform has no separate attachment for an RDS instance, Aurora cluster, Lambda function, Managed Flink application or App Runner service, so the workspace that owns one adds the group to the resource's own list.
+
+That workspace declares nothing of Xshield's. The enforcement workspace creates the group and every rule in it, such as the `rds/orders-db/in/tcp/5432/10.20.1.11/32` rule in the plan above, and writes the group's ID to the SSM parameter `/colortokens/v1/rds/orders-db/security-groups`. The lookup module reads that parameter by the resource's handle:
 
 ```hcl
 module "orders_db_xshield" {
   source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
-  handle = "rds/orders-db"
+
+  handle                 = "rds/orders-db"
+  own_security_group_ids = [aws_security_group.orders_db.id]
 }
 
 resource "aws_db_instance" "orders" {
@@ -78,7 +82,18 @@ resource "aws_db_instance" "orders" {
   # ...
   vpc_security_group_ids = concat([aws_security_group.orders_db.id], module.orders_db_xshield.security_group_ids)
 }
+
+output "xshield_security_group_ids" {
+  value = module.orders_db_xshield.security_group_ids
+}
 ```
+
+- `module.orders_db_xshield.security_group_ids` is the group Xshield gave the database. Its rules show in the enforcement workspace's plan, never in this one.
+- `aws_security_group.orders_db` is the database's own group, with the rules this workspace declares for it. Xshield's group goes beside it. Xshield changes a group of your own only under Full control, through step 4.
+- `own_security_group_ids` makes the plan fail, rather than the apply, when the database's own groups and Xshield's are more than AWS allows on it.
+- The output shows Xshield's group in this workspace's plan, under `Changes to Outputs`, when it arrives and when it leaves.
+
+`database/` is this workspace in full.
 
 | Resource | Handle |
 |--|--|
@@ -93,7 +108,7 @@ An App Runner service takes groups only through its VPC connector, and every ser
 
 An Auto Scaling group takes its group through its launch template, so new instances start with it. The enforcement run attaches the group to the instances that do not carry it yet.
 
-The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield and shows nothing from it. A misspelt handle therefore attaches nothing, and Xshield reports the resource as `memberUnattached`. To have the plan warn whenever a handle has no entry, set `warn_when_unlisted = true`; the warning is then expected on the run that creates the resource, and for a resource Xshield's policy gives nothing to attach.
+The lookup needs no Xshield credentials, only `ssm:GetParametersByPath` on `/colortokens/v1/*`. A resource Xshield lists no entry for gets an empty list, so its plan never depends on Xshield and attaches nothing from it, and the output above is empty. A misspelt handle therefore attaches nothing, and Xshield reports the resource as `memberUnattached`. To have the plan warn whenever a handle has no entry, set `warn_when_unlisted = true`; the warning is then expected on the run that creates the resource, and for a resource Xshield's policy gives nothing to attach.
 
 ### 3. Instances whose Terraform declares their security groups
 

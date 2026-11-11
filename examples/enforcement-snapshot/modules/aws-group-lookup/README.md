@@ -1,6 +1,6 @@
 # aws-group-lookup module
 
-Returns the Xshield security group a database, function or service must attach, for the workspace that owns it.
+Returns the Xshield security group a database, function or service must attach, for the workspace that owns it. The enforcement workspace creates that group and every rule in it; this module only finds the group's ID.
 
 ```hcl
 module "orders_db_xshield" {
@@ -13,6 +13,8 @@ resource "aws_db_instance" "orders" {
   vpc_security_group_ids = concat([aws_security_group.orders_db.id], module.orders_db_xshield.security_group_ids)
 }
 ```
+
+`aws_security_group.orders_db` is the database's own group, with the rules its workspace declares for it; Xshield's group goes beside it. [`database/`](../../database/main.tf) and [`apprunner/`](../../apprunner/main.tf) are whole workspaces that use the module.
 
 `handle` is the resource's kind and name: `rds/<DB instance identifier>`, `rds-cluster/<cluster identifier>`, `lambda/<function name>`, `flink/<application name>`, `apprunner/<service name>` or `asg/<Auto Scaling group name>`. The name is the one you already give the resource, so the lookup works before the resource exists.
 
