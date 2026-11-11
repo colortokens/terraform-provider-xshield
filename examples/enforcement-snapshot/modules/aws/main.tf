@@ -158,9 +158,10 @@ data "aws_network_interface" "receiving" {
 
 locals {
   new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
+  # An interface is full when the groups it carries and every new group of this run together pass its limit.
   full_interfaces = {
     for id, interface in data.aws_network_interface.receiving : id => try(interface.attachment[0].instance_id, "not attached")
-    if length(interface.security_groups) + length(lookup(local.new_limits, id, [])) > min(concat(lookup(local.new_limits, id, []), [length(interface.security_groups) + 1])...)
+    if length(interface.security_groups) + length(local.new_limits[id]) > min(local.new_limits[id]...)
   }
   attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(contains(keys(local.new_attachments), key) && contains(keys(local.full_interfaces), attachment.network_interface_id)) }
 }
