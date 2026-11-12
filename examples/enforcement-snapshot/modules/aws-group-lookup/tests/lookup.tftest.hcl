@@ -214,3 +214,23 @@ run "without_a_limit_nothing_is_checked" {
     error_message = "an entry without a limit returns its groups and leaves the room unknown"
   }
 }
+
+# An Auto Scaling group's launch template reads its group by the group's own name.
+run "reads_an_auto_scaling_group_by_its_name" {
+  variables {
+    handle = "asg/Orders-Web"
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/asg/Orders-Web/security-groups"]
+      values = ["{\"handle\":\"asg/Orders-Web\",\"security_group_ids\":[\"sg-0asg\"]}"]
+    }
+  }
+
+  assert {
+    condition     = data.aws_ssm_parameters_by_path.entry.path == "/colortokens/v1/asg/Orders-Web" && output.security_group_ids == ["sg-0asg"]
+    error_message = "an Auto Scaling group is read under asg/ and its name, in the name's own case"
+  }
+}

@@ -206,3 +206,57 @@ run "a_group_whose_name_is_known_only_at_apply_plans_while_no_change_is_publishe
     error_message = "with no change published, a group named only at apply must plan with the rules the caller passes"
   }
 }
+
+# A rule may name another security group or a prefix list instead of an address range. It is declared as the
+# caller wrote it, and Xshield is asked about it with that source.
+run "rules_that_name_a_group_or_a_prefix_list_are_declared_with_that_source" {
+  command = apply
+
+  variables {
+    xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = {} }
+    ingress_rules = {
+      from_lb = { ip_protocol = "tcp", from_port = 8080, to_port = 8080, referenced_security_group_id = "sg-0lb" }
+    }
+    egress_rules = {
+      s3 = { ip_protocol = "tcp", from_port = 443, to_port = 443, prefix_list_id = "pl-0example" }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      aws_vpc_security_group_ingress_rule.this["from_lb"].referenced_security_group_id == "sg-0lb",
+      aws_vpc_security_group_ingress_rule.this["from_lb"].cidr_ipv4 == null,
+      aws_vpc_security_group_egress_rule.this["s3"].prefix_list_id == "pl-0example",
+      aws_vpc_security_group_egress_rule.this["s3"].cidr_ipv4 == null,
+    ])
+    error_message = "a rule that names a group or a prefix list keeps that source, and gets no address range"
+  }
+}
+
+run "xshield_is_asked_about_a_rule_with_the_group_or_prefix_list_it_names" {
+  command = apply
+
+  variables {
+    xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = { web = ["vpc-0example"] } }
+    ingress_rules = {
+      from_lb    = { ip_protocol = "tcp", from_port = 8080, to_port = 8080, referenced_security_group_id = "sg-0lb" }
+      ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
+    }
+    egress_rules = {
+      s3           = { ip_protocol = "tcp", from_port = 443, to_port = 443, prefix_list_id = "pl-0example" }
+      dns_resolver = { ip_protocol = "udp", from_port = 53, to_port = 53, cidr_ipv4 = "10.0.0.2/32" }
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      data.xshield_aws_security_group_rules.this[0].declared_ingress_rules["from_lb"].referenced_security_group_id == "sg-0lb",
+      data.xshield_aws_security_group_rules.this[0].declared_egress_rules["s3"].prefix_list_id == "pl-0example",
+    ])
+    error_message = "Xshield matches a rule by what it allows, so it must be told the group or the prefix list the rule names"
+  }
+  assert {
+    condition     = toset(keys(aws_vpc_security_group_ingress_rule.this)) == toset(["ssh_office"]) && toset(keys(aws_vpc_security_group_egress_rule.this)) == toset(["dns_resolver"])
+    error_message = "a rule that names a group or a prefix list leaves the plan like any other once Xshield leaves it out"
+  }
+}

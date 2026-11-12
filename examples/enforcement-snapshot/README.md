@@ -240,6 +240,95 @@ The plan then shows the rule as `has moved to`, and nothing in AWS is added or d
 
 `full-control/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the two changes marked.
 
+#### A group whose rules are declared another way, or not in Terraform
+
+A group you already have keeps every rule through this step: the rules are in AWS already, so the change carries each one into the module instead of creating it. How depends on how the group's rules are declared today.
+
+| The group's rules today | The one-time change |
+|---|---|
+| `aws_vpc_security_group_ingress_rule` and `aws_vpc_security_group_egress_rule` resources | A map entry and a `moved` block for each rule, as above. |
+| Inline `ingress` and `egress` blocks of the `aws_security_group` | Delete every inline block of the group. Add a map entry and an `import` block for each rule. |
+| `aws_security_group_rule` resources | Add a map entry and an `import` block for each rule, and a `removed` block for each old resource. |
+| No Terraform: the group was made in the console, by a script or by another tool | Add an `aws_security_group` block with the group's own name and description, an `import` block for the group, and a map entry and an `import` block for each rule. |
+
+An `import` block names a rule by its security group rule ID. To list a group's rules with their IDs:
+
+```bash
+aws ec2 describe-security-group-rules --filters Name=group-id,Values=<group ID>
+```
+
+A group with inline rules:
+
+```hcl
+# Before
+resource "aws_security_group" "web" {
+  name   = "web"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    protocol    = "tcp"
+    from_port   = 443
+    to_port     = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# After: the group keeps its block without the ingress block, the https_all
+# entry of the map declares the rule, and
+import {
+  to = module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]
+  id = "sgr-0a1b2c3d4e5f60101"
+}
+```
+
+A group whose rules are `aws_security_group_rule` resources. Terraform cannot move that type into the one the module uses, so a `moved` block fails the plan. The `removed` block makes Terraform forget the old resource and leave its rule in AWS, and the `import` block brings the rule in under its key:
+
+```hcl
+# Before
+resource "aws_security_group_rule" "app_from_web" {
+  type                     = "ingress"
+  security_group_id        = aws_security_group.app.id
+  protocol                 = "tcp"
+  from_port                = 8080
+  to_port                  = 8080
+  source_security_group_id = aws_security_group.web.id
+}
+
+# After: the from_web entry of the map replaces that block, with
+removed {
+  from = aws_security_group_rule.app_from_web
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+import {
+  to = module.app_rules.aws_vpc_security_group_ingress_rule.this["from_web"]
+  id = "sgr-0a1b2c3d4e5f60201"
+}
+```
+
+`full-control-adopt/` is a workspace with one group of each of the last three kinds. Its `adopt.tf` holds the `import` and `removed` blocks. Delete them once the plan that uses them is applied.
+
+Read the first plan before you apply it. For each group it imports the rules, and the group too when no Terraform managed it, and adds only `terraform_data.xshield_routed`. It destroys and replaces nothing. A plan that shows anything else has one of these causes:
+
+- **A rule to destroy, inline rules.** Only some of the group's inline blocks of one direction were deleted. Terraform keeps the rules of a group with no inline block of that direction, and revokes the rules of the blocks deleted from a group that still has one.
+- **A rule to destroy, `aws_security_group_rule`.** A resource block was deleted with no `removed` block for it.
+- **A rule to create.** The rule has no `import` block, and the apply fails because the rule is already in the group. One `aws_security_group_rule` with several entries in `cidr_blocks` is one rule in AWS for each entry, so it becomes that many map entries and `import` blocks.
+- **A group to replace.** The `name` or `description` of the new `aws_security_group` block differs from the group's own. A description cannot be changed in place, so Terraform plans a new group.
+- **`Configuration for import target does not exist`.** The key of an `import` block is not a key of the map. Or a change that narrows the group was approved before this step, and Xshield already takes that rule out, so the module no longer declares it.
+
+Do this step before a change that narrows the group is approved. If one was approved first, nothing is lost: the change waits, every workload keeps the access the rule gives, `xshield_enforcement_status` reads `waiting`, and its `changeSetHeld` notice names the group and the rule. Once the module takes that rule out, its `import` block has no target. Delete that one `import` block and revoke that one rule yourself. That is the removal this workspace's plan would have made, and Xshield takes a rule out of the module only when every workload that still needs it carries its `ct-cohort-` group:
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id <group ID> --security-group-rule-ids <rule ID>
+```
+
+For an egress rule the command is `revoke-security-group-egress`.
+
+A group that stays outside Terraform is never changed by Xshield or by the enforcement workspace. A change that narrows one of its rules waits in the same way, until whoever owns the group takes the rule out and Xshield sees the group without it. A revert of that change waits for the rule to be put back the same way.
+
 What a plan of this workspace shows:
 
 - A group no approved change applies to plans exactly as its code declares it. The module reads nothing from Xshield for that group.
@@ -358,7 +447,7 @@ The module tests mock both providers, so they need no tenant or AWS account. Bui
 cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
 ```
 
-`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `monitor/`, `database/`, `apprunner/` and `full-control/` have tests too. Run them the same way from their own directories; from `monitor/`, `database/`, `apprunner/` and `full-control/` the file is `../.dev.tfrc`. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how.
+`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` have tests too. Run them the same way from their own directories; from `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` the file is `../.dev.tfrc`. The test of `full-control-adopt/` needs Terraform 1.11 or later. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how.
 
 ## What happens if
 
