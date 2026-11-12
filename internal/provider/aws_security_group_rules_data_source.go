@@ -102,7 +102,9 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 	kept := func(direction string) schema.MapAttribute {
 		return schema.MapAttribute{Computed: true, ElementType: sgrRuleType,
 			MarkdownDescription: "The declared " + direction + " rules to keep, under the same keys and with the same arguments. " +
-				"Declare these with `aws_vpc_security_group_" + direction + "_rule`, not the input."}
+				"Declare these with `aws_vpc_security_group_" + direction + "_rule`, not the input. " +
+				"Each holds what its declared rule holds: `ip_protocol`, `from_port`, `to_port`, `cidr_ipv4`, `cidr_ipv6`, " +
+				"`prefix_list_id`, `referenced_security_group_id`, `description` and `tags`."}
 	}
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Applies Full control to one of your own security groups when a Terraform pipeline delivers the account. " +
@@ -144,12 +146,16 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 			"undeclared_restores": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
 				MarkdownDescription: "The rules a revert puts back that the group no longer declares, each with the `change_set` being " +
 					"reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them " +
-					"to end it."},
+					"to end it. " +
+					"`direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. " +
+					"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination."},
 			"undeclared_pending": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
 				MarkdownDescription: "The rules an approved change will leave out once every workload that keeps them carries its cohort, " +
 					"which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a " +
 					"plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out " +
-					"once it is safe. A rule a change already leaves out is not listed."},
+					"once it is safe. A rule a change already leaves out is not listed. " +
+					"`direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. " +
+					"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination."},
 		},
 	}
 }
