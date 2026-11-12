@@ -166,3 +166,25 @@ run "a_group_that_exists_but_is_not_on_the_interface_still_needs_room" {
     error_message = "four groups and two of ours still to add pass five, so neither is attached"
   }
 }
+
+# The last receipt lists the workload's own group as attached, so only the cohort group is new. The interface has
+# no room for it: the cohort group is left off, and the attachment already applied stays.
+run "a_full_interface_keeps_the_group_already_applied_and_leaves_only_the_new_one_off" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this[0]
+    values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0ours" }, handover_attachments = {} }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-4", "sg-0ours"], attachment = [] }
+  }
+
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1"])
+    error_message = "five groups leave no room for the cohort group, and the group the last apply attached is kept"
+  }
+}

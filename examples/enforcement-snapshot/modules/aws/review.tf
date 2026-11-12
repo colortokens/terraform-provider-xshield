@@ -6,10 +6,12 @@ locals {
   review_protocol_names   = { tcp = "TCP", udp = "UDP", icmp = "ICMP", icmpv6 = "ICMPv6" }
   review_names_per_line   = 5
 
-  review_cohorts   = [for key, group in local.snap.security_groups : key if try(group.tags["ct:kind"], "") == "cohort"]
-  review_groups    = concat(local.review_cohorts, [for key in keys(local.snap.security_groups) : key if !contains(local.review_cohorts, key)])
-  review_described = slice(local.review_groups, 0, min(var.review_max_groups, length(local.review_groups)))
-  review_subjects  = { for key in local.review_described : key => contains(local.review_cohorts, key) ? "Cohort group ${key}" : "Group for ${key}" }
+  review_cohorts      = [for key, group in local.snap.security_groups : key if try(group.tags["ct:kind"], "") == "cohort"]
+  review_is_cohort    = { for key in local.review_cohorts : key => true }
+  review_groups       = concat(local.review_cohorts, [for key in keys(local.snap.security_groups) : key if !lookup(local.review_is_cohort, key, false)])
+  review_described    = slice(local.review_groups, 0, min(var.review_max_groups, length(local.review_groups)))
+  review_is_described = { for key in local.review_described : key => true }
+  review_subjects     = { for key in local.review_described : key => lookup(local.review_is_cohort, key, false) ? "Cohort group ${key}" : "Group for ${key}" }
 
   review_rule_facts = [
     for rule in concat(
@@ -33,7 +35,7 @@ locals {
       kept        = try(rule.tags["ct:origin"], "") == "kept"
       split_group = try(rule.tags["ct:split-group"], "")
       change_set  = try(rule.tags["ct:change-set"], "")
-    } if contains(local.review_described, rule.security_group)
+    } if lookup(local.review_is_described, rule.security_group, false)
   ]
 
   # A span is a port range as text that sorts in port order. TCP and UDP without ports mean every port.
@@ -103,7 +105,7 @@ locals {
   }
 
   review_interfaces      = { for attachment in values(local.snap.interface_attachments) : attachment.security_group => attachment.network_interface_id... }
-  review_interface_owner = { for attachment in values(local.snap.interface_attachments) : attachment.network_interface_id => attachment.security_group... if !contains(local.review_cohorts, attachment.security_group) }
+  review_interface_owner = { for attachment in values(local.snap.interface_attachments) : attachment.network_interface_id => attachment.security_group... if !lookup(local.review_is_cohort, attachment.security_group, false) }
   review_handles = {
     for pair in flatten([for entry in values(local.snap.directory_entries) : [for key in entry.security_groups : { group = key, handle = entry.handle }]]) : pair.group => pair.handle...
   }
@@ -113,7 +115,7 @@ locals {
   # names the handles whose own workspaces attach it.
   review_carriers = {
     for key in local.review_described : key => sort(distinct(concat(
-      [for interface in lookup(local.review_interfaces, key, []) : try(local.review_interface_owner[interface][0], "network interface ${interface}") if contains(local.review_cohorts, key)],
+      [for interface in lookup(local.review_interfaces, key, []) : try(local.review_interface_owner[interface][0], "network interface ${interface}") if lookup(local.review_is_cohort, key, false)],
       lookup(local.review_handles, key, []),
     )))
   }
@@ -132,7 +134,7 @@ locals {
   review_headers = {
     for key in local.review_described : key => (
       contains(local.snap.withdrawing_security_groups, key) ? "${local.review_subjects[key]} is being withdrawn. Policy no longer uses it, and it keeps its rules until Xshield sees it detached." :
-      contains(local.review_cohorts, key) ? format(
+      lookup(local.review_is_cohort, key, false) ? format(
         "%s %s. It keeps access that %s gives up%s.",
         local.review_subjects[key],
         local.review_carried_by[key] == "" ? "is on no workload in this version" : "is for ${local.review_carried_by[key]}",

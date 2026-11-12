@@ -128,8 +128,8 @@ data "aws_network_interfaces" "present" {
 }
 
 locals {
-  present_interfaces = try(data.aws_network_interfaces.present[0].ids, [])
-  attachments        = { for key, attachment in local.snap.interface_attachments : key => attachment if contains(local.present_interfaces, attachment.network_interface_id) }
+  present_interfaces = { for id in toset(try(data.aws_network_interfaces.present[0].ids, [])) : id => true }
+  attachments        = { for key, attachment in local.snap.interface_attachments : key => attachment if lookup(local.present_interfaces, attachment.network_interface_id, false) }
 }
 
 # An interface that filled up since Xshield last discovered it has no room for a
@@ -146,8 +146,8 @@ data "xshield_enforcement_status" "this" {
 }
 
 locals {
-  held_attachments = concat(try(keys(data.xshield_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_enforcement_status.this[0].handover_attachments), []))
-  new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !contains(local.held_attachments, key) }
+  held_attachments = { for key in toset(concat(try(keys(data.xshield_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_enforcement_status.this[0].handover_attachments), []))) : key => true }
+  new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !lookup(local.held_attachments, key, false) }
 }
 
 data "aws_network_interface" "receiving" {
@@ -175,11 +175,12 @@ data "aws_security_groups" "attaching" {
 
 locals {
   new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
+  new_groups = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.security_group... }
   # The new groups each interface still has to take. One it already carries takes no further room.
   groups_to_add = {
     for id, interface in data.aws_network_interface.receiving : id => [
-      for attachment in values(local.new_attachments) : attachment.security_group
-      if attachment.network_interface_id == id && length(setintersection(data.aws_security_groups.attaching[attachment.security_group].ids, interface.security_groups)) == 0
+      for group in local.new_groups[id] : group
+      if length(setintersection(data.aws_security_groups.attaching[group].ids, interface.security_groups)) == 0
     ]
   }
   # An interface is full when the groups it carries and the new groups it still has to take together pass its limit.
@@ -187,7 +188,9 @@ locals {
     for id, interface in data.aws_network_interface.receiving : id => try(interface.attachment[0].instance_id, "not attached")
     if length(interface.security_groups) + length(local.groups_to_add[id]) > min(local.new_limits[id]...)
   }
-  attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(contains(keys(local.new_attachments), key) && contains(keys(local.full_interfaces), attachment.network_interface_id)) }
+  new_attachment_keys   = { for key in keys(local.new_attachments) : key => true }
+  full_interface_ids    = { for id in keys(local.full_interfaces) : id => true }
+  attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(lookup(local.new_attachment_keys, key, false) && lookup(local.full_interface_ids, attachment.network_interface_id, false)) }
 }
 
 check "interfaces_have_room" {
