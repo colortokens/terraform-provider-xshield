@@ -11,6 +11,7 @@ Apply Xshield segmentation policy through your own Terraform pipeline. Xshield r
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `database/` | A workspace that owns an RDS instance and attaches the group Xshield gave it beside its own. It declares none of Xshield's rules. |
 | `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own that carries the group Xshield gave it beside its own. |
+| `full-control/` | A workspace that owns a security group Xshield narrows under Full control, and declares the group's rules through `modules/aws-security-group-rules`. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
 | `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
@@ -176,6 +177,8 @@ module "web_rules" {
 
 `ingress` and `egress` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules. Rules the workspace already manages as rule resources move into the module with `moved` blocks, to addresses such as `module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]`, so Terraform keeps them and creates nothing again.
 
+`full-control/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the two changes marked.
+
 What a plan of this workspace shows:
 
 - A group no approved change applies to plans exactly as its code declares it. The module reads nothing from Xshield for that group.
@@ -284,7 +287,7 @@ The module tests mock both providers, so they need no tenant or AWS account. Bui
 cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
 ```
 
-`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `monitor/`, `database/` and `apprunner/` have tests too. Run them the same way from their own directories; from `monitor/`, `database/` and `apprunner/` the file is `../.dev.tfrc`. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how.
+`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `monitor/`, `database/`, `apprunner/` and `full-control/` have tests too. Run them the same way from their own directories; from `monitor/`, `database/`, `apprunner/` and `full-control/` the file is `../.dev.tfrc`. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how.
 
 ## What happens if
 
