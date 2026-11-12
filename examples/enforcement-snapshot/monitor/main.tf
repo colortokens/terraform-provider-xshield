@@ -34,11 +34,13 @@ terraform {
 provider "xshield" {}
 
 variable "cloud_account_id" {
-  type = string
+  description = "AWS account to report on."
+  type        = string
 }
 
 variable "region" {
-  type = string
+  description = "AWS region to report on."
+  type        = string
 }
 
 variable "warn_on" {

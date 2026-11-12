@@ -1,6 +1,6 @@
 # aws-security-group-rules module
 
-Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables and outputs there describe themselves. [`full-control/`](../../full-control/) is a whole workspace that uses the module. This page covers the `review` output and the record the module keeps in state.
+Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables in `variables.tf` and the outputs in `outputs.tf` describe themselves. [`full-control/`](../../full-control/) is a whole workspace that uses the module. This page covers the `review` output and the record the module keeps in state.
 
 ## Reading what Xshield changed, in words
 

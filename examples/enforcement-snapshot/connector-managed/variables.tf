@@ -4,7 +4,8 @@ variable "xshield_server_url" {
 }
 
 variable "xshield_tenancy_id" {
-  type = string
+  description = "Tenancy ID of the API key, shown with the key in Xshield under Settings > API Keys."
+  type        = string
 }
 
 variable "xshield_user_id" {
@@ -13,12 +14,14 @@ variable "xshield_user_id" {
 }
 
 variable "xshield_fingerprint" {
-  type = string
+  description = "Fingerprint of the API key."
+  type        = string
 }
 
 variable "xshield_private_key_path" {
-  type      = string
-  sensitive = true
+  description = "Path to the API key's PEM private key."
+  type        = string
+  sensitive   = true
 }
 
 variable "enable_deployment_trigger" {

@@ -43,7 +43,8 @@ variable "enforcement_role_arn" {
 }
 
 output "summary" {
-  value = module.xshield_enforcement.summary
+  description = "What the applied version holds, for plan review and run logs."
+  value       = module.xshield_enforcement.summary
 }
 
 output "xshield_review" {

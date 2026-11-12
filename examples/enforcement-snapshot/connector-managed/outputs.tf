@@ -8,6 +8,7 @@ output "segment_ids" {
 }
 
 output "template_ids" {
+  description = "ID of each template this workspace authors, by its resource name."
   value = {
     postgres_from_app = xshield_template.postgres_from_app.id
     billing_egress    = xshield_template.billing_egress.id

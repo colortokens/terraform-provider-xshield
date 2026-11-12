@@ -2,40 +2,6 @@
 # attach, from the handle its own workspace already knows. Reads the SSM
 # parameter the enforcement workspace writes; needs no Xshield credentials.
 
-terraform {
-  required_version = ">= 1.7.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 6.0"
-    }
-  }
-}
-
-variable "handle" {
-  description = "The resource's kind and name: rds/<DB instance identifier>, rds-cluster/<cluster identifier>, lambda/<function name>, flink/<application name>, apprunner/<service name> or asg/<Auto Scaling group name>. An RDS identifier may be given in any case."
-  type        = string
-}
-
-variable "own_security_group_ids" {
-  description = "The resource's own security group IDs, which it carries beside Xshield's. When given, the plan fails if together they are more than AWS allows on the resource, rather than AWS failing the apply. Leave null to skip the check."
-  type        = list(string)
-  default     = null
-}
-
-variable "directory_prefix" {
-  description = "SSM path the enforcement workspace writes the directory under."
-  type        = string
-  default     = "/colortokens/v1"
-}
-
-variable "warn_when_unlisted" {
-  description = "Warn on every plan while Xshield lists no entry for the resource, to find a handle that names a resource Xshield does not know. Off by default, as a resource Xshield gives nothing to attach has no entry either."
-  type        = bool
-  default     = false
-}
-
 # Reads the handle's own path rather than one parameter, so a resource Xshield
 # lists no entry for, as in an account with nothing published, gets no group
 # instead of a failed plan.
@@ -70,23 +36,4 @@ check "directory_entry" {
     condition     = local.found || !var.warn_when_unlisted
     error_message = "Xshield lists no entry for ${local.handle} at ${local.parameter_name}. This is expected on the run that creates the resource, until Xshield has discovered it and the enforcement workspace has applied, and while Xshield's policy gives the resource nothing to attach. Otherwise, compare the handle with the enforcement module's directory output, and look for the resource among the assetRefused and groupRefused notices of the xshield_enforcement_status data source."
   }
-}
-
-output "security_group_ids" {
-  description = "Security group IDs to add to the resource's own list. Empty while Xshield lists no entry for the resource."
-  value       = local.entry.security_group_ids
-
-  precondition {
-    condition     = local.entry.handle == local.handle
-    error_message = "The directory entry at ${local.parameter_name} is for ${local.entry.handle}, not ${local.handle}. Only the enforcement workspace should write under ${var.directory_prefix}."
-  }
-  precondition {
-    condition     = var.own_security_group_ids == null || local.slot_limit == null || length(coalesce(var.own_security_group_ids, [])) + length(local.entry.security_group_ids) <= coalesce(local.slot_limit, 0)
-    error_message = "${local.handle} would carry ${length(coalesce(var.own_security_group_ids, []))} security groups of its own and ${length(local.entry.security_group_ids)} of Xshield's, more than the ${coalesce(local.slot_limit, 0)} AWS allows on it. Remove one of its own groups, or raise the quota where AWS allows it."
-  }
-}
-
-output "own_security_groups_allowed" {
-  description = "How many security groups of its own the resource can carry beside Xshield's: the limit AWS sets for it, as Xshield last discovered it, less the groups this lookup returns. Null until Xshield has discovered the limit."
-  value       = local.slot_limit == null ? null : max(local.slot_limit - length(local.entry.security_group_ids), 0)
 }
