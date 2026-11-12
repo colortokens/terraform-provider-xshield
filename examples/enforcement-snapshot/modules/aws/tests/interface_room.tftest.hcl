@@ -98,3 +98,71 @@ run "two_new_groups_are_both_left_off_an_interface_with_room_for_one" {
     error_message = "neither new group is attached"
   }
 }
+
+# An apply that attached the workload's group and then failed sent no receipt, so the run after it still finds
+# the attachment new, with the group already on the interface. The group takes no further room there: counted
+# again it would read the interface as full, and the attachment the failed apply made would be removed.
+run "a_retry_keeps_the_group_a_failed_apply_already_attached" {
+  command = plan
+
+  override_data {
+    target = data.aws_security_groups.attaching["i-0a1"]
+    values = { ids = ["sg-0ours"] }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ours"], attachment = [] }
+  }
+
+  assert {
+    condition     = length(local.full_interfaces) == 0
+    error_message = "three groups, ours already attached and the cohort group still to add make five, which the account allows"
+  }
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1", "ct-cohort-0example/eni-0a1"])
+    error_message = "the attachment the failed apply made is kept, and the cohort group is attached beside it"
+  }
+}
+
+run "a_retry_with_both_groups_already_attached_plans_them_again" {
+  command = plan
+
+  override_data {
+    target = data.aws_security_groups.attaching["i-0a1"]
+    values = { ids = ["sg-0ours"] }
+  }
+  override_data {
+    target = data.aws_security_groups.attaching["ct-cohort-0example"]
+    values = { ids = ["sg-0cohort"] }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ours", "sg-0cohort"], attachment = [] }
+  }
+
+  assert {
+    condition     = length(local.full_interfaces) == 0 && length(aws_network_interface_sg_attachment.this) == 2
+    error_message = "an interface at its limit with both of ours already on it has nothing more to take"
+  }
+}
+
+# A group of ours on another interface says nothing about this one, which still has to take it.
+run "a_group_that_exists_but_is_not_on_the_interface_still_needs_room" {
+  command = plan
+
+  override_data {
+    target = data.aws_security_groups.attaching["i-0a1"]
+    values = { ids = ["sg-0ours"] }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-4"], attachment = [] }
+  }
+
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = length(aws_network_interface_sg_attachment.this) == 0
+    error_message = "four groups and two of ours still to add pass five, so neither is attached"
+  }
+}

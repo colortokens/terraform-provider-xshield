@@ -137,7 +137,7 @@ locals {
 # receipt holds nor a hand-over offers goes only on an interface with room for every
 # new group: the others are left out with a warning, the receipt leaves them out, and
 # Xshield refuses the workload once discovery shows the interface full. Only those
-# interfaces are read.
+# interfaces, and the groups new to them, are read.
 data "xshield_enforcement_status" "this" {
   count = length(local.attachments) > 0 ? 1 : 0
 
@@ -156,12 +156,36 @@ data "aws_network_interface" "receiving" {
   id = each.key
 }
 
+# A new attachment's group can already be on its interface: an apply that attached it
+# and then failed sent no receipt, so the run after it finds the attachment new and
+# the group in place. Each such group is looked up by name, since its ID is not known
+# to a plan that creates it.
+data "aws_security_groups" "attaching" {
+  for_each = toset([for attachment in values(local.new_attachments) : attachment.security_group])
+
+  filter {
+    name   = "group-name"
+    values = [local.snap.security_groups[each.key].name]
+  }
+  filter {
+    name   = "vpc-id"
+    values = [local.snap.security_groups[each.key].vpc_id]
+  }
+}
+
 locals {
   new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
-  # An interface is full when the groups it carries and every new group of this run together pass its limit.
+  # The new groups each interface still has to take. One it already carries takes no further room.
+  groups_to_add = {
+    for id, interface in data.aws_network_interface.receiving : id => [
+      for attachment in values(local.new_attachments) : attachment.security_group
+      if attachment.network_interface_id == id && length(setintersection(data.aws_security_groups.attaching[attachment.security_group].ids, interface.security_groups)) == 0
+    ]
+  }
+  # An interface is full when the groups it carries and the new groups it still has to take together pass its limit.
   full_interfaces = {
     for id, interface in data.aws_network_interface.receiving : id => try(interface.attachment[0].instance_id, "not attached")
-    if length(interface.security_groups) + length(local.new_limits[id]) > min(local.new_limits[id]...)
+    if length(interface.security_groups) + length(local.groups_to_add[id]) > min(local.new_limits[id]...)
   }
   attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(contains(keys(local.new_attachments), key) && contains(keys(local.full_interfaces), attachment.network_interface_id)) }
 }
