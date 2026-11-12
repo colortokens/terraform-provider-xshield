@@ -128,6 +128,9 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
+	if refuseUnknown(resp, "server_url", "XSHIELD_SERVER_URL", data.ServerURL) {
+		return
+	}
 	ServerURL := withEnv(data.ServerURL, "XSHIELD_SERVER_URL")
 
 	if ServerURL == "" {
@@ -245,8 +248,23 @@ func withEnv(v types.String, name string) string {
 	return os.Getenv(name)
 }
 
+// refuseUnknown reports a value the plan does not know yet. The environment does not stand in for it: the
+// configuration says the value comes from elsewhere, so the environment's would be another key's.
+func refuseUnknown(resp *provider.ConfigureResponse, attr, env string, v types.String) bool {
+	if !v.IsUnknown() {
+		return false
+	}
+	resp.Diagnostics.AddAttributeError(path.Root(attr), "Unknown Xshield "+attr,
+		"The value of "+attr+" is not known until apply, and the provider needs it to plan. Give it a value that is "+
+			"known when the plan starts, or leave it out of the xshield provider block and set "+env+".")
+	return true
+}
+
 func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {
 	need := func(attr, env string, v types.String, where string) string {
+		if refuseUnknown(resp, attr, env, v) {
+			return ""
+		}
 		value := withEnv(v, env)
 		if value == "" {
 			resp.Diagnostics.AddAttributeError(path.Root(attr), "Missing Xshield "+attr,
@@ -260,7 +278,10 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 	fingerprint := need("fingerprint", "XSHIELD_FINGERPRINT", data.FingerPrint, fromKey)
 	keyPath := withEnv(data.PrivateKeyLocation, "XSHIELD_PRIVATE_KEY_PATH")
 	key := withEnv(data.PrivateKey, "XSHIELD_PRIVATE_KEY")
+	keyUnknown := refuseUnknown(resp, "private_key_path", "XSHIELD_PRIVATE_KEY_PATH", data.PrivateKeyLocation)
+	keyUnknown = refuseUnknown(resp, "private_key", "XSHIELD_PRIVATE_KEY", data.PrivateKey) || keyUnknown
 	switch {
+	case keyUnknown:
 	case keyPath == "" && key == "":
 		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "Missing Xshield private key",
 			"Set private_key_path (or XSHIELD_PRIVATE_KEY_PATH) to the API key's PEM file, or private_key (or XSHIELD_PRIVATE_KEY) to its contents.")
