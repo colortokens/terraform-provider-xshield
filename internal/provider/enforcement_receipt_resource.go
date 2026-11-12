@@ -100,9 +100,8 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
 			"attachments":     idMap("Attachment ID created for each key in the snapshot's `interface_attachments`.", false),
 			"run_id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Computed:    true,
+				Description: "Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise.",
 			},
 			"applied_at": schema.StringAttribute{
 				Computed:    true,
