@@ -267,6 +267,9 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. One line for each port, group and change set, which lists the workloads. |
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. Not warned by default. |
 | `unpublished` | Xshield has published nothing here: the wrong tenant, or an account that is not onboarded. Not warned by default. |
+| `group_withdrawing` | Policy no longer uses a group, and Xshield keeps it, with its rules, until it sees the group detached. One line for each group, with what it waits for. Not warned by default. |
+| `asg_policy_differs` | The instances of an Auto Scaling group have different policies, so each has a group of its own. One line for each Auto Scaling group. Not warned by default. |
+| `workload_contained` | Xshield contained a workload, so its group stays off its interfaces until the containment is reverted. One line lists the workloads. Not warned by default. |
 
 Notices that differ only in their workload share a line, so one change held for ten workloads prints one line:
 

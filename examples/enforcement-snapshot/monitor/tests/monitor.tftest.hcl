@@ -424,6 +424,107 @@ run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
   }
 }
 
+run "withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_are_silent_by_default" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
+        { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "the instances of this Auto Scaling group do not have the same policy" },
+        { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
+      ]
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_on_withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_when_asked" {
+  command = plan
+
+  variables {
+    warn_on = ["group_withdrawing", "asg_policy_differs", "workload_contained"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = concat(
+        [
+          { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "policy no longer uses this security group: the workspace that owns rds/old-db detaches it at its next apply" },
+          { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "lambda/old-fn", since = null, message = "policy no longer uses this security group: the workspace that owns lambda/old-fn detaches it at its next apply" },
+          { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "the instances of this Auto Scaling group do not have the same policy, so each has a group of its own until they do" },
+        ],
+        [for i in range(1, 4) : {
+          code    = "assetContained", reason = "CONTAINED", asset_id = format("asset-%02d", i), asset_name = format("app-%02d", i), group = null, since = null,
+          message = "the asset is contained; its group stays as applied, off its interfaces, until the containment is reverted"
+        }],
+      )
+    }
+  }
+
+  expect_failures = [check.xshield_group_withdrawing, check.xshield_asg_policy_differs, check.xshield_workload_contained]
+
+  assert {
+    condition     = length(output.problems.group_withdrawing) == 3 && length(output.problems.asg_policy_differs) == 2 && length(output.problems.workload_contained) == 2
+    error_message = "Each cause takes one line after the headline, but reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition = alltrue([
+      for n in data.xshield_enforcement_status.this.notices : alltrue([
+        for shown in compact([n.asset_name, n.group, n.reason, n.message]) :
+        strcontains(join("\n", output.problems[{ withdrawing = "group_withdrawing", asgPolicyDiffers = "asg_policy_differs", assetContained = "workload_contained" }[n.code]]), shown)
+      ])
+    ])
+    error_message = "A workload, group, reason or message of a notice is missing from ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition     = output.problems.workload_contained[1] == "  app-01, app-02, app-03: the asset is contained; its group stays as applied, off its interfaces, until the containment is reverted (CONTAINED)"
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition     = output.problems.asg_policy_differs[1] == "  asg/web: the instances of this Auto Scaling group do not have the same policy, so each has a group of its own until they do"
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_contained_workload_named_in_fail_on_stops_the_plan" {
+  command = plan
+
+  variables {
+    warn_on = []
+    fail_on = ["workload_contained"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
+      ]
+    }
+  }
+
+  expect_failures = [output.problems]
+}
+
 run "a_problem_left_out_of_warn_on_is_silent" {
   command = plan
 
@@ -525,4 +626,46 @@ run "a_limit_that_is_no_duration_is_refused" {
   }
 
   expect_failures = [var.max_run_gap]
+}
+
+run "notices_that_differ_in_group_message_reason_or_time_each_keep_a_line" {
+  command = plan
+
+  variables {
+    warn_on = ["group_withdrawing", "workload_contained"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
+        { code = "assetContained", reason = "CONTAINED", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset is contained, in other words" },
+        { code = "assetContained", reason = "ISOLATED", asset_id = "asset-03", asset_name = "app-03", group = null, since = null, message = "the asset is contained" },
+        { code = "assetContained", reason = "CONTAINED", asset_id = "asset-04", asset_name = "app-04", group = null, since = "2020-03-01T00:00:00Z", message = "the asset is contained" },
+        { code = "withdrawing", reason = null, asset_id = "asset-05", asset_name = "db-01", group = "rds/old-db", since = null, message = "kept until it is detached" },
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/older-db", since = null, message = "kept until it is detached" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_group_withdrawing, check.xshield_workload_contained]
+
+  assert {
+    condition     = length(output.problems.workload_contained) == 5 && length(output.problems.group_withdrawing) == 3
+    error_message = "Four contained causes and two withdrawn groups each take a line after the headline, but reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition     = contains(output.problems.workload_contained, "  app-04: the asset is contained (CONTAINED) since 2020-03-01T00:00:00Z")
+    error_message = "The time a notice carries is missing from ${jsonencode(output.problems.workload_contained)}."
+  }
+
+  assert {
+    condition     = contains(output.problems.group_withdrawing, "  rds/old-db: kept until it is detached; workloads: db-01")
+    error_message = "The workload a notice names beside its group is missing from ${jsonencode(output.problems.group_withdrawing)}."
+  }
 }

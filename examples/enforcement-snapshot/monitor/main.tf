@@ -20,6 +20,12 @@
 #                          customer security group was reverted, so the group allows more than the policy
 #   unpublished            Xshield has published nothing here: wrong tenant, or the account is not onboarded
 #                          (not warned by default)
+#   group_withdrawing      policy no longer uses a group, which Xshield keeps until the workspace that owns a
+#                          workload carrying it detaches it (not warned by default)
+#   asg_policy_differs     the instances of an Auto Scaling group have different policies, so each gets a group
+#                          of its own (not warned by default)
+#   workload_contained     Xshield contained a workload, so its group is off its interfaces until the containment
+#                          is reverted (not warned by default)
 
 terraform {
   required_version = ">= 1.7.0"
@@ -55,6 +61,7 @@ variable "warn_on" {
     condition = length(setsubtract(var.warn_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "apply_overdue", "never_applied", "owner_apply_overdue",
       "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
+      "group_withdrawing", "asg_policy_differs", "workload_contained",
     ])) == 0
     error_message = "The warn_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -69,6 +76,7 @@ variable "fail_on" {
     condition = length(setsubtract(var.fail_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "apply_overdue", "never_applied", "owner_apply_overdue",
       "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
+      "group_withdrawing", "asg_policy_differs", "workload_contained",
     ])) == 0
     error_message = "The fail_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -174,6 +182,25 @@ locals {
       workloads = distinct(local.unnarrowed_ports_by_cause[key][*].workload)
     })
   ]
+  deliberate_state_notices = [
+    for n in local.status.notices : merge(n, {
+      workload = coalesce(n.asset_name, n.asset_id, "-")
+      cause    = jsonencode([n.code, n.group, n.message, n.reason, n.since])
+    })
+    if contains(["withdrawing", "asgPolicyDiffers", "assetContained"], n.code)
+  ]
+  deliberate_states_by_cause = { for n in local.deliberate_state_notices : n.cause => n... }
+  deliberate_state_causes = [
+    for key in distinct(local.deliberate_state_notices[*].cause) : merge(local.deliberate_states_by_cause[key][0], {
+      workloads = [for w in distinct(local.deliberate_states_by_cause[key][*].workload) : w if w != "-"]
+    })
+  ]
+  deliberate_state_lines = [
+    for c in local.deliberate_state_causes : {
+      code = c.code
+      line = "  ${coalesce(c.group, join(", ", c.workloads), "-")}: ${c.message}${c.reason == null ? "" : " (${c.reason})"}${c.since == null ? "" : " since ${c.since}"}${c.group == null || length(c.workloads) == 0 ? "" : "; workloads: ${join(", ", c.workloads)}"}"
+    }
+  ]
 
   problems = tomap({
     drift_high = [
@@ -203,6 +230,9 @@ locals {
     unpublished = local.status.published ? [] : [
       "  check that the provider points at the right Xshield tenant, and that the account and region are onboarded for pipeline delivery.",
     ]
+    group_withdrawing  = [for c in local.deliberate_state_lines : c.line if c.code == "withdrawing"]
+    asg_policy_differs = [for c in local.deliberate_state_lines : c.line if c.code == "asgPolicyDiffers"]
+    workload_contained = [for c in local.deliberate_state_lines : c.line if c.code == "assetContained"]
   })
 
   headlines = {
@@ -216,6 +246,9 @@ locals {
     drift_not_evaluated   = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
     port_not_narrowed     = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
     unpublished           = "Xshield has published nothing for ${local.where}:"
+    group_withdrawing     = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
+    asg_policy_differs    = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
+    workload_contained    = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
   }
 
   failing = sort([for name in var.fail_on : name if length(local.problems[name]) > 0])
@@ -237,7 +270,7 @@ check "xshield_drift_medium" {
 
 check "xshield_workload_not_enforced" {
   assert {
-    # A contained workload and a group being withdrawn are deliberate states, not failures.
+    # A contained workload and a group being withdrawn are deliberate states, reported as workload_contained and group_withdrawing.
     condition     = !contains(var.warn_on, "workload_not_enforced") || length(local.problems.workload_not_enforced) == 0
     error_message = join("\n", concat([local.headlines.workload_not_enforced], local.problems.workload_not_enforced))
   }
@@ -289,6 +322,27 @@ check "xshield_unpublished" {
   assert {
     condition     = !contains(var.warn_on, "unpublished") || length(local.problems.unpublished) == 0
     error_message = join("\n", concat([local.headlines.unpublished], local.problems.unpublished))
+  }
+}
+
+check "xshield_group_withdrawing" {
+  assert {
+    condition     = !contains(var.warn_on, "group_withdrawing") || length(local.problems.group_withdrawing) == 0
+    error_message = join("\n", concat([local.headlines.group_withdrawing], local.problems.group_withdrawing))
+  }
+}
+
+check "xshield_asg_policy_differs" {
+  assert {
+    condition     = !contains(var.warn_on, "asg_policy_differs") || length(local.problems.asg_policy_differs) == 0
+    error_message = join("\n", concat([local.headlines.asg_policy_differs], local.problems.asg_policy_differs))
+  }
+}
+
+check "xshield_workload_contained" {
+  assert {
+    condition     = !contains(var.warn_on, "workload_contained") || length(local.problems.workload_contained) == 0
+    error_message = join("\n", concat([local.headlines.workload_contained], local.problems.workload_contained))
   }
 }
 
