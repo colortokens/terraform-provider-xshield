@@ -1,7 +1,8 @@
 # Declares one of your own security group's rules through Xshield Full control. Every rule comes back as
 # declared until an approved change narrows one, which then leaves once every workload that still needs it
 # carries its ct-cohort- group. A group no change applies to never reads its rules from Xshield, so its plan
-# shows nothing from Xshield, and its VPC and rules may be values the plan learns only at apply.
+# shows nothing from Xshield beyond the record kept in state, and its VPC and rules may be values the plan learns
+# only at apply.
 
 terraform {
   required_version = ">= 1.7.0"
@@ -124,6 +125,20 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   referenced_security_group_id = each.value.referenced_security_group_id
   description                  = each.value.description
   tags                         = each.value.tags
+}
+
+# Held in Terraform's state alone, with nothing in AWS. A plan that stops declaring the group's rules through this
+# module deletes it, which is how the Xshield policy checks see such a plan after the plan's own reads of Xshield
+# are gone with the module.
+resource "terraform_data" "xshield_routed" {
+  input = {
+    cloud_account_id  = var.xshield_changes.cloud_account_id
+    region            = var.xshield_changes.region
+    vpc_id            = var.vpc_id
+    group_name        = var.group_name
+    security_group_id = var.security_group_id
+    changed           = local.changed
+  }
 }
 
 output "changed" {

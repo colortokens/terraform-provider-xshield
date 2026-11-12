@@ -1,6 +1,6 @@
 # aws-security-group-rules module
 
-Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables and outputs there describe themselves. This page covers the `review` output.
+Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables and outputs there describe themselves. This page covers the `review` output and the record the module keeps in state.
 
 ## Reading what Xshield changed, in words
 
@@ -63,3 +63,13 @@ Changes to Outputs:
 ```
 
 Use the same output name in the enforcement workspace, for the enforcement module's `review` output. A reviewer then looks for `xshield_review` in every plan.
+
+## The record kept in state
+
+The module keeps one `terraform_data` resource for the group, named `xshield_routed`. It lives in Terraform's state alone: it creates nothing in AWS and calls neither AWS nor Xshield. It records the account, region, VPC and group, and whether an approved change applied to the group at the last apply.
+
+A plan shows it three times in a group's life. The first plan with this version of the module creates it. A plan in which a change starts to apply to the group, or stops, updates it in place. A plan that removes the module call deletes it.
+
+That last plan is why it exists. Once a workspace stops calling the module and stops reading `xshield_aws_security_group_changes`, its plan reads nothing from Xshield, so nothing in the plan says a change applies to the group. The deleted record still does, and a policy check can read it to stop a plan that would put back a rule a change took out.
+
+To take a group out of the module while a change applies to it, revert the change in Xshield first, apply the workspace so the group's rules return as declared, and then remove the module call.

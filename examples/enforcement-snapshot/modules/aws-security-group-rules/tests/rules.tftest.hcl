@@ -154,3 +154,36 @@ run "a_change_for_the_same_name_in_another_vpc_leaves_the_group_unchanged" {
     error_message = "the rules a change for another VPC narrows must stay as the caller declared them here"
   }
 }
+
+# The record the policy checks read: who the group is, and whether its last apply carried an approved change.
+run "an_unchanged_group_keeps_a_record_in_state_that_says_so" {
+  command = apply
+
+  variables {
+    xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = { db = ["vpc-0example"] } }
+  }
+
+  assert {
+    condition = terraform_data.xshield_routed.output == {
+      cloud_account_id  = "111111111111", region = "us-east-1", vpc_id = "vpc-0example", group_name = "web",
+      security_group_id = "sg-0example", changed = false
+    }
+    error_message = "the record must name the account, region, VPC and group, and say no change applied"
+  }
+}
+
+run "a_changed_group_keeps_a_record_in_state_that_says_so" {
+  command = apply
+
+  variables {
+    xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = { web = ["vpc-0example"] } }
+  }
+
+  assert {
+    condition = terraform_data.xshield_routed.output == {
+      cloud_account_id  = "111111111111", region = "us-east-1", vpc_id = "vpc-0example", group_name = "web",
+      security_group_id = "sg-0example", changed = true
+    }
+    error_message = "the record must say an approved change applied to the group at this apply"
+  }
+}
