@@ -3,14 +3,14 @@ output "changed" {
   value       = local.changed
 }
 
-output "revoked" {
+output "revoked_rules" {
   description = "Declared rules Xshield has left out, as ingress/<key> or egress/<key>."
-  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].revoked : []
+  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].revoked_rules : []
 }
 
-output "pending" {
+output "pending_rules" {
   description = "Declared rules an approved change will leave out once every workload that keeps them carries its cohort."
-  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].pending : []
+  value       = local.changed ? data.xshield_aws_security_group_rules.this[0].pending_rules : []
 }
 
 output "ingress_keys" {

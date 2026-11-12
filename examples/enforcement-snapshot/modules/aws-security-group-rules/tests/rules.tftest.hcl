@@ -22,8 +22,8 @@ mock_provider "xshield" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      revoked = ["ingress/https_all", "egress/all"]
-      pending = []
+      revoked_rules = ["ingress/https_all", "egress/all"]
+      pending_rules = []
     }
   }
 }
@@ -33,11 +33,11 @@ variables {
   group_name        = "web"
   security_group_id = "sg-0example"
 
-  ingress = {
+  ingress_rules = {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
     ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
   }
-  egress = {
+  egress_rules = {
     all          = { ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }
     dns_resolver = { ip_protocol = "udp", from_port = 53, to_port = 53, cidr_ipv4 = "10.0.0.2/32" }
   }
@@ -113,8 +113,8 @@ run "a_change_for_the_group_in_its_vpc_takes_the_rules_from_xshield" {
       data.xshield_aws_security_group_rules.this[0].region == "us-east-1",
       data.xshield_aws_security_group_rules.this[0].vpc_id == "vpc-0example",
       data.xshield_aws_security_group_rules.this[0].group_name == "web",
-      toset(keys(data.xshield_aws_security_group_rules.this[0].ingress)) == toset(["https_all", "ssh_office"]),
-      toset(keys(data.xshield_aws_security_group_rules.this[0].egress)) == toset(["all", "dns_resolver"]),
+      toset(keys(data.xshield_aws_security_group_rules.this[0].declared_ingress_rules)) == toset(["https_all", "ssh_office"]),
+      toset(keys(data.xshield_aws_security_group_rules.this[0].declared_egress_rules)) == toset(["all", "dns_resolver"]),
     ])
     error_message = "Xshield must be asked about this group, by its account, region, VPC and name, with every rule the caller declares"
   }

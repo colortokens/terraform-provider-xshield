@@ -77,7 +77,7 @@ mock_provider "xshield" {
         "i-0a1/eni-0a1"  = { security_group = "i-0a1", network_interface_id = "eni-0a1", slot_limit = 5 }
         "i-0a1/eni-0a1b" = { security_group = "i-0a1", network_interface_id = "eni-0a1b", slot_limit = null }
       }
-      directory = {
+      directory_entries = {
         "rds/orders-db" = {
           parameter_name  = "/colortokens/v1/rds/orders-db/security-groups"
           handle          = "rds/orders-db"
@@ -91,7 +91,7 @@ mock_provider "xshield" {
         "asset-orders-1" = { security_group = "rds/orders-db", attached_by = "owner" }
         "asset-batch-1"  = { security_group = null, attached_by = "pipeline" }
       }
-      withdrawing = []
+      withdrawing_security_groups = []
     }
   }
   mock_data "xshield_enforcement_status" {
@@ -290,15 +290,15 @@ run "empty_snapshot_still_reports" {
   override_data {
     target = data.xshield_aws_enforcement_snapshot.this
     values = {
-      published             = true
-      version               = "v43"
-      security_groups       = {}
-      ingress_rules         = {}
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      published                   = true
+      version                     = "v43"
+      security_groups             = {}
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 
@@ -337,9 +337,9 @@ run "full_control_cohort_rule_names_its_group" {
       interface_attachments = {
         "ct-cohort-0123456789abcdef/eni-legacy" = { security_group = "ct-cohort-0123456789abcdef", network_interface_id = "eni-legacy", slot_limit = null }
       }
-      directory   = {}
-      assets      = {}
-      withdrawing = []
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 

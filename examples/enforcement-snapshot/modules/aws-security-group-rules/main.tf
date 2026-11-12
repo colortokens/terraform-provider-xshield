@@ -18,13 +18,13 @@ data "xshield_aws_security_group_rules" "this" {
   vpc_id           = var.vpc_id
   group_name       = var.group_name
 
-  ingress = var.ingress
-  egress  = var.egress
+  declared_ingress_rules = var.ingress_rules
+  declared_egress_rules  = var.egress_rules
 }
 
 locals {
-  ingress = local.changed ? data.xshield_aws_security_group_rules.this[0].ingress_rules : var.ingress
-  egress  = local.changed ? data.xshield_aws_security_group_rules.this[0].egress_rules : var.egress
+  ingress = local.changed ? data.xshield_aws_security_group_rules.this[0].ingress_rules : var.ingress_rules
+  egress  = local.changed ? data.xshield_aws_security_group_rules.this[0].egress_rules : var.egress_rules
 }
 
 resource "aws_vpc_security_group_ingress_rule" "this" {

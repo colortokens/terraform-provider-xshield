@@ -25,8 +25,8 @@ func webRules() *awsSecurityGroupRulesDataSourceModel {
 	return &awsSecurityGroupRulesDataSourceModel{
 		CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		VPCID: types.StringValue("vpc-1"), GroupName: types.StringValue("web"), Version: types.StringValue(testVersion),
-		Ingress: map[string]sgrRuleModel{"https_all": declaredRule("6", 443, "0.0.0.0/0"), "ssh_office": declaredRule("tcp", 22, "10.0.0.0/8")},
-		Egress:  map[string]sgrRuleModel{"https_out": declaredRule("tcp", 443, "0.0.0.0/0")},
+		DeclaredIngressRules: map[string]sgrRuleModel{"https_all": declaredRule("6", 443, "0.0.0.0/0"), "ssh_office": declaredRule("tcp", 22, "10.0.0.0/8")},
+		DeclaredEgressRules:  map[string]sgrRuleModel{"https_out": declaredRule("tcp", 443, "0.0.0.0/0")},
 	}
 }
 
@@ -64,7 +64,7 @@ func TestFullControlSnapshotCarriesTheCohortLikeAnyGroup(t *testing.T) {
 	if a := m.InterfaceAttachments[sampleCohortKey+"/eni-legacy"]; a.SecurityGroup.ValueString() != sampleCohortKey {
 		t.Errorf("attachment %+v, want the cohort on the instance's interface", a)
 	}
-	if e := m.Directory["lambda/reports"]; !slices.ContainsFunc(e.SecurityGroups, func(s types.String) bool { return s.ValueString() == sampleCohortKey }) {
+	if e := m.DirectoryEntries["lambda/reports"]; !slices.ContainsFunc(e.SecurityGroups, func(s types.String) bool { return s.ValueString() == sampleCohortKey }) {
 		t.Errorf("directory entry %+v, want the cohort for the function's workspace to attach", e)
 	}
 	group := ruleModel(wireRule{SecurityGroup: sampleCohortKey, IPProtocol: "-1", ReferencedSecurityGroupID: ptr("111122223333/sg-lb")})
@@ -81,11 +81,11 @@ func TestRulesFilterKeepsARuleUntilEveryMemberCarriesItsCohort(t *testing.T) {
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"https_all", "ssh_office"}) {
 		t.Errorf("kept %v, want every declared rule while the cohort is attaching", got)
 	}
-	if got := keysOf(data.Pending); !slices.Equal(got, []string{"ingress/https_all"}) {
+	if got := keysOf(data.PendingRules); !slices.Equal(got, []string{"ingress/https_all"}) {
 		t.Errorf("pending %v, want the broad rule named", got)
 	}
-	if len(data.Revoked) != 0 {
-		t.Errorf("revoked %v, want none yet", keysOf(data.Revoked))
+	if len(data.RevokedRules) != 0 {
+		t.Errorf("revoked %v, want none yet", keysOf(data.RevokedRules))
 	}
 }
 
@@ -97,7 +97,7 @@ func TestRulesFilterLeavesOutTheMovedRuleByItsContent(t *testing.T) {
 	if got := sortedKeys(data.IngressRules); !slices.Equal(got, []string{"ssh_office"}) {
 		t.Errorf("kept %v, want the broad 443 rule left out though it was declared with protocol 6", got)
 	}
-	if got := keysOf(data.Revoked); !slices.Equal(got, []string{"ingress/https_all"}) {
+	if got := keysOf(data.RevokedRules); !slices.Equal(got, []string{"ingress/https_all"}) {
 		t.Errorf("revoked %v", got)
 	}
 	if got := sortedKeys(data.EgressRules); !slices.Equal(got, []string{"https_out"}) {
@@ -112,7 +112,7 @@ func TestRulesFilterReturnsTagsAsDeclared(t *testing.T) {
 	data := webRules()
 	tagged := declaredRule("tcp", 22, "10.0.0.0/8")
 	tagged.Tags = types.MapValueMust(types.StringType, map[string]attr.Value{"owner": types.StringValue("netops")})
-	data.Ingress["ssh_office"] = tagged
+	data.DeclaredIngressRules["ssh_office"] = tagged
 	filterDeclaredRules(data, nil)
 
 	if tags := data.IngressRules["https_all"].Tags; !tags.IsNull() {
@@ -129,8 +129,8 @@ func TestRulesFilterReturnsAnotherGroupUnchanged(t *testing.T) {
 	data.GroupName = types.StringValue("db")
 	filterDeclaredRules(data, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "db"))
 
-	if len(data.IngressRules) != 2 || len(data.EgressRules) != 1 || len(data.Revoked) != 0 || len(data.Pending) != 0 {
-		t.Errorf("kept %v and %v, revoked %v, want everything kept", sortedKeys(data.IngressRules), sortedKeys(data.EgressRules), keysOf(data.Revoked))
+	if len(data.IngressRules) != 2 || len(data.EgressRules) != 1 || len(data.RevokedRules) != 0 || len(data.PendingRules) != 0 {
+		t.Errorf("kept %v and %v, revoked %v, want everything kept", sortedKeys(data.IngressRules), sortedKeys(data.EgressRules), keysOf(data.RevokedRules))
 	}
 }
 

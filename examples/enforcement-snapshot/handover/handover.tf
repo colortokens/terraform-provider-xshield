@@ -48,7 +48,7 @@ data "aws_ssm_parameters_by_path" "handover" {
 }
 
 import {
-  for_each = { for k, d in data.xshield_aws_enforcement_snapshot.handover.directory : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
+  for_each = { for k, d in data.xshield_aws_enforcement_snapshot.handover.directory_entries : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

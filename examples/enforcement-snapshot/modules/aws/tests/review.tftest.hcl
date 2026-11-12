@@ -175,7 +175,7 @@ mock_provider "xshield" {
         "ct-cohort-0example/eni-0web1a"  = { security_group = "ct-cohort-0example", network_interface_id = "eni-0web1a", slot_limit = null }
         "ct-cohort-0example/eni-0legacy" = { security_group = "ct-cohort-0example", network_interface_id = "eni-0legacy", slot_limit = null }
       }
-      directory = {
+      directory_entries = {
         "rds/orders-db" = {
           parameter_name  = "/colortokens/v1/rds/orders-db/security-groups"
           handle          = "rds/orders-db"
@@ -188,7 +188,7 @@ mock_provider "xshield" {
         "asset-web-1"    = { security_group = "i-0web1", attached_by = "pipeline" }
         "asset-orders-1" = { security_group = "rds/orders-db", attached_by = "owner" }
       }
-      withdrawing = []
+      withdrawing_security_groups = []
     }
   }
   mock_data "xshield_enforcement_status" {
@@ -355,9 +355,9 @@ run "a_changed_rule_changes_only_its_own_sentence" {
       interface_attachments = {
         "i-0web1/eni-0web1a" = { security_group = "i-0web1", network_interface_id = "eni-0web1a", slot_limit = 5 }
       }
-      directory   = {}
-      assets      = { "asset-web-1" = { security_group = "i-0web1", attached_by = "pipeline" } }
-      withdrawing = []
+      directory_entries           = {}
+      assets                      = { "asset-web-1" = { security_group = "i-0web1", attached_by = "pipeline" } }
+      withdrawing_security_groups = []
     }
   }
 
@@ -382,15 +382,15 @@ run "nothing_published_is_one_sentence" {
   override_data {
     target = data.xshield_aws_enforcement_snapshot.this
     values = {
-      published             = false
-      version               = null
-      security_groups       = {}
-      ingress_rules         = {}
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      published                   = false
+      version                     = null
+      security_groups             = {}
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 
@@ -408,15 +408,15 @@ run "an_empty_version_is_one_count" {
   override_data {
     target = data.xshield_aws_enforcement_snapshot.this
     values = {
-      published             = true
-      version               = "v44"
-      security_groups       = {}
-      ingress_rules         = {}
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      published                   = true
+      version                     = "v44"
+      security_groups             = {}
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 
@@ -455,11 +455,11 @@ run "a_large_account_is_cut_short_and_says_so" {
         "i-0web1/in/tcp/5432/10.1.0.7/32" = { security_group = "i-0web1", ip_protocol = "tcp", from_port = 5432, to_port = 5432, cidr_ipv4 = "10.1.0.7/32", cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = null, description = null, tags = {} }
         "i-0web2/in/tcp/22/10.9.0.0/24"   = { security_group = "i-0web2", ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.9.0.0/24", cidr_ipv6 = null, prefix_list_id = null, referenced_security_group_id = null, description = null, tags = {} }
       }
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 
@@ -492,11 +492,11 @@ run "a_withdrawn_group_says_so" {
       }
       egress_rules          = {}
       interface_attachments = {}
-      directory = {
+      directory_entries = {
         "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = [], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
-      assets      = {}
-      withdrawing = ["rds/orders-db"]
+      assets                      = {}
+      withdrawing_security_groups = ["rds/orders-db"]
     }
   }
 

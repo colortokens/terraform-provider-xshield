@@ -14,12 +14,12 @@ mock_provider "xshield" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      egress_rules        = {}
-      revoked             = []
-      pending             = []
-      reopens             = []
-      undeclared_pending  = []
-      undeclared_restores = []
+      egress_rules               = {}
+      revoked_rules              = []
+      pending_rules              = []
+      reopening_rules            = []
+      undeclared_pending_rules   = []
+      undeclared_restoring_rules = []
     }
   }
 }
@@ -30,7 +30,7 @@ variables {
   group_name        = "web"
   security_group_id = "sg-0example"
 
-  ingress = {
+  ingress_rules = {
     https_office  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "10.0.0.0/8" }
     ssh_all       = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "0.0.0.0/0" }
     ssh_numbered  = { ip_protocol = "6", from_port = 22, to_port = 22, cidr_ipv4 = "10.9.0.0/24" }
@@ -40,7 +40,7 @@ variables {
     dns_from_lb   = { ip_protocol = "udp", from_port = 53, to_port = 53, referenced_security_group_id = "sg-0lb" }
     ping          = { ip_protocol = "icmp", from_port = 8, to_port = -1, cidr_ipv4 = "10.0.0.0/8" }
   }
-  egress = {
+  egress_rules = {
     all = { ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }
     s3  = { ip_protocol = "tcp", from_port = 443, to_port = 443, prefix_list_id = "pl-0example" }
     esp = { ip_protocol = "50", cidr_ipv4 = "10.0.0.0/8" }
@@ -91,12 +91,12 @@ run "rules_taken_out_and_waiting_are_said_in_words" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      egress_rules        = {}
-      revoked             = ["ingress/everything_v6", "ingress/ssh_all", "ingress/tcp_internal", "egress/all"]
-      pending             = ["ingress/app_range", "ingress/dns_from_lb", "ingress/ping", "ingress/ssh_numbered", "egress/esp", "egress/s3"]
-      reopens             = []
-      undeclared_pending  = []
-      undeclared_restores = []
+      egress_rules               = {}
+      revoked_rules              = ["ingress/everything_v6", "ingress/ssh_all", "ingress/tcp_internal", "egress/all"]
+      pending_rules              = ["ingress/app_range", "ingress/dns_from_lb", "ingress/ping", "ingress/ssh_numbered", "egress/esp", "egress/s3"]
+      reopening_rules            = []
+      undeclared_pending_rules   = []
+      undeclared_restoring_rules = []
     }
   }
 
@@ -164,12 +164,12 @@ run "the_same_answer_gives_the_same_sentences" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      egress_rules        = {}
-      revoked             = ["ingress/everything_v6", "ingress/ssh_all", "ingress/tcp_internal", "egress/all"]
-      pending             = ["ingress/app_range", "ingress/dns_from_lb", "ingress/ping", "ingress/ssh_numbered", "egress/esp", "egress/s3"]
-      reopens             = []
-      undeclared_pending  = []
-      undeclared_restores = []
+      egress_rules               = {}
+      revoked_rules              = ["ingress/everything_v6", "ingress/ssh_all", "ingress/tcp_internal", "egress/all"]
+      pending_rules              = ["ingress/app_range", "ingress/dns_from_lb", "ingress/ping", "ingress/ssh_numbered", "egress/esp", "egress/s3"]
+      reopening_rules            = []
+      undeclared_pending_rules   = []
+      undeclared_restoring_rules = []
     }
   }
 
@@ -195,15 +195,15 @@ run "rules_a_change_set_needs_say_which_change_set" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      egress_rules = {}
-      revoked      = []
-      pending      = []
-      reopens      = [{ rule = "ingress/tcp_internal", change_set = "cs-1" }]
-      undeclared_pending = [{
+      egress_rules    = {}
+      revoked_rules   = []
+      pending_rules   = []
+      reopening_rules = [{ rule = "ingress/tcp_internal", change_set = "cs-1" }]
+      undeclared_pending_rules = [{
         direction      = "ingress", ip_protocol = "tcp", from_port = 3389, to_port = 3389, cidr_ipv4 = "0.0.0.0/0", cidr_ipv6 = null
         prefix_list_id = null, referenced_security_group_id = null, change_set = "cs-2"
       }]
-      undeclared_restores = [{
+      undeclared_restoring_rules = [{
         direction      = "egress", ip_protocol = "-1", from_port = null, to_port = null, cidr_ipv4 = "0.0.0.0/0", cidr_ipv6 = null
         prefix_list_id = null, referenced_security_group_id = null, change_set = "cs-3"
       }]
@@ -227,15 +227,15 @@ run "a_key_the_group_does_not_declare_is_named_without_words" {
   override_data {
     target = data.xshield_aws_security_group_rules.this[0]
     values = {
-      published           = true
-      version             = "v10"
-      ingress_rules       = {}
-      egress_rules        = {}
-      revoked             = ["ingress/not_declared"]
-      pending             = []
-      reopens             = []
-      undeclared_pending  = []
-      undeclared_restores = []
+      published                  = true
+      version                    = "v10"
+      ingress_rules              = {}
+      egress_rules               = {}
+      revoked_rules              = ["ingress/not_declared"]
+      pending_rules              = []
+      reopening_rules            = []
+      undeclared_pending_rules   = []
+      undeclared_restoring_rules = []
     }
   }
 

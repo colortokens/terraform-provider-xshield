@@ -209,7 +209,7 @@ resource "aws_network_interface_sg_attachment" "this" {
 # One parameter per database, function or service its own workspace attaches;
 # the aws-group-lookup module reads it by handle.
 resource "aws_ssm_parameter" "directory" {
-  for_each = local.snap.directory
+  for_each = local.snap.directory_entries
 
   name = each.value.parameter_name
   type = "String"

@@ -49,7 +49,7 @@ import {
 }
 
 import {
-  for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory : handle => entry.parameter_name }
+  for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

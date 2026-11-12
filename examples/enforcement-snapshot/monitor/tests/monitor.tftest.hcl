@@ -21,7 +21,7 @@ mock_provider "xshield" {
       drift_observed_at             = "2020-01-02T00:00:00Z"
       drift_findings                = []
       notices = [
-        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, security_group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
       ]
     }
   }
@@ -139,7 +139,7 @@ run "warns_on_a_refused_workload" {
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "assetRefused", reason = "NO_FREE_SLOT", asset_id = "asset-web-1", asset_name = "i-0web1", group = null, since = null, message = "no Xshield group can be written for this workload as it stands" },
+        { code = "assetRefused", reason = "NO_FREE_SLOT", asset_id = "asset-web-1", asset_name = "i-0web1", security_group = null, since = null, message = "no Xshield group can be written for this workload as it stands" },
       ]
     }
   }
@@ -261,9 +261,9 @@ run "warns_when_a_full_control_change_has_waited_too_long_for_the_owning_workspa
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "changeSetHeld", reason = "cs-old", asset_id = null, asset_name = null, group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "the change waits for the workspace that owns web to apply" },
-        { code = "changeSetHeld", reason = "cs-new", asset_id = null, asset_name = null, group = "vpc-1/admin", since = "2999-01-01T00:00:00Z", message = "the change waits for the workspace that owns admin to apply" },
-        { code = "changeSetHeld", reason = "cs-undated", asset_id = null, asset_name = null, group = "vpc-1/db", since = null, message = "the change waits for the workspace that owns db to apply" },
+        { code = "changeSetHeld", reason = "cs-old", asset_id = null, asset_name = null, security_group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "the change waits for the workspace that owns web to apply" },
+        { code = "changeSetHeld", reason = "cs-new", asset_id = null, asset_name = null, security_group = "vpc-1/admin", since = "2999-01-01T00:00:00Z", message = "the change waits for the workspace that owns admin to apply" },
+        { code = "changeSetHeld", reason = "cs-undated", asset_id = null, asset_name = null, security_group = "vpc-1/db", since = null, message = "the change waits for the workspace that owns db to apply" },
       ]
     }
   }
@@ -350,7 +350,7 @@ run "warns_on_a_port_whose_group_is_no_longer_narrowed" {
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "portNotNarrowed", reason = "cs-reverted", asset_id = "asset-web-1", asset_name = "i-0web1", group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "inbound port TCP:443 is still deployed, but the change set that narrowed web for it was reverted" },
+        { code = "portNotNarrowed", reason = "cs-reverted", asset_id = "asset-web-1", asset_name = "i-0web1", security_group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "inbound port TCP:443 is still deployed, but the change set that narrowed web for it was reverted" },
       ]
     }
   }
@@ -438,7 +438,7 @@ run "fail_on_alone_stops_the_plan_without_a_warning" {
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "groupRefused", reason = "RULE_BUDGET_EXCEEDED:inbound/ipv4=61", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the group does not fit" },
+        { code = "groupRefused", reason = "RULE_BUDGET_EXCEEDED:inbound/ipv4=61", asset_id = null, asset_name = null, security_group = "i-0web1", since = null, message = "the group does not fit" },
       ]
     }
   }

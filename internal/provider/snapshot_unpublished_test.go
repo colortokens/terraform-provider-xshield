@@ -112,7 +112,7 @@ func TestNothingPublishedReadsAsAnEmptySnapshotWithoutFetchingAVersion(t *testin
 	if m.Published.ValueBool() || !m.Version.IsNull() {
 		t.Errorf("published %v version %v, want false and null", m.Published, m.Version)
 	}
-	if len(m.SecurityGroups)+len(m.IngressRules)+len(m.EgressRules)+len(m.InterfaceAttachments)+len(m.Directory)+len(m.Assets)+len(m.Withdrawing) != 0 {
+	if len(m.SecurityGroups)+len(m.IngressRules)+len(m.EgressRules)+len(m.InterfaceAttachments)+len(m.DirectoryEntries)+len(m.Assets)+len(m.WithdrawingSecurityGroups) != 0 {
 		t.Errorf("an unpublished snapshot must hold nothing to create: %+v", m)
 	}
 	if len(*requested) != 1 {
@@ -229,14 +229,14 @@ func TestDeclaredRulesComeBackUnchangedWhenNothingIsPublished(t *testing.T) {
 	args := pointArgs()
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
-	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
+	args["declared_ingress_rules"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
 	var m awsSecurityGroupRulesDataSourceModel
 	if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &m); !ok {
 		t.Fatalf("a group's own pipeline must plan while nothing is published: %s", errs)
 	}
 	kept, ok := m.IngressRules["https_public"]
-	if m.Published.ValueBool() || !m.Version.IsNull() || !ok || kept.CIDRIPv4.ValueString() != "0.0.0.0/0" || len(m.Revoked)+len(m.Pending) != 0 {
-		t.Errorf("published %v version %v kept %+v revoked %v pending %v, want every declared rule back unchanged", m.Published, m.Version, m.IngressRules, m.Revoked, m.Pending)
+	if m.Published.ValueBool() || !m.Version.IsNull() || !ok || kept.CIDRIPv4.ValueString() != "0.0.0.0/0" || len(m.RevokedRules)+len(m.PendingRules) != 0 {
+		t.Errorf("published %v version %v kept %+v revoked %v pending %v, want every declared rule back unchanged", m.Published, m.Version, m.IngressRules, m.RevokedRules, m.PendingRules)
 	}
 	if slices.ContainsFunc(*requested, func(p string) bool { return strings.HasSuffix(p, "/expected") }) {
 		t.Errorf("requested %v: a team's rules filter read the expected version, which Xshield records as the enforcement pipeline's last check", *requested)
@@ -267,13 +267,13 @@ func TestDeclaredRulesLoseWhatAReleasedChangeRevokes(t *testing.T) {
 	args := pointArgs()
 	args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
 	args["group_name"] = tftypes.NewValue(tftypes.String, "web")
-	args["ingress"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
+	args["declared_ingress_rules"] = tftypes.NewValue(tftypes.Map{ElementType: ruleType}, map[string]tftypes.Value{"https_public": rule})
 	var m awsSecurityGroupRulesDataSourceModel
 	if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &m); !ok {
 		t.Fatalf("read failed: %s", errs)
 	}
-	if _, kept := m.IngressRules["https_public"]; kept || !m.Published.ValueBool() || len(m.Revoked) != 1 || m.Revoked[0].ValueString() != "ingress/https_public" {
-		t.Errorf("kept %v revoked %v, want the broad rule left out", m.IngressRules, m.Revoked)
+	if _, kept := m.IngressRules["https_public"]; kept || !m.Published.ValueBool() || len(m.RevokedRules) != 1 || m.RevokedRules[0].ValueString() != "ingress/https_public" {
+		t.Errorf("kept %v revoked %v, want the broad rule left out", m.IngressRules, m.RevokedRules)
 	}
 	if slices.ContainsFunc(*requested, func(p string) bool { return strings.Contains(p, "/versions/") || strings.HasSuffix(p, "/status") }) {
 		t.Errorf("requested %v: the rules filter reads the published changes alone, never a snapshot", *requested)

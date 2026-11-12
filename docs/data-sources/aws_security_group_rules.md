@@ -48,11 +48,11 @@ data "xshield_aws_security_group_rules" "web" {
   vpc_id           = aws_vpc.main.id
   group_name       = aws_security_group.web.name
 
-  ingress = local.web_ingress_rules
+  declared_ingress_rules = local.web_ingress_rules
 }
 
 locals {
-  web_revoked = local.web_changed ? data.xshield_aws_security_group_rules.web[0].revoked : []
+  web_revoked = local.web_changed ? data.xshield_aws_security_group_rules.web[0].revoked_rules : []
 }
 
 # Keeps your own rule blocks: only the rules Xshield has left out drop from for_each.
@@ -79,24 +79,24 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
 
 ### Optional
 
-- `egress` (Attributes Map) The egress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_egress_rule`. (see [below for nested schema](#nestedatt--egress))
-- `ingress` (Attributes Map) The ingress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_ingress_rule`. (see [below for nested schema](#nestedatt--ingress))
+- `declared_egress_rules` (Attributes Map) The egress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_egress_rule`. (see [below for nested schema](#nestedatt--declared_egress_rules))
+- `declared_ingress_rules` (Attributes Map) The ingress rules the group declares, keyed as your code keys them, with the arguments of `aws_vpc_security_group_ingress_rule`. (see [below for nested schema](#nestedatt--declared_ingress_rules))
 
 ### Read-Only
 
 - `egress_rules` (Map of Object) The declared egress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_egress_rule`, not the input. Each holds what its declared rule holds: `ip_protocol`, `from_port`, `to_port`, `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`, `description` and `tags`. (see [below for nested schema](#nestedatt--egress_rules))
 - `ingress_rules` (Map of Object) The declared ingress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_ingress_rule`, not the input. Each holds what its declared rule holds: `ip_protocol`, `from_port`, `to_port`, `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`, `description` and `tags`. (see [below for nested schema](#nestedatt--ingress_rules))
-- `pending` (List of String) The declared rules an approved change will leave out once every workload that keeps them carries its cohort.
+- `pending_rules` (List of String) The declared rules an approved change will leave out once every workload that keeps them carries its cohort.
 - `published` (Boolean) False while Xshield has published nothing for this account and region; every declared rule then comes back unchanged and `version` is null. Any other failure to read the changes fails the plan.
-- `reopens` (List of Object) The declared rules that give a workload in the group traffic an approved change takes from it, each as `rule` (`ingress/<key>` or `egress/<key>`) with the `change_set` it undoes part of. Every workload in the group gets a rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending` or `revoked` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule naming a security group or prefix list is compared only with moved rules naming the same one. (see [below for nested schema](#nestedatt--reopens))
-- `revoked` (List of String) The declared rules left out, as `ingress/<key>` or `egress/<key>`.
+- `reopening_rules` (List of Object) The declared rules that give a workload in the group traffic an approved change takes from it, each as `rule` (`ingress/<key>` or `egress/<key>`) with the `change_set` it undoes part of. Every workload in the group gets a rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending_rules` or `revoked_rules` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule naming a security group or prefix list is compared only with moved rules naming the same one. (see [below for nested schema](#nestedatt--reopening_rules))
+- `revoked_rules` (List of String) The declared rules left out, as `ingress/<key>` or `egress/<key>`.
 - `security_group_id` (String) The group's AWS ID while an approved change applies to it, and null otherwise. The optional policy checks use it to find the group's rules in a plan.
-- `undeclared_pending` (List of Object) The rules an approved change will leave out once every workload that keeps them carries its cohort, which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out once it is safe. A rule a change already leaves out is not listed. `direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination. (see [below for nested schema](#nestedatt--undeclared_pending))
-- `undeclared_restores` (List of Object) The rules a revert puts back that the group no longer declares, each with the `change_set` being reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them to end it. `direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination. (see [below for nested schema](#nestedatt--undeclared_restores))
+- `undeclared_pending_rules` (List of Object) The rules an approved change will leave out once every workload that keeps them carries its cohort, which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out once it is safe. A rule a change already leaves out is not listed. `direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination. (see [below for nested schema](#nestedatt--undeclared_pending_rules))
+- `undeclared_restoring_rules` (List of Object) The rules a revert puts back that the group no longer declares, each with the `change_set` being reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them to end it. `direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination. (see [below for nested schema](#nestedatt--undeclared_restoring_rules))
 - `version` (String) Version of the changes to customer groups Xshield published for the account and region, which it publishes apart from the enforcement snapshot, so a released change needs no enforcement apply.
 
-<a id="nestedatt--egress"></a>
-### Nested Schema for `egress`
+<a id="nestedatt--declared_egress_rules"></a>
+### Nested Schema for `declared_egress_rules`
 
 Required:
 
@@ -114,8 +114,8 @@ Optional:
 - `to_port` (Number) End of the port range, or the ICMP code.
 
 
-<a id="nestedatt--ingress"></a>
-### Nested Schema for `ingress`
+<a id="nestedatt--declared_ingress_rules"></a>
+### Nested Schema for `declared_ingress_rules`
 
 Required:
 
@@ -165,8 +165,8 @@ Read-Only:
 - `to_port` (Number)
 
 
-<a id="nestedatt--reopens"></a>
-### Nested Schema for `reopens`
+<a id="nestedatt--reopening_rules"></a>
+### Nested Schema for `reopening_rules`
 
 Read-Only:
 
@@ -174,8 +174,8 @@ Read-Only:
 - `rule` (String)
 
 
-<a id="nestedatt--undeclared_pending"></a>
-### Nested Schema for `undeclared_pending`
+<a id="nestedatt--undeclared_pending_rules"></a>
+### Nested Schema for `undeclared_pending_rules`
 
 Read-Only:
 
@@ -190,8 +190,8 @@ Read-Only:
 - `to_port` (Number)
 
 
-<a id="nestedatt--undeclared_restores"></a>
-### Nested Schema for `undeclared_restores`
+<a id="nestedatt--undeclared_restoring_rules"></a>
+### Nested Schema for `undeclared_restoring_rules`
 
 Read-Only:
 

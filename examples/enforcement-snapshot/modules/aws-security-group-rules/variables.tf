@@ -22,7 +22,7 @@ variable "security_group_id" {
   type        = string
 }
 
-variable "ingress" {
+variable "ingress_rules" {
   description = "Ingress rules keyed by a stable name, with the arguments of aws_vpc_security_group_ingress_rule."
   type = map(object({
     ip_protocol                  = string
@@ -38,7 +38,7 @@ variable "ingress" {
   default = {}
 }
 
-variable "egress" {
+variable "egress_rules" {
   description = "Egress rules keyed by a stable name, with the arguments of aws_vpc_security_group_egress_rule."
   type = map(object({
     ip_protocol                  = string

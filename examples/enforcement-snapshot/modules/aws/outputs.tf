@@ -11,13 +11,13 @@ output "published" {
 output "summary" {
   description = "What the applied version holds, for plan review and run logs."
   value = {
-    published             = local.snap.published
-    version               = local.snap.version
-    security_groups       = length(local.snap.security_groups)
-    rules                 = length(local.snap.ingress_rules) + length(local.snap.egress_rules)
-    interface_attachments = length(local.snap.interface_attachments)
-    attached_by_owner     = sort(keys(local.snap.directory))
-    withdrawing           = local.snap.withdrawing
+    published                   = local.snap.published
+    version                     = local.snap.version
+    security_groups             = length(local.snap.security_groups)
+    rules                       = length(local.snap.ingress_rules) + length(local.snap.egress_rules)
+    interface_attachments       = length(local.snap.interface_attachments)
+    attached_by_owner           = sort(keys(local.snap.directory_entries))
+    withdrawing_security_groups = local.snap.withdrawing_security_groups
   }
 }
 
@@ -36,7 +36,7 @@ output "attachment_keys" {
   value       = keys(local.attachments_with_room)
 }
 
-output "directory" {
+output "directory_entries" {
   description = "The SSM parameter each owning workspace's aws-group-lookup reads, keyed by handle."
-  value       = { for handle, entry in local.snap.directory : handle => entry.parameter_name }
+  value       = { for handle, entry in local.snap.directory_entries : handle => entry.parameter_name }
 }

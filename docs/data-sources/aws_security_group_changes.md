@@ -27,7 +27,7 @@ module "web_rules" {
   group_name        = aws_security_group.web.name
   security_group_id = aws_security_group.web.id
 
-  ingress = {
+  ingress_rules = {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
     ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
   }

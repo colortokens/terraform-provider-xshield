@@ -6,15 +6,15 @@ locals {
   review_protocol_names   = { tcp = "TCP", udp = "UDP", icmp = "ICMP", icmpv6 = "ICMPv6" }
 
   review_declared = merge(
-    { for key, rule in var.ingress : "ingress/${key}" => rule },
-    { for key, rule in var.egress : "egress/${key}" => rule },
+    { for key, rule in var.ingress_rules : "ingress/${key}" => rule },
+    { for key, rule in var.egress_rules : "egress/${key}" => rule },
   )
 
-  review_revoked             = local.changed ? data.xshield_aws_security_group_rules.this[0].revoked : []
-  review_pending             = local.changed ? data.xshield_aws_security_group_rules.this[0].pending : []
-  review_reopens             = local.changed ? data.xshield_aws_security_group_rules.this[0].reopens : []
-  review_undeclared_pending  = local.changed ? data.xshield_aws_security_group_rules.this[0].undeclared_pending : []
-  review_undeclared_restores = local.changed ? data.xshield_aws_security_group_rules.this[0].undeclared_restores : []
+  review_revoked             = local.changed ? data.xshield_aws_security_group_rules.this[0].revoked_rules : []
+  review_pending             = local.changed ? data.xshield_aws_security_group_rules.this[0].pending_rules : []
+  review_reopens             = local.changed ? data.xshield_aws_security_group_rules.this[0].reopening_rules : []
+  review_undeclared_pending  = local.changed ? data.xshield_aws_security_group_rules.this[0].undeclared_pending_rules : []
+  review_undeclared_restores = local.changed ? data.xshield_aws_security_group_rules.this[0].undeclared_restoring_rules : []
 
   # A declared rule is found by its key. A rule the group no longer declares comes from Xshield with its content.
   review_entries = concat(

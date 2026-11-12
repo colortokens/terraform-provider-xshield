@@ -82,7 +82,7 @@ func TestSnapshotMapsAttachmentsDirectoryAndAssets(t *testing.T) {
 	if a := m.InterfaceAttachments["i-app-1/eni-app-1-data"]; a.SecurityGroup.ValueString() != "i-app-1" || a.NetworkInterfaceID.ValueString() != "eni-app-1-data" {
 		t.Errorf("attachment %+v", a)
 	}
-	db := m.Directory["rds/orders-db"]
+	db := m.DirectoryEntries["rds/orders-db"]
 	if db.ParameterName.ValueString() != "/colortokens/v1/rds/orders-db/security-groups" || db.Handle.ValueString() != "rds/orders-db" || len(db.SecurityGroups) != 1 || db.SecurityGroups[0].ValueString() != "rds/orders-db" {
 		t.Errorf("directory entry %+v", db)
 	}
@@ -110,7 +110,7 @@ func TestSnapshotMapsSlotLimitsAndLeavesAnUndiscoveredOneNull(t *testing.T) {
 	if got := m.InterfaceAttachments["i-app-1/eni-app-1-data"].SlotLimit; got.ValueInt64() != 8 {
 		t.Errorf("attachment limit %v, want 8", got)
 	}
-	if got := m.Directory["rds/orders-db"].SlotLimit; got.ValueInt64() != 5 {
+	if got := m.DirectoryEntries["rds/orders-db"].SlotLimit; got.ValueInt64() != 5 {
 		t.Errorf("directory limit %v, want 5", got)
 	}
 	for key, a := range m.InterfaceAttachments {
@@ -190,11 +190,11 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		len(attachments) != len(st.Applied.Resources.Attachments) || len(groups) == 0 {
 		t.Errorf("applied IDs %d groups %d rules %d attachments, want every resource the receipt records", len(groups), len(rules), len(attachments))
 	}
-	if len(data.Notices) != 2 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() ||
+	if len(data.Notices) != 2 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].SecurityGroup.IsNull() ||
 		data.Notices[0].AssetName.ValueString() != "rds/db-1" || !data.Notices[0].Since.IsNull() {
 		t.Errorf("notices %+v", data.Notices)
 	}
-	if len(data.Notices) == 2 && (data.Notices[1].Since.ValueString() != "2026-11-01T09:00:00Z" || data.Notices[1].Group.ValueString() != "vpc-1/web") {
+	if len(data.Notices) == 2 && (data.Notices[1].Since.ValueString() != "2026-11-01T09:00:00Z" || data.Notices[1].SecurityGroup.ValueString() != "vpc-1/web") {
 		t.Errorf("waiting notice %+v, want its group and since when it has waited", data.Notices[1])
 	}
 	kinds := []string{}

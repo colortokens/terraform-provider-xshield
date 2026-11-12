@@ -39,22 +39,22 @@ type sgrRuleModel struct {
 }
 
 type awsSecurityGroupRulesDataSourceModel struct {
-	CloudAccountID     types.String            `tfsdk:"cloud_account_id"`
-	Region             types.String            `tfsdk:"region"`
-	VPCID              types.String            `tfsdk:"vpc_id"`
-	GroupName          types.String            `tfsdk:"group_name"`
-	Version            types.String            `tfsdk:"version"`
-	Published          types.Bool              `tfsdk:"published"`
-	Ingress            map[string]sgrRuleModel `tfsdk:"ingress"`
-	Egress             map[string]sgrRuleModel `tfsdk:"egress"`
-	IngressRules       map[string]sgrRuleModel `tfsdk:"ingress_rules"`
-	EgressRules        map[string]sgrRuleModel `tfsdk:"egress_rules"`
-	Revoked            []types.String          `tfsdk:"revoked"`
-	Pending            []types.String          `tfsdk:"pending"`
-	SecurityGroupID    types.String            `tfsdk:"security_group_id"`
-	Reopens            []sgrReopenModel        `tfsdk:"reopens"`
-	UndeclaredRestores []sgrMoveModel          `tfsdk:"undeclared_restores"`
-	UndeclaredPending  []sgrMoveModel          `tfsdk:"undeclared_pending"`
+	CloudAccountID           types.String            `tfsdk:"cloud_account_id"`
+	Region                   types.String            `tfsdk:"region"`
+	VPCID                    types.String            `tfsdk:"vpc_id"`
+	GroupName                types.String            `tfsdk:"group_name"`
+	Version                  types.String            `tfsdk:"version"`
+	Published                types.Bool              `tfsdk:"published"`
+	DeclaredIngressRules     map[string]sgrRuleModel `tfsdk:"declared_ingress_rules"`
+	DeclaredEgressRules      map[string]sgrRuleModel `tfsdk:"declared_egress_rules"`
+	IngressRules             map[string]sgrRuleModel `tfsdk:"ingress_rules"`
+	EgressRules              map[string]sgrRuleModel `tfsdk:"egress_rules"`
+	RevokedRules             []types.String          `tfsdk:"revoked_rules"`
+	PendingRules             []types.String          `tfsdk:"pending_rules"`
+	SecurityGroupID          types.String            `tfsdk:"security_group_id"`
+	ReopeningRules           []sgrReopenModel        `tfsdk:"reopening_rules"`
+	UndeclaredRestoringRules []sgrMoveModel          `tfsdk:"undeclared_restoring_rules"`
+	UndeclaredPendingRules   []sgrMoveModel          `tfsdk:"undeclared_pending_rules"`
 }
 
 var sgrRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
@@ -126,30 +126,30 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 			"published": schema.BoolAttribute{Computed: true,
 				MarkdownDescription: "False while Xshield has published nothing for this account and region; every declared rule " +
 					"then comes back unchanged and `version` is null. Any other failure to read the changes fails the plan."},
-			"ingress":       declared("ingress"),
-			"egress":        declared("egress"),
-			"ingress_rules": kept("ingress"),
-			"egress_rules":  kept("egress"),
-			"revoked": schema.ListAttribute{Computed: true, ElementType: types.StringType,
+			"declared_ingress_rules": declared("ingress"),
+			"declared_egress_rules":  declared("egress"),
+			"ingress_rules":          kept("ingress"),
+			"egress_rules":           kept("egress"),
+			"revoked_rules": schema.ListAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "The declared rules left out, as `ingress/<key>` or `egress/<key>`."},
-			"pending": schema.ListAttribute{Computed: true, ElementType: types.StringType,
+			"pending_rules": schema.ListAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "The declared rules an approved change will leave out once every workload that keeps them carries its cohort."},
 			"security_group_id": schema.StringAttribute{Computed: true,
 				MarkdownDescription: "The group's AWS ID while an approved change applies to it, and null otherwise. The optional policy " +
 					"checks use it to find the group's rules in a plan."},
-			"reopens": schema.ListAttribute{Computed: true, ElementType: sgrReopenType,
+			"reopening_rules": schema.ListAttribute{Computed: true, ElementType: sgrReopenType,
 				MarkdownDescription: "The declared rules that give a workload in the group traffic an approved change takes from it, each as " +
 					"`rule` (`ingress/<key>` or `egress/<key>`) with the `change_set` it undoes part of. Every workload in the group gets a " +
-					"rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending` or " +
-					"`revoked` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule " +
+					"rule's traffic, including the workloads the change narrowed. A rule that is exactly the moved rule is in `pending_rules` or " +
+					"`revoked_rules` instead, and a rule that allows only traffic every workload keeps through the change is not listed. A rule " +
 					"naming a security group or prefix list is compared only with moved rules naming the same one."},
-			"undeclared_restores": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
+			"undeclared_restoring_rules": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
 				MarkdownDescription: "The rules a revert puts back that the group no longer declares, each with the `change_set` being " +
 					"reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them " +
 					"to end it. " +
 					"`direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. " +
 					"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination."},
-			"undeclared_pending": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
+			"undeclared_pending_rules": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
 				MarkdownDescription: "The rules an approved change will leave out once every workload that keeps them carries its cohort, " +
 					"which the group no longer declares, each with the `change_set` that moves it. Until then the group must hold them: a " +
 					"plan that removes one takes its traffic from those workloads early. Declare them again, and Xshield leaves each out " +
@@ -207,9 +207,9 @@ func groupChangeOf(changes wireCustomerGroupChanges, vpcID, name string) *wireCu
 // filterDeclaredRules never returns a nil map or list, so an unchanged group plans cleanly.
 func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wireCustomerGroupChange) {
 	data.IngressRules, data.EgressRules = map[string]sgrRuleModel{}, map[string]sgrRuleModel{}
-	data.Revoked, data.Pending = []types.String{}, []types.String{}
-	data.SecurityGroupID, data.Reopens = types.StringNull(), []sgrReopenModel{}
-	data.UndeclaredRestores, data.UndeclaredPending = []sgrMoveModel{}, []sgrMoveModel{}
+	data.RevokedRules, data.PendingRules = []types.String{}, []types.String{}
+	data.SecurityGroupID, data.ReopeningRules = types.StringNull(), []sgrReopenModel{}
+	data.UndeclaredRestoringRules, data.UndeclaredPendingRules = []sgrMoveModel{}, []sgrMoveModel{}
 	if change != nil && change.GroupID != "" {
 		data.SecurityGroupID = types.StringValue(change.GroupID)
 	}
@@ -217,27 +217,27 @@ func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wir
 		name     string
 		declared map[string]sgrRuleModel
 		kept     map[string]sgrRuleModel
-	}{{"ingress", data.Ingress, data.IngressRules}, {"egress", data.Egress, data.EgressRules}} {
+	}{{"ingress", data.DeclaredIngressRules, data.IngressRules}, {"egress", data.DeclaredEgressRules, data.EgressRules}} {
 		for _, key := range sortedKeys(dir.declared) {
 			rule := dir.declared[key]
 			if change != nil && matchesAny(dir.name, rule, change.Revoke) {
-				data.Revoked = append(data.Revoked, types.StringValue(dir.name+"/"+key))
+				data.RevokedRules = append(data.RevokedRules, types.StringValue(dir.name+"/"+key))
 				continue
 			}
 			if change != nil && pendingMove(dir.name, rule, change) {
-				data.Pending = append(data.Pending, types.StringValue(dir.name+"/"+key))
+				data.PendingRules = append(data.PendingRules, types.StringValue(dir.name+"/"+key))
 			}
 			if change != nil {
 				if changeSet := reopenedBy(dir.name, rule, change); changeSet != "" {
-					data.Reopens = append(data.Reopens, sgrReopenModel{Rule: types.StringValue(dir.name + "/" + key), ChangeSet: types.StringValue(changeSet)})
+					data.ReopeningRules = append(data.ReopeningRules, sgrReopenModel{Rule: types.StringValue(dir.name + "/" + key), ChangeSet: types.StringValue(changeSet)})
 				}
 			}
 			dir.kept[key] = rule
 		}
 	}
 	if change != nil {
-		data.UndeclaredRestores = undeclaredMoves(data, change, changeSetRestoring)
-		data.UndeclaredPending = undeclaredMoves(data, change, changeSetAttaching)
+		data.UndeclaredRestoringRules = undeclaredMoves(data, change, changeSetRestoring)
+		data.UndeclaredPendingRules = undeclaredMoves(data, change, changeSetAttaching)
 	}
 }
 

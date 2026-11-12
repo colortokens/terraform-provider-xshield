@@ -33,11 +33,11 @@ data "xshield_aws_security_group_rules" "web" {
   vpc_id           = aws_vpc.main.id
   group_name       = aws_security_group.web.name
 
-  ingress = local.web_ingress_rules
+  declared_ingress_rules = local.web_ingress_rules
 }
 
 locals {
-  web_revoked = local.web_changed ? data.xshield_aws_security_group_rules.web[0].revoked : []
+  web_revoked = local.web_changed ? data.xshield_aws_security_group_rules.web[0].revoked_rules : []
 }
 
 # Keeps your own rule blocks: only the rules Xshield has left out drop from for_each.

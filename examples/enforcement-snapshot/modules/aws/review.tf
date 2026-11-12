@@ -105,7 +105,7 @@ locals {
   review_interfaces      = { for attachment in values(local.snap.interface_attachments) : attachment.security_group => attachment.network_interface_id... }
   review_interface_owner = { for attachment in values(local.snap.interface_attachments) : attachment.network_interface_id => attachment.security_group... if !contains(local.review_cohorts, attachment.security_group) }
   review_handles = {
-    for pair in flatten([for entry in values(local.snap.directory) : [for key in entry.security_groups : { group = key, handle = entry.handle }]]) : pair.group => pair.handle...
+    for pair in flatten([for entry in values(local.snap.directory_entries) : [for key in entry.security_groups : { group = key, handle = entry.handle }]]) : pair.group => pair.handle...
   }
 
   # The workloads a group's first sentence names. A cohort group goes on the workloads that keep the access: an
@@ -131,7 +131,7 @@ locals {
   }
   review_headers = {
     for key in local.review_described : key => (
-      contains(local.snap.withdrawing, key) ? "${local.review_subjects[key]} is being withdrawn. Policy no longer uses it, and it keeps its rules until Xshield sees it detached." :
+      contains(local.snap.withdrawing_security_groups, key) ? "${local.review_subjects[key]} is being withdrawn. Policy no longer uses it, and it keeps its rules until Xshield sees it detached." :
       contains(local.review_cohorts, key) ? format(
         "%s %s. It keeps access that %s gives up%s.",
         local.review_subjects[key],

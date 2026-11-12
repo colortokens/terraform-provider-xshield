@@ -60,9 +60,9 @@ func undeclaredMoves(data *awsSecurityGroupRulesDataSourceModel, change *wireCus
 			continue
 		}
 		for _, moved := range cs.Moves {
-			declared := data.Ingress
+			declared := data.DeclaredIngressRules
 			if moved.Direction == "egress" {
-				declared = data.Egress
+				declared = data.DeclaredEgressRules
 			}
 			if slices.ContainsFunc(change.Revoke, func(r wireRuleMatch) bool { return sameMatch(r, moved.wireRuleMatch) }) ||
 				declaresMatch(declared, moved.wireRuleMatch) {

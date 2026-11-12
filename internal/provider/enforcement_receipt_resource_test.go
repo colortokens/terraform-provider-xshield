@@ -175,10 +175,10 @@ data "xshield_aws_security_group_rules" "test" {
   vpc_id           = "vpc-0123456789abcdef0"
   group_name       = %q
 
-  ingress = {
+  declared_ingress_rules = {
     https = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "10.0.0.0/8" }
   }
-  egress = {
+  declared_egress_rules = {
     all = { ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }
   }
 }
@@ -195,8 +195,8 @@ data "xshield_aws_security_group_rules" "test" {
 						}),
 					})),
 					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("egress_rules"), knownvalue.MapSizeExact(1)),
-					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("revoked"), knownvalue.ListSizeExact(0)),
-					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("pending"), knownvalue.ListSizeExact(0)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("revoked_rules"), knownvalue.ListSizeExact(0)),
+					statecheck.ExpectKnownValue("data.xshield_aws_security_group_rules.test", tfjsonpath.New("pending_rules"), knownvalue.ListSizeExact(0)),
 				},
 			},
 		},

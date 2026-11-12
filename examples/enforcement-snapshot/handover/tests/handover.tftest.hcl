@@ -38,9 +38,9 @@ mock_provider "xshield" {
         "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 }
         "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 }
       }
-      directory   = {}
-      assets      = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
-      withdrawing = []
+      directory_entries           = {}
+      assets                      = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      withdrawing_security_groups = []
     }
   }
   mock_data "xshield_enforcement_status" {

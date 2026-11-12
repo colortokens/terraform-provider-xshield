@@ -48,8 +48,8 @@ mock_provider "xshield" {
           prefix_list_id = null, referenced_security_group_id = null, description = null, tags = null
         }
       }
-      revoked = ["ingress/https_all"]
-      pending = []
+      revoked_rules = ["ingress/https_all"]
+      pending_rules = []
     }
   }
 }

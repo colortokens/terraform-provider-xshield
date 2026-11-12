@@ -205,17 +205,17 @@ module "web_rules" {
   group_name        = aws_security_group.web.name
   security_group_id = aws_security_group.web.id
 
-  ingress = {
+  ingress_rules = {
     https_all  = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
     ssh_office = { ip_protocol = "tcp", from_port = 22, to_port = 22, cidr_ipv4 = "10.0.0.0/8" }
   }
-  egress = {
+  egress_rules = {
     all = { ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" }
   }
 }
 ```
 
-`ingress` and `egress` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules.
+`ingress_rules` and `egress_rules` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules.
 
 A rule the workspace already manages as a rule resource becomes a map entry with the same arguments, and a `moved` block tells Terraform it is the same rule:
 

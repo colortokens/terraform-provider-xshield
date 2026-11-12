@@ -44,9 +44,9 @@ mock_provider "xshield" {
         "i-0a1/eni-0a1"              = { security_group = "i-0a1", network_interface_id = "eni-0a1", slot_limit = 5 }
         "ct-cohort-0example/eni-0a1" = { security_group = "ct-cohort-0example", network_interface_id = "eni-0a1", slot_limit = 5 }
       }
-      directory   = {}
-      assets      = { "asset-web-1" = { security_group = "i-0a1", attached_by = "pipeline" } }
-      withdrawing = []
+      directory_entries           = {}
+      assets                      = { "asset-web-1" = { security_group = "i-0a1", attached_by = "pipeline" } }
+      withdrawing_security_groups = []
     }
   }
   mock_data "xshield_enforcement_status" {

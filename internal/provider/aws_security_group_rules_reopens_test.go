@@ -41,10 +41,10 @@ func TestReopens_aNarrowerDeclaredRuleGivesBackWhatAMemberLost(t *testing.T) {
 			changes = narrowed(changes)
 		}
 		data := webRules()
-		data.Ingress["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
+		data.DeclaredIngressRules["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
 		filterDeclaredRules(data, groupChangeOf(changes, "vpc-1", "web"))
 
-		if got := reopenKeys(data.Reopens); !slices.Equal(got, []string{"ingress/https_lb@cs-1"}) {
+		if got := reopenKeys(data.ReopeningRules); !slices.Equal(got, []string{"ingress/https_lb@cs-1"}) {
 			t.Errorf("%s: reopens %v, want the 10.0.0.0/8:443 rule: the moved rule itself is pending or revoked, 22 and egress are not moved", state, got)
 		}
 		if data.SecurityGroupID.ValueString() != "sg-web" {
@@ -62,11 +62,11 @@ func TestReopens_notARuleEveryMemberKeeps(t *testing.T) {
 	change := changes.Groups["vpc-1/web"]
 	change.ChangeSets[0].Moves[0].KeptByEveryMember = []wireRuleMatch{change.ChangeSets[0].Moves[0].wireRuleMatch}
 	data := webRules()
-	data.Ingress["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
+	data.DeclaredIngressRules["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
 	filterDeclaredRules(data, &change)
 
-	if len(data.Reopens) != 0 {
-		t.Errorf("reopens %v, want none: every member keeps the moved rule whole", reopenKeys(data.Reopens))
+	if len(data.ReopeningRules) != 0 {
+		t.Errorf("reopens %v, want none: every member keeps the moved rule whole", reopenKeys(data.ReopeningRules))
 	}
 }
 
@@ -74,9 +74,9 @@ func TestReopens_noChangeNoGroupID(t *testing.T) {
 	t.Parallel()
 	data := webRules()
 	filterDeclaredRules(data, nil)
-	if !data.SecurityGroupID.IsNull() || data.Reopens == nil || data.UndeclaredRestores == nil || data.UndeclaredPending == nil {
-		t.Errorf("group id %v, reopens %v, restores %v, pending %v: want null and empty lists", data.SecurityGroupID, data.Reopens,
-			data.UndeclaredRestores, data.UndeclaredPending)
+	if !data.SecurityGroupID.IsNull() || data.ReopeningRules == nil || data.UndeclaredRestoringRules == nil || data.UndeclaredPendingRules == nil {
+		t.Errorf("group id %v, reopens %v, restoring %v, pending %v: want null and empty lists", data.SecurityGroupID, data.ReopeningRules,
+			data.UndeclaredRestoringRules, data.UndeclaredPendingRules)
 	}
 }
 
@@ -165,30 +165,30 @@ func TestUndeclaredRestores(t *testing.T) {
 			ChangeSets: []wireGroupChangeSet{{ID: "cs-1", State: state, Moves: []wireMovedRule{{wireRuleMatch: https}, {wireRuleMatch: ssh}}}}}
 	}
 	data := webRules()
-	delete(data.Ingress, "https_all")
-	delete(data.Ingress, "ssh_office")
+	delete(data.DeclaredIngressRules, "https_all")
+	delete(data.DeclaredIngressRules, "ssh_office")
 	filterDeclaredRules(data, reverting("restoring"))
-	if len(data.UndeclaredRestores) != 1 || data.UndeclaredRestores[0].FromPort.ValueInt64() != 443 ||
-		data.UndeclaredRestores[0].CIDRIPv4.ValueString() != "0.0.0.0/0" || data.UndeclaredRestores[0].ChangeSet.ValueString() != "cs-1" ||
-		!data.UndeclaredRestores[0].CIDRIPv6.IsNull() {
-		t.Errorf("restores %+v, want 0.0.0.0/0:443 alone: 22 stays revoked for the change set that moves it again", data.UndeclaredRestores)
+	if len(data.UndeclaredRestoringRules) != 1 || data.UndeclaredRestoringRules[0].FromPort.ValueInt64() != 443 ||
+		data.UndeclaredRestoringRules[0].CIDRIPv4.ValueString() != "0.0.0.0/0" || data.UndeclaredRestoringRules[0].ChangeSet.ValueString() != "cs-1" ||
+		!data.UndeclaredRestoringRules[0].CIDRIPv6.IsNull() {
+		t.Errorf("restores %+v, want 0.0.0.0/0:443 alone: 22 stays revoked for the change set that moves it again", data.UndeclaredRestoringRules)
 	}
 
 	declared := webRules()
-	declared.Ingress["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
+	declared.DeclaredIngressRules["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
 	filterDeclaredRules(declared, reverting("restoring"))
-	if len(declared.UndeclaredRestores) != 0 {
-		t.Errorf("restores %+v, want none: the group declares the rule again, as protocol 6", declared.UndeclaredRestores)
+	if len(declared.UndeclaredRestoringRules) != 0 {
+		t.Errorf("restores %+v, want none: the group declares the rule again, as protocol 6", declared.UndeclaredRestoringRules)
 	}
-	if len(declared.Reopens) != 0 {
-		t.Errorf("reopens %v, want none: a reverting change set gives the access back itself", reopenKeys(declared.Reopens))
+	if len(declared.ReopeningRules) != 0 {
+		t.Errorf("reopens %v, want none: a reverting change set gives the access back itself", reopenKeys(declared.ReopeningRules))
 	}
 
 	open := webRules()
-	delete(open.Ingress, "https_all")
+	delete(open.DeclaredIngressRules, "https_all")
 	filterDeclaredRules(open, reverting("narrowing"))
-	if len(open.UndeclaredRestores) != 0 {
-		t.Errorf("restores %+v, want none while the change set is not reverting", open.UndeclaredRestores)
+	if len(open.UndeclaredRestoringRules) != 0 {
+		t.Errorf("restores %+v, want none while the change set is not reverting", open.UndeclaredRestoringRules)
 	}
 }
 
@@ -200,31 +200,31 @@ func TestUndeclaredPending(t *testing.T) {
 	}
 	declared := webRules()
 	filterDeclaredRules(declared, fixture())
-	if len(declared.UndeclaredPending) != 0 {
-		t.Errorf("pending %+v, want none: the group declares the moved rule, as protocol 6", declared.UndeclaredPending)
+	if len(declared.UndeclaredPendingRules) != 0 {
+		t.Errorf("pending %+v, want none: the group declares the moved rule, as protocol 6", declared.UndeclaredPendingRules)
 	}
 
 	dropped := webRules()
-	delete(dropped.Ingress, "https_all")
+	delete(dropped.DeclaredIngressRules, "https_all")
 	withEgress := fixture()
 	egress := tcpMatch(443, 443, "0.0.0.0/0")
 	egress.Direction = "egress"
 	withEgress.ChangeSets[0].Moves = append(withEgress.ChangeSets[0].Moves, wireMovedRule{wireRuleMatch: egress})
 	filterDeclaredRules(dropped, withEgress)
-	if len(dropped.UndeclaredPending) != 1 || dropped.UndeclaredPending[0].FromPort.ValueInt64() != 443 ||
-		dropped.UndeclaredPending[0].CIDRIPv4.ValueString() != "0.0.0.0/0" || dropped.UndeclaredPending[0].ChangeSet.ValueString() != "cs-1" ||
-		dropped.UndeclaredPending[0].Direction.ValueString() != "ingress" {
-		t.Errorf("pending %+v, want the ingress 0.0.0.0/0:443 of cs-1: the egress one is declared as egress", dropped.UndeclaredPending)
+	if len(dropped.UndeclaredPendingRules) != 1 || dropped.UndeclaredPendingRules[0].FromPort.ValueInt64() != 443 ||
+		dropped.UndeclaredPendingRules[0].CIDRIPv4.ValueString() != "0.0.0.0/0" || dropped.UndeclaredPendingRules[0].ChangeSet.ValueString() != "cs-1" ||
+		dropped.UndeclaredPendingRules[0].Direction.ValueString() != "ingress" {
+		t.Errorf("pending %+v, want the ingress 0.0.0.0/0:443 of cs-1: the egress one is declared as egress", dropped.UndeclaredPendingRules)
 	}
-	if len(dropped.UndeclaredRestores) != 0 {
-		t.Errorf("restores %+v, want none: the change set is not reverting", dropped.UndeclaredRestores)
+	if len(dropped.UndeclaredRestoringRules) != 0 {
+		t.Errorf("restores %+v, want none: the change set is not reverting", dropped.UndeclaredRestoringRules)
 	}
 
 	narrowing := webRules()
-	delete(narrowing.Ingress, "https_all")
+	delete(narrowing.DeclaredIngressRules, "https_all")
 	filterDeclaredRules(narrowing, groupChangeOf(narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json")), "vpc-1", "web"))
-	if len(narrowing.UndeclaredPending) != 0 {
-		t.Errorf("pending %+v, want none: the change set leaves the rule out itself once it narrows", narrowing.UndeclaredPending)
+	if len(narrowing.UndeclaredPendingRules) != 0 {
+		t.Errorf("pending %+v, want none: the change set leaves the rule out itself once it narrows", narrowing.UndeclaredPendingRules)
 	}
 
 	revokedElsewhere := fixture()
@@ -232,11 +232,11 @@ func TestUndeclaredPending(t *testing.T) {
 	revokedElsewhere.Revoke = []wireRuleMatch{ssh}
 	revokedElsewhere.ChangeSets[0].Moves = append(revokedElsewhere.ChangeSets[0].Moves, wireMovedRule{wireRuleMatch: ssh})
 	both := webRules()
-	delete(both.Ingress, "https_all")
-	delete(both.Ingress, "ssh_office")
+	delete(both.DeclaredIngressRules, "https_all")
+	delete(both.DeclaredIngressRules, "ssh_office")
 	filterDeclaredRules(both, revokedElsewhere)
-	if len(both.UndeclaredPending) != 1 || both.UndeclaredPending[0].FromPort.ValueInt64() != 443 {
-		t.Errorf("pending %+v, want 0.0.0.0/0:443 alone: 22 is revoked already, so removing it takes nothing early", both.UndeclaredPending)
+	if len(both.UndeclaredPendingRules) != 1 || both.UndeclaredPendingRules[0].FromPort.ValueInt64() != 443 {
+		t.Errorf("pending %+v, want 0.0.0.0/0:443 alone: 22 is revoked already, so removing it takes nothing early", both.UndeclaredPendingRules)
 	}
 }
 
@@ -246,15 +246,15 @@ func TestRulesFilterModelWithFindingsFitsTheDataSourceSchema(t *testing.T) {
 	var resp datasource.SchemaResponse
 	(&awsSecurityGroupRulesDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	data := webRules()
-	data.Ingress["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
-	delete(data.Ingress, "https_all")
+	data.DeclaredIngressRules["https_lb"] = declaredRule("tcp", 443, "10.0.0.0/8")
+	delete(data.DeclaredIngressRules, "https_all")
 	change := groupChangeOf(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json"), "vpc-1", "web")
 	restoring := *change
 	restoring.ChangeSets = append(slices.Clone(change.ChangeSets), wireGroupChangeSet{ID: "cs-0", State: "restoring",
 		Moves: []wireMovedRule{{wireRuleMatch: wireRuleMatch{Direction: "ingress", IPProtocol: "-1", CIDRIPv6: ptr("::/0")}}}})
 	filterDeclaredRules(data, &restoring)
-	if len(data.Reopens) == 0 || len(data.UndeclaredRestores) == 0 || len(data.UndeclaredPending) == 0 {
-		t.Fatalf("reopens %v, restores %v and pending %v, want each set", reopenKeys(data.Reopens), data.UndeclaredRestores, data.UndeclaredPending)
+	if len(data.ReopeningRules) == 0 || len(data.UndeclaredRestoringRules) == 0 || len(data.UndeclaredPendingRules) == 0 {
+		t.Fatalf("reopens %v, restoring %v and pending %v, want each set", reopenKeys(data.ReopeningRules), data.UndeclaredRestoringRules, data.UndeclaredPendingRules)
 	}
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {

@@ -39,13 +39,13 @@ type driftFindingModel struct {
 }
 
 type noticeModel struct {
-	Code      types.String `tfsdk:"code"`
-	Reason    types.String `tfsdk:"reason"`
-	AssetID   types.String `tfsdk:"asset_id"`
-	AssetName types.String `tfsdk:"asset_name"`
-	Group     types.String `tfsdk:"group"`
-	Since     types.String `tfsdk:"since"`
-	Message   types.String `tfsdk:"message"`
+	Code          types.String `tfsdk:"code"`
+	Reason        types.String `tfsdk:"reason"`
+	AssetID       types.String `tfsdk:"asset_id"`
+	AssetName     types.String `tfsdk:"asset_name"`
+	SecurityGroup types.String `tfsdk:"security_group"`
+	Since         types.String `tfsdk:"since"`
+	Message       types.String `tfsdk:"message"`
 }
 
 type wireNotice struct {
@@ -126,7 +126,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"notices": schema.ListAttribute{
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
-					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType,
+					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "security_group": types.StringType,
 					"since": types.StringType, "message": types.StringType,
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A refusal leaves a workload " +
@@ -140,7 +140,9 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"policy, until the port is deployed again and its change approved, or undeployed. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld` or `portNotNarrowed`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, or for `changeSetHeld` and `portNotNarrowed` the change set's ID. " +
-					"`asset_id`, `group`: the Xshield asset, or the security group key, the notice is about, when there is one. " +
+					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
+					"`security_group`: the security group the notice is about, when there is one: its key in the snapshot's `security_groups`, or for " +
+					"`changeSetHeld` one of your own groups, as `<VPC ID>/<name>`. Xshield's API names it `group`. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
 					"for `portNotNarrowed`, when the revert was requested; null for every other code. " +
@@ -317,7 +319,7 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	data.Notices = []noticeModel{}
 	for _, n := range st.Notices {
 		data.Notices = append(data.Notices, noticeModel{Code: types.StringValue(n.Code), Reason: optionalString(n.Reason),
-			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Since: optionalString(n.Since),
+			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), SecurityGroup: optionalString(n.Group), Since: optionalString(n.Since),
 			Message: types.StringValue(n.Message)})
 	}
 }

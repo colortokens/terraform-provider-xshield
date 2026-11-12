@@ -24,15 +24,15 @@ mock_provider "aws" {
 mock_provider "xshield" {
   mock_data "xshield_aws_enforcement_snapshot" {
     defaults = {
-      published             = false
-      version               = null
-      security_groups       = {}
-      ingress_rules         = {}
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      published                   = false
+      version                     = null
+      security_groups             = {}
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
   mock_data "xshield_enforcement_status" {
@@ -86,14 +86,14 @@ run "first_version_applies_and_is_confirmed" {
       }
       egress_rules          = {}
       interface_attachments = { "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 } }
-      directory = {
+      directory_entries = {
         "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
         "a-db"  = { security_group = "rds/orders-db", attached_by = "owner" }
       }
-      withdrawing = []
+      withdrawing_security_groups = []
     }
   }
 
@@ -141,7 +141,7 @@ run "changes_touch_only_what_changed" {
       }
       egress_rules          = {}
       interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
-      directory = {
+      directory_entries = {
         "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["rds/orders-db"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
@@ -149,7 +149,7 @@ run "changes_touch_only_what_changed" {
         "a-api" = { security_group = "i-2", attached_by = "pipeline" }
         "a-db"  = { security_group = "rds/orders-db", attached_by = "owner" }
       }
-      withdrawing = []
+      withdrawing_security_groups = []
     }
   }
 
@@ -206,14 +206,14 @@ run "withdrawn_group_outlives_its_attachment" {
       }
       egress_rules          = {}
       interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
-      directory = {
+      directory_entries = {
         "rds/orders-db" = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = [], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
       }
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
         "a-api" = { security_group = "i-2", attached_by = "pipeline" }
       }
-      withdrawing = ["rds/orders-db"]
+      withdrawing_security_groups = ["rds/orders-db"]
     }
   }
 
@@ -222,7 +222,7 @@ run "withdrawn_group_outlives_its_attachment" {
     error_message = "a group being withdrawn keeps its rules, because AWS refuses to delete a group that is still attached"
   }
   assert {
-    condition     = jsondecode(aws_ssm_parameter.directory["rds/orders-db"].insecure_value).security_group_ids == [] && output.summary.withdrawing == tolist(["rds/orders-db"])
+    condition     = jsondecode(aws_ssm_parameter.directory["rds/orders-db"].insecure_value).security_group_ids == [] && output.summary.withdrawing_security_groups == tolist(["rds/orders-db"])
     error_message = "the directory tells the database's workspace to detach the group"
   }
 }
@@ -251,12 +251,12 @@ run "detached_group_is_removed_and_the_rest_stay" {
       }
       egress_rules          = {}
       interface_attachments = { "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 } }
-      directory             = {}
+      directory_entries     = {}
       assets = {
         "a-web" = { security_group = "i-1", attached_by = "pipeline" }
         "a-api" = { security_group = "i-2", attached_by = "pipeline" }
       }
-      withdrawing = []
+      withdrawing_security_groups = []
     }
   }
 
@@ -289,15 +289,15 @@ run "off_removes_everything_and_still_confirms" {
   override_data {
     target = data.xshield_aws_enforcement_snapshot.this
     values = {
-      published             = true
-      version               = "v5"
-      security_groups       = {}
-      ingress_rules         = {}
-      egress_rules          = {}
-      interface_attachments = {}
-      directory             = {}
-      assets                = {}
-      withdrawing           = []
+      published                   = true
+      version                     = "v5"
+      security_groups             = {}
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
     }
   }
 

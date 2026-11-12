@@ -67,17 +67,17 @@ type esAssetModel struct {
 }
 
 type awsEnforcementSnapshotDataSourceModel struct {
-	CloudAccountID       types.String                    `tfsdk:"cloud_account_id"`
-	Region               types.String                    `tfsdk:"region"`
-	Published            types.Bool                      `tfsdk:"published"`
-	Version              types.String                    `tfsdk:"version"`
-	SecurityGroups       map[string]esSecurityGroupModel `tfsdk:"security_groups"`
-	IngressRules         map[string]esRuleModel          `tfsdk:"ingress_rules"`
-	EgressRules          map[string]esRuleModel          `tfsdk:"egress_rules"`
-	InterfaceAttachments map[string]esAttachmentModel    `tfsdk:"interface_attachments"`
-	Directory            map[string]esDirectoryModel     `tfsdk:"directory"`
-	Assets               map[string]esAssetModel         `tfsdk:"assets"`
-	Withdrawing          []types.String                  `tfsdk:"withdrawing"`
+	CloudAccountID            types.String                    `tfsdk:"cloud_account_id"`
+	Region                    types.String                    `tfsdk:"region"`
+	Published                 types.Bool                      `tfsdk:"published"`
+	Version                   types.String                    `tfsdk:"version"`
+	SecurityGroups            map[string]esSecurityGroupModel `tfsdk:"security_groups"`
+	IngressRules              map[string]esRuleModel          `tfsdk:"ingress_rules"`
+	EgressRules               map[string]esRuleModel          `tfsdk:"egress_rules"`
+	InterfaceAttachments      map[string]esAttachmentModel    `tfsdk:"interface_attachments"`
+	DirectoryEntries          map[string]esDirectoryModel     `tfsdk:"directory_entries"`
+	Assets                    map[string]esAssetModel         `tfsdk:"assets"`
+	WithdrawingSecurityGroups []types.String                  `tfsdk:"withdrawing_security_groups"`
 }
 
 func (d *awsEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -152,7 +152,7 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 				"`security_group`: key, in `security_groups`, of the group to attach. "+
 				"`network_interface_id`: interface to attach it to. "+
 				"`slot_limit`: how many security groups the account allows on the interface, as Xshield last discovered it; null when it has not."),
-			"directory": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
+			"directory_entries": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"parameter_name": types.StringType, "handle": types.StringType, "security_groups": types.ListType{ElemType: types.StringType}, "tags": esTagsType,
 				"slot_limit": types.Int64Type,
 			}}, "One SSM parameter per database, function or service its own workspace attaches, keyed by handle. The "+
@@ -161,16 +161,18 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 				"`handle`: the resource's kind and name, such as `rds/orders-db` or `lambda/orders-api`. "+
 				"`security_groups`: keys, in `security_groups`, of the groups the resource attaches. "+
 				"`tags`: tags for the parameter. "+
-				"`slot_limit`: how many security groups AWS allows on the resource, as Xshield last discovered it; null when it has not."),
+				"`slot_limit`: how many security groups AWS allows on the resource, as Xshield last discovered it; null when it has not. "+
+				"Xshield's API names this map `directory`."),
 			"assets": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"security_group": types.StringType, "attached_by": types.StringType,
 			}}, "How each Xshield asset carries its group, keyed by Xshield asset ID. "+
 				"`security_group`: key, in `security_groups`, of the asset's group. Null when its group was refused, or for an instance whose policy holds no rule. "+
 				"`attached_by`: `pipeline` when this plan attaches it to the asset's interfaces, `owner` when the asset's own workspace does."),
-			"withdrawing": schema.ListAttribute{
+			"withdrawing_security_groups": schema.ListAttribute{
 				Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "Keys of groups policy no longer uses but a resource may still carry. They keep their rules " +
-					"until Xshield sees them detached, because AWS refuses to delete an attached group.",
+					"until Xshield sees them detached, because AWS refuses to delete an attached group. Xshield's API names this list " +
+					"`withdrawing`, the word its notices use for the same groups.",
 			},
 		},
 	}
@@ -383,24 +385,24 @@ func expectedVersion(ctx context.Context, api cloudSnapshotAPI, account, region 
 // as a change on every plan.
 func snapshotModel(account, region types.String, snap *wireSnapshot) awsEnforcementSnapshotDataSourceModel {
 	m := awsEnforcementSnapshotDataSourceModel{
-		CloudAccountID:       account,
-		Region:               region,
-		Published:            types.BoolValue(snap != nil),
-		Version:              types.StringNull(),
-		SecurityGroups:       map[string]esSecurityGroupModel{},
-		IngressRules:         map[string]esRuleModel{},
-		EgressRules:          map[string]esRuleModel{},
-		InterfaceAttachments: map[string]esAttachmentModel{},
-		Directory:            map[string]esDirectoryModel{},
-		Assets:               map[string]esAssetModel{},
-		Withdrawing:          []types.String{},
+		CloudAccountID:            account,
+		Region:                    region,
+		Published:                 types.BoolValue(snap != nil),
+		Version:                   types.StringNull(),
+		SecurityGroups:            map[string]esSecurityGroupModel{},
+		IngressRules:              map[string]esRuleModel{},
+		EgressRules:               map[string]esRuleModel{},
+		InterfaceAttachments:      map[string]esAttachmentModel{},
+		DirectoryEntries:          map[string]esDirectoryModel{},
+		Assets:                    map[string]esAssetModel{},
+		WithdrawingSecurityGroups: []types.String{},
 	}
 	if snap == nil {
 		return m
 	}
 	plan := snap.AWS
 	m.Version = types.StringValue(snap.Version)
-	m.Withdrawing = toStrList(plan.Withdrawing)
+	m.WithdrawingSecurityGroups = toStrList(plan.Withdrawing)
 	for key, g := range plan.SecurityGroups {
 		m.SecurityGroups[key] = esSecurityGroupModel{Name: types.StringValue(g.Name), Description: types.StringValue(g.Description),
 			VPCID: types.StringValue(g.VPCID), Tags: nonNilTags(g.Tags)}
@@ -416,7 +418,7 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) awsEnforcem
 			SlotLimit: knownLimit(a.SlotLimit)}
 	}
 	for key, e := range plan.Directory {
-		m.Directory[key] = esDirectoryModel{ParameterName: types.StringValue(e.ParameterName), Handle: types.StringValue(e.Handle),
+		m.DirectoryEntries[key] = esDirectoryModel{ParameterName: types.StringValue(e.ParameterName), Handle: types.StringValue(e.Handle),
 			SecurityGroups: toStrList(e.SecurityGroups), Tags: nonNilTags(e.Tags), SlotLimit: knownLimit(e.SlotLimit)}
 	}
 	for id, a := range plan.Assets {
