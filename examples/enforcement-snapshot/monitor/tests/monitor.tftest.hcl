@@ -669,3 +669,62 @@ run "notices_that_differ_in_group_message_reason_or_time_each_keep_a_line" {
     error_message = "The workload a notice names beside its group is missing from ${jsonencode(output.problems.group_withdrawing)}."
   }
 }
+
+# What keeps two notices on separate lines: for a held change its subject, change set and time; for a port its
+# group and change set; for a deliberate state its kind. A notice that names no workload adds none to a line.
+run "held_changes_ports_and_states_that_differ_in_subject_change_set_time_or_kind_each_keep_a_line" {
+  command = plan
+
+  variables {
+    warn_on = ["owner_apply_overdue", "port_not_narrowed", "group_withdrawing", "asg_policy_differs"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-01", asset_name = "app-01", group = null, since = "2020-02-01T00:00:00Z", message = "waits for its interface" },
+        { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-02", asset_name = "app-02", group = null, since = "2020-02-01T00:00:00Z", message = "waits for its interface" },
+        { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-03", asset_name = "app-03", group = "web", since = "2020-02-01T00:00:00Z", message = "waits for the owner" },
+        { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-04", asset_name = "app-04", group = "web", since = "2020-03-01T00:00:00Z", message = "waits for the owner" },
+        { code = "portNotNarrowed", reason = "cs-9", asset_id = "asset-05", asset_name = "app-05", group = "web", since = "2020-02-01T00:00:00Z", message = "TCP 443 is not narrowed" },
+        { code = "portNotNarrowed", reason = "cs-9", asset_id = null, asset_name = null, group = "web", since = "2020-02-01T00:00:00Z", message = "TCP 443 is not narrowed" },
+        { code = "portNotNarrowed", reason = "cs-9", asset_id = "asset-06", asset_name = "app-06", group = "app", since = "2020-02-01T00:00:00Z", message = "TCP 443 is not narrowed" },
+        { code = "portNotNarrowed", reason = "cs-8", asset_id = "asset-07", asset_name = "app-07", group = "web", since = "2020-02-01T00:00:00Z", message = "TCP 443 is not narrowed" },
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "asg/orders", since = null, message = "is in a state Xshield chose" },
+        { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/orders", since = null, message = "is in a state Xshield chose" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_owner_apply_overdue, check.xshield_port_not_narrowed, check.xshield_group_withdrawing, check.xshield_asg_policy_differs]
+
+  assert {
+    condition = alltrue([
+      length(output.problems.owner_apply_overdue) == 5,
+      contains(output.problems.owner_apply_overdue, "  app-01: waits for its interface (change set cs-1, waiting since 2020-02-01T00:00:00Z)"),
+      contains(output.problems.owner_apply_overdue, "  app-02: waits for its interface (change set cs-1, waiting since 2020-02-01T00:00:00Z)"),
+      contains(output.problems.owner_apply_overdue, "  web: waits for the owner (change set cs-1, waiting since 2020-02-01T00:00:00Z; workloads: app-03)"),
+      contains(output.problems.owner_apply_overdue, "  web: waits for the owner (change set cs-1, waiting since 2020-03-01T00:00:00Z; workloads: app-04)"),
+    ])
+    error_message = "A held change with no group is its workload's own line, and one group's change keeps a line for each time it has waited since, but reported ${jsonencode(output.problems.owner_apply_overdue)}."
+  }
+
+  assert {
+    condition = alltrue([
+      length(output.problems.port_not_narrowed) == 4,
+      contains(output.problems.port_not_narrowed, "  app-05: TCP 443 is not narrowed (change set cs-9, reverted 2020-02-01T00:00:00Z)"),
+      contains(output.problems.port_not_narrowed, "  app-06: TCP 443 is not narrowed (change set cs-9, reverted 2020-02-01T00:00:00Z)"),
+      contains(output.problems.port_not_narrowed, "  app-07: TCP 443 is not narrowed (change set cs-8, reverted 2020-02-01T00:00:00Z)"),
+    ])
+    error_message = "A port keeps a line for each group and each change set, and a notice that names no workload adds none, but reported ${jsonencode(output.problems.port_not_narrowed)}."
+  }
+
+  assert {
+    condition     = length(output.problems.group_withdrawing) == 2 && length(output.problems.asg_policy_differs) == 2
+    error_message = "A withdrawn group and a split Auto Scaling group with the same words are two problems, but reported ${jsonencode(output.problems)}."
+  }
+}

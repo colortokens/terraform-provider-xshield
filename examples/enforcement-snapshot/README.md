@@ -360,7 +360,7 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `asg_policy_differs` | The instances of an Auto Scaling group have different policies, so each has a group of its own. One line for each Auto Scaling group. Not warned by default. |
 | `workload_contained` | Xshield contained a workload, so its group stays off its interfaces until the containment is reverted. One line lists the workloads. Not warned by default. |
 
-Notices that differ only in their workload share a line, so one change held for ten workloads prints one line:
+Notices about one group that differ only in their workload share a line, so one change held for ten workloads prints one line:
 
 ```text
 A Full control change in 123456789012/us-east-1 has waited more than 24h for the workspace that owns a customer security group:

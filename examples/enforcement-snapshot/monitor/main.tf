@@ -154,7 +154,8 @@ locals {
     length(local.pending) > local.shown ? ["  and ${length(local.pending) - local.shown} more"] : [],
   )
 
-  # Notices that differ only in their workload share one line, which lists the workloads.
+  # Notices that differ only in their workload share one line, which lists the workloads. A held change that names no
+  # group is about its workload, so each such workload keeps a line of its own.
   overdue_held_notices = [
     for n in local.status.notices : merge(n, {
       label    = coalesce(n.group, n.asset_name, n.asset_id, "-")
@@ -179,7 +180,7 @@ locals {
   unnarrowed_ports_by_cause = { for n in local.unnarrowed_port_notices : n.cause => n... }
   unnarrowed_port_causes = [
     for key in distinct(local.unnarrowed_port_notices[*].cause) : merge(local.unnarrowed_ports_by_cause[key][0], {
-      workloads = distinct(local.unnarrowed_ports_by_cause[key][*].workload)
+      workloads = [for w in distinct(local.unnarrowed_ports_by_cause[key][*].workload) : w if w != "-"]
     })
   ]
   deliberate_state_notices = [
@@ -225,7 +226,7 @@ locals {
       "  applied ${coalesce(local.status.applied_at, "at an unknown time")}; last observation ${coalesce(local.status.drift_observed_at, "none")}. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector's discovery is running.",
     ] : []
     port_not_narrowed = [
-      for c in local.unnarrowed_port_causes : "  ${join(", ", c.workloads)}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, reverted ${coalesce(c.since, "at an unknown time")})"
+      for c in local.unnarrowed_port_causes : "  ${coalesce(join(", ", c.workloads), c.group, "-")}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, reverted ${coalesce(c.since, "at an unknown time")})"
     ]
     unpublished = local.status.published ? [] : [
       "  check that the provider points at the right Xshield tenant, and that the account and region are onboarded for pipeline delivery.",
