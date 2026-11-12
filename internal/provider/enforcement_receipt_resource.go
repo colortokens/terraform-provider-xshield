@@ -25,6 +25,7 @@ import (
 var _ resource.Resource = &enforcementReceiptResource{}
 var _ resource.ResourceWithConfigure = &enforcementReceiptResource{}
 var _ resource.ResourceWithImportState = &enforcementReceiptResource{}
+var _ resource.ResourceWithModifyPlan = &enforcementReceiptResource{}
 
 func newEnforcementReceiptResource() resource.Resource { return &enforcementReceiptResource{} }
 
@@ -64,6 +65,8 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"A new receipt is sent only when the applied version or a resource ID changes, so it adds nothing to a " +
 			"plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer " +
 			"this one, the next plan proposes sending it again.\n\n" +
+			"A plan that creates the receipt while Xshield already holds one for the account and region warns, and " +
+			"names the workspace that sent it: the state was lost, or two workspaces apply to the same place.\n\n" +
 			"Destroying it removes it from state and leaves the receipt history in Xshield.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -271,6 +274,47 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 				"only one of them should own it.")
 		resp.State.RemoveResource(ctx)
 	}
+}
+
+// ModifyPlan warns before a receipt is created where Xshield already holds one: the state was lost, or another
+// workspace applies to the same place. A warning, because applying again after a destroy looks the same from here.
+func (r *enforcementReceiptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.api.client == nil || req.Plan.Raw.IsNull() || !req.State.Raw.IsNull() {
+		return
+	}
+	var data enforcementReceiptResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() || data.Cloud.IsUnknown() || data.CloudAccountID.IsUnknown() || data.Region.IsUnknown() {
+		return
+	}
+	var status wireConvergence
+	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
+	if err := r.api.get(ctx, endpoint, &status); err != nil {
+		resp.Diagnostics.AddWarning("Cannot check whether Xshield already holds an apply receipt", err.Error())
+		return
+	}
+	if status.Applied == nil {
+		return
+	}
+	resp.Diagnostics.AddWarning("Xshield already holds an apply receipt for this account and region",
+		heldReceiptWarning(*status.Applied, data))
+}
+
+func heldReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
+	by := fmt.Sprintf("by workspace %q", held.Workspace)
+	if !planned.Workspace.IsUnknown() && planned.Workspace.ValueString() == held.Workspace {
+		by = fmt.Sprintf("under this workspace's name, %q,", held.Workspace)
+	}
+	when := ""
+	if held.AppliedAt != nil {
+		when = " on " + held.AppliedAt.UTC().Format(time.RFC3339)
+	}
+	return fmt.Sprintf("Xshield recorded an apply to account %s in %s %s%s, and this workspace's state does not hold that "+
+		"receipt, so this plan does not manage what that apply created.\n\n"+
+		"If another workspace applies to this account and region, only one should: do not apply this one. "+
+		"If this workspace's state was lost, rebuild it from that receipt before applying, as the provider's "+
+		"enforcement-snapshot/recovery example shows. If what that apply created has been destroyed, the plan is as intended.",
+		planned.CloudAccountID.ValueString(), planned.Region.ValueString(), by, when)
 }
 
 // adopt fills an imported receipt from the one Xshield currently holds, so a
