@@ -156,11 +156,29 @@ func TestRuleMatchingComparesWhatAWSCompares(t *testing.T) {
 			r.CIDRIPv4, r.ReferencedSecurityGroupID = types.StringNull(), types.StringValue("sg-lb")
 			return r
 		}(), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), ReferencedSecurityGroupID: ptr("111122223333/sg-lb")}, true},
+		"another group":                      {fromGroup("sg-lb"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), ReferencedSecurityGroupID: ptr("sg-web")}, false},
+		"a prefix list":                      {fromPrefixList("pl-0abc"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), PrefixListID: ptr("pl-0abc")}, true},
+		"another prefix list":                {fromPrefixList("pl-0abc"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), PrefixListID: ptr("pl-0def")}, false},
+		"a group is no address range":        {fromGroup("sg-lb"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), CIDRIPv4: ptr("0.0.0.0/0")}, false},
+		"an address range is no group":       {declaredRule("tcp", 443, "0.0.0.0/0"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), ReferencedSecurityGroupID: ptr("sg-lb")}, false},
+		"an address range is no prefix list": {declaredRule("tcp", 443, "0.0.0.0/0"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(443), ToPort: i64(443), PrefixListID: ptr("pl-0abc")}, false},
 	} {
 		if got := ruleMatches(tc.rule, tc.want); got != tc.same {
 			t.Errorf("%s: matched %v, want %v", name, got, tc.same)
 		}
 	}
+}
+
+func fromGroup(group string) sgrRuleModel {
+	r := declaredRule("tcp", 443, "")
+	r.CIDRIPv4, r.ReferencedSecurityGroupID = types.StringNull(), types.StringValue(group)
+	return r
+}
+
+func fromPrefixList(list string) sgrRuleModel {
+	r := declaredRule("tcp", 443, "")
+	r.CIDRIPv4, r.PrefixListID = types.StringNull(), types.StringValue(list)
+	return r
 }
 
 func TestRuleMatchingWithoutAToPort(t *testing.T) {
