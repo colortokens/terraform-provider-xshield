@@ -2,22 +2,60 @@
 
 Apply Xshield segmentation policy through your own Terraform pipeline. Xshield renders every rule; these modules create exactly what it lists, and report back what was applied.
 
+## Who writes what
+
+Xshield decides everything that is enforced: which groups exist, every rule in them, what carries each group, and under Full control which rule of a group of your own is left out. None of that is written in your code. Your code carries it to AWS, through the modules below.
+
+**Shipped with the provider.** You write none of it. Call each module by its `source`, at the tag of the provider release you run. The modules use the provider's own data sources and receipt resource, which the [provider's README](../../README.md#enforcing-aws-policy-through-your-own-pipeline) lists.
+
 | Directory | What it is |
 |--|--|
 | `modules/aws` | The enforcement module. One block per AWS account and region. |
 | `modules/aws-group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
 | `modules/aws-security-group-rules` | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
+
+**To copy and fill in.** New code in your repository, complete but for its inputs.
+
+| Directory | What it is |
+|--|--|
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
-| `database/` | A workspace that owns an RDS instance and attaches the group Xshield gave it beside its own. It declares none of Xshield's rules. |
-| `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own that carries the group Xshield gave it beside its own. |
-| `full-control/` | A workspace that owns a security group Xshield narrows under Full control, and declares the group's rules through `modules/aws-security-group-rules`. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
 | `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
+
+**Files for one apply.** Each goes into the enforcement workspace when the event it names happens, and is deleted afterwards.
+
+| Directory | What it is |
+|--|--|
 | `recovery/` | Import blocks that rebuild a lost enforcement state from the last receipt. |
 | `handover/` | Import blocks that take over the groups the cloud connector created, when an account moves to pipeline delivery. |
 | `leave/` | A `removed` block that hands the account's groups to the cloud connector, when an account moves back to connector delivery. |
+
+**Stand-ins for workspaces you already have.** Do not copy these. Each shows a team's own workspace after the change Xshield needs: `xshield.tf` holds everything the team adds, and `main.tf` is the team's own code with each line changed for Xshield marked.
+
+| Directory | What it is |
+|--|--|
+| `database/` | A workspace that owns an RDS instance and attaches the group Xshield gave it beside its own. It declares none of Xshield's rules. |
+| `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own that carries the group Xshield gave it beside its own. |
+| `full-control/` | A workspace that owns a security group Xshield narrows under Full control, and declares the group's rules through `modules/aws-security-group-rules`. |
+
+**Another way to deliver.**
+
+| Directory | What it is |
+|--|--|
 | `connector-managed/` | The other way: author policy in HCL and let the Xshield connector enforce it. |
+
+### What a person does
+
+| Where | What a person does | How often |
+|--|--|--|
+| A new enforcement workspace | Copies `enforcement/`, creates its role from `enforcement-role/`, sets the API key on the runner and runs the workspace on a schedule: step 1. | Once for each account and region |
+| The workspace that owns a database, function or service | Adds the lookup module and puts its output in the resource's list of groups: step 2. | Once for each resource |
+| A workspace that declares an instance's or an interface's security groups | Adds `ignore_changes`: step 3. | Once for each such instance or interface |
+| Under Full control, the workspace that owns a security group Xshield narrows | Configures the `xshield` provider and moves the group's rules into the rules module: step 4. | Once for each group |
+| A new monitor workspace | Copies `monitor/` and runs it on a schedule: step 5. | Once for each account and region |
+
+After that, a policy change approved in Xshield needs no edit to any of this code. It reaches AWS on the next run of the enforcement workspace. It also needs the next run of an owning workspace when it changes which groups a resource of that workspace carries, or leaves out a rule of a group that workspace owns.
 
 ## Quickstart
 
@@ -133,7 +171,9 @@ resource "aws_network_interface" "web" {
 
 ### 4. Full control: declare your own groups' rules through the rules module
 
-Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own, such as `0.0.0.0/0` on port 443. In pipeline delivery this goes through your code. The workspace that owns the group declares the group's rules through `modules/aws-security-group-rules`, and the module leaves a rule out once Xshield says it is safe to.
+Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own, such as `0.0.0.0/0` on port 443. In pipeline delivery this goes through your code. The enforcement workspace changes only Xshield's own groups, so a rule leaves a group of yours in a plan of the workspace that owns the group. That workspace declares the group's rules through `modules/aws-security-group-rules`, and the module leaves a rule out once Xshield says it is safe to.
+
+A person does this step once for each group. From then on Xshield decides which of the declared rules are created, and an approved change needs no edit to the workspace.
 
 In the workspace that owns the group:
 
@@ -175,14 +215,35 @@ module "web_rules" {
 }
 ```
 
-`ingress` and `egress` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules. Rules the workspace already manages as rule resources move into the module with `moved` blocks, to addresses such as `module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]`, so Terraform keeps them and creates nothing again.
+`ingress` and `egress` are maps. Each key is a name you choose and keep. Each value takes the arguments of `aws_vpc_security_group_ingress_rule` or `aws_vpc_security_group_egress_rule`, and the module creates one such resource per rule. Do not also declare the group's rules inline, in `ingress` or `egress` blocks of the `aws_security_group`: the AWS provider's documentation warns that mixing the two causes conflicts and overwritten rules.
+
+A rule the workspace already manages as a rule resource becomes a map entry with the same arguments, and a `moved` block tells Terraform it is the same rule:
+
+```hcl
+# Before
+resource "aws_vpc_security_group_ingress_rule" "https_all" {
+  security_group_id = aws_security_group.web.id
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+# After: the https_all entry of the map replaces that block, with
+moved {
+  from = aws_vpc_security_group_ingress_rule.https_all
+  to   = module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]
+}
+```
+
+The plan then shows the rule as `has moved to`, and nothing in AWS is added or destroyed. The one resource it adds is `terraform_data.xshield_routed`, the [record the module keeps in state](modules/aws-security-group-rules/README.md#the-record-kept-in-state).
 
 `full-control/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the two changes marked.
 
 What a plan of this workspace shows:
 
 - A group no approved change applies to plans exactly as its code declares it. The module reads nothing from Xshield for that group.
-- When an approved change applies to the group, the module asks Xshield which declared rules to keep. A group is matched by its name and its VPC, so a group of the same name in another VPC is not affected.
+- When an approved change applies to the group, the module asks Xshield which declared rules to keep. A group is matched by its name and its VPC, so a group of the same name in another VPC is not affected. A rule is matched by what it allows: its direction, protocol, ports and source or destination. Its key plays no part in the match.
 - A rule Xshield narrows stays in the plan until every workload that still needs it carries a `ct-cohort-` group that keeps that access. The enforcement workspace creates those groups, so run it first. The next plan of this workspace then removes the rule, and no workload loses access part-way.
 - Until this workspace has applied, the group keeps its broad rule. `xshield_enforcement_status` reads `waiting` while the change waits for this workspace, and the monitor reports `owner_apply_overdue` when the wait passes `max_owner_apply_age`.
 
