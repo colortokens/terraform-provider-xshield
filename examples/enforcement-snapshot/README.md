@@ -93,7 +93,7 @@ output "xshield_security_group_ids" {
 - `own_security_group_ids` makes the plan fail, rather than the apply, when the database's own groups and Xshield's are more than AWS allows on it.
 - The output shows Xshield's group in this workspace's plan, under `Changes to Outputs`, when it arrives and when it leaves.
 
-`database/` is this workspace in full.
+`database/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the one changed line marked.
 
 | Resource | Handle |
 |--|--|

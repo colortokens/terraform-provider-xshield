@@ -14,7 +14,7 @@ resource "aws_db_instance" "orders" {
 }
 ```
 
-`aws_security_group.orders_db` is the database's own group, with the rules its workspace declares for it; Xshield's group goes beside it. [`database/`](../../database/main.tf) and [`apprunner/`](../../apprunner/main.tf) are whole workspaces that use the module.
+`aws_security_group.orders_db` is the database's own group, with the rules its workspace declares for it; Xshield's group goes beside it. [`database/`](../../database/) and [`apprunner/`](../../apprunner/) are whole workspaces that use the module. In each, `xshield.tf` holds what the workspace adds for Xshield.
 
 `handle` is the resource's kind and name: `rds/<DB instance identifier>`, `rds-cluster/<cluster identifier>`, `lambda/<function name>`, `flink/<application name>`, `apprunner/<service name>` or `asg/<Auto Scaling group name>`. The name is the one you already give the resource, so the lookup works before the resource exists.
 
