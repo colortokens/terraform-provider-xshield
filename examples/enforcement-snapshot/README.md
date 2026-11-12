@@ -261,12 +261,19 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `workload_not_enforced` | Xshield could not write a group for a workload. The message names it and the reason. |
 | `apply_overdue` | Newer approved policy has waited longer than `max_apply_age` (24h) for an enforcement run. The message counts and lists what is waiting. |
 | `never_applied` | Published policy has never been applied, for longer than `max_apply_age`. |
-| `owner_apply_overdue` | A Full control change has waited longer than `max_owner_apply_age` (24h) for the workspace that owns a customer security group. |
+| `owner_apply_overdue` | A Full control change has waited longer than `max_owner_apply_age` (24h) for the workspace that owns a customer security group. One line for each change set and group, which lists the workloads it holds. |
 | `pipeline_stopped` | No enforcement plan has run for longer than `max_run_gap` (72h). Raise it if that pipeline runs only on a change. |
 | `drift_not_evaluated` | Xshield has not looked for drift since the last apply, for longer than `max_unobserved_age` (24h). No finding then means nobody looked. |
-| `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. |
+| `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. One line for each port, group and change set, which lists the workloads. |
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. Not warned by default. |
 | `unpublished` | Xshield has published nothing here: the wrong tenant, or an account that is not onboarded. Not warned by default. |
+
+Notices that differ only in their workload share a line, so one change held for ten workloads prints one line:
+
+```text
+A Full control change in 123456789012/us-east-1 has waited more than 24h for the workspace that owns a customer security group:
+  vpc-1/sg-web: the change waits for the enforcement workspace's next apply to write the rules this workload keeps into vpc-1/sg-web (change set cs-7a1, waiting since 2020-03-01T00:00:00Z; workloads: app-01, app-02, app-03, app-04, app-05, app-06, app-07, app-08, app-09, app-10)
+```
 
 Every check only warns, so the monitor never blocks a pipeline unless you ask it to. Choose what it warns about with `warn_on`. Name a problem in `fail_on` and the plan stops on it, with the same message, and no OPA or Sentinel:
 

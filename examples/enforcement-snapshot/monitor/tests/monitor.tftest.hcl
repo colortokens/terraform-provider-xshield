@@ -363,6 +363,67 @@ run "warns_on_a_port_whose_group_is_no_longer_narrowed" {
   }
 }
 
+run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = concat(
+        [for i in range(1, 11) : {
+          code    = "changeSetHeld", reason = "cs-7a1", asset_id = format("asset-%02d", i), asset_name = format("app-%02d", i), group = "vpc-1/sg-web", since = "2020-03-01T00:00:00Z",
+          message = "the change waits for the enforcement workspace's next apply to write the rules this workload keeps into vpc-1/sg-web"
+        }],
+        [{
+          code    = "changeSetHeld", reason = "cs-7b2", asset_id = "asset-11", asset_name = "app-11", group = "vpc-1/sg-web", since = "2020-04-01T00:00:00Z",
+          message = "the change waits for the enforcement workspace's next apply to write the rules this workload keeps into vpc-1/sg-web"
+        }],
+        [for held in [["app-01", "22", "sg-web"], ["app-02", "22", "sg-web"], ["app-03", "22", "sg-web"], ["app-01", "443", "sg-web"], ["app-02", "443", "sg-web"], ["app-03", "443", "sg-web"], ["app-03", "22", "sg-admin"]] : {
+          code    = "portNotNarrowed", reason = "cs-7c3", asset_id = null, asset_name = held[0], group = "vpc-1/${held[2]}", since = "2020-05-01T00:00:00Z",
+          message = "inbound port TCP:${held[1]} is still deployed, but the change set that narrowed vpc-1/${held[2]} for it was reverted: deploy the port again and approve the change it proposes"
+        }],
+        [{
+          code    = "portNotNarrowed", reason = "cs-7d4", asset_id = null, asset_name = "app-04", group = "vpc-1/sg-web", since = "2020-06-01T00:00:00Z",
+          message = "inbound port TCP:22 is still deployed, but the change set that narrowed vpc-1/sg-web for it was reverted: deploy the port again and approve the change it proposes"
+        }],
+      )
+    }
+  }
+
+  expect_failures = [check.xshield_owner_apply_overdue, check.xshield_port_not_narrowed]
+
+  assert {
+    condition     = length(output.problems.owner_apply_overdue) == 3 && length(output.problems.port_not_narrowed) == 5
+    error_message = "Each cause takes one line after the headline, but reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition = alltrue([
+      for n in data.xshield_enforcement_status.this.notices : alltrue([
+        for shown in [n.asset_name, n.group, n.reason, n.since, n.message] :
+        strcontains(join("\n", output.problems[n.code == "changeSetHeld" ? "owner_apply_overdue" : "port_not_narrowed"]), shown)
+      ])
+    ])
+    error_message = "A workload, group, change set, time or message of a notice is missing from ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition = length([
+      for line in concat(output.problems.owner_apply_overdue, output.problems.port_not_narrowed) : line
+      if strcontains(line, "cs-7a1") && strcontains(line, "cs-7b2") || strcontains(line, "cs-7c3") && strcontains(line, "cs-7d4")
+    ]) == 0
+    error_message = "Notices of different change sets share a line in ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition     = contains(output.problems.port_not_narrowed, "  app-01, app-02, app-03: inbound port TCP:22 is still deployed, but the change set that narrowed vpc-1/sg-web for it was reverted: deploy the port again and approve the change it proposes (change set cs-7c3, reverted 2020-05-01T00:00:00Z)")
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
 run "a_problem_left_out_of_warn_on_is_silent" {
   command = plan
 

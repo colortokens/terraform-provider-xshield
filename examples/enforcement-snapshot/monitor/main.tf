@@ -146,6 +146,35 @@ locals {
     length(local.pending) > local.shown ? ["  and ${length(local.pending) - local.shown} more"] : [],
   )
 
+  # Notices that differ only in their workload share one line, which lists the workloads.
+  overdue_held_notices = [
+    for n in local.status.notices : merge(n, {
+      label    = coalesce(n.group, n.asset_name, n.asset_id, "-")
+      workload = coalesce(n.asset_name, n.asset_id, "-")
+      cause    = jsonencode([coalesce(n.group, n.asset_name, n.asset_id, "-"), n.group, n.message, n.reason, n.since])
+    })
+    if n.code == "changeSetHeld" && (n.since == null || timecmp(timeadd(coalesce(n.since, local.now), var.max_owner_apply_age), local.now) < 0)
+  ]
+  overdue_held_by_cause = { for n in local.overdue_held_notices : n.cause => n... }
+  overdue_held_causes = [
+    for key in distinct(local.overdue_held_notices[*].cause) : merge(local.overdue_held_by_cause[key][0], {
+      workloads = [for w in distinct(local.overdue_held_by_cause[key][*].workload) : w if !contains([local.overdue_held_by_cause[key][0].label, "-"], w)]
+    })
+  ]
+  unnarrowed_port_notices = [
+    for n in local.status.notices : merge(n, {
+      workload = coalesce(n.asset_name, n.asset_id, "-")
+      cause    = jsonencode([n.group, n.message, n.reason, n.since])
+    })
+    if n.code == "portNotNarrowed"
+  ]
+  unnarrowed_ports_by_cause = { for n in local.unnarrowed_port_notices : n.cause => n... }
+  unnarrowed_port_causes = [
+    for key in distinct(local.unnarrowed_port_notices[*].cause) : merge(local.unnarrowed_ports_by_cause[key][0], {
+      workloads = distinct(local.unnarrowed_ports_by_cause[key][*].workload)
+    })
+  ]
+
   problems = tomap({
     drift_high = [
       for f in local.status.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
@@ -159,8 +188,8 @@ locals {
     apply_overdue = local.status.state == "pending" && local.pending_overdue ? local.pending_lines : []
     never_applied = local.status.state == "unapplied" && local.pending_overdue ? local.pending_lines : []
     owner_apply_overdue = [
-      for n in local.status.notices : "  ${coalesce(n.group, n.asset_name, n.asset_id, "-")}: ${n.message} (change set ${coalesce(n.reason, "unknown")}, waiting since ${coalesce(n.since, "an unknown time")})"
-      if n.code == "changeSetHeld" && (n.since == null || timecmp(timeadd(coalesce(n.since, local.now), var.max_owner_apply_age), local.now) < 0)
+      for c in local.overdue_held_causes :
+      "  ${c.label}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, waiting since ${coalesce(c.since, "an unknown time")}${length(c.workloads) == 0 ? "" : "; workloads: ${join(", ", c.workloads)}"})"
     ]
     pipeline_stopped = local.status.published && local.status.last_checked_at != null && local.run_overdue ? [
       "  last enforcement plan: ${coalesce(local.status.last_checked_at, "never")}. Until that workspace plans again, nothing new Xshield approves is applied and the state below may be stale.",
@@ -169,7 +198,7 @@ locals {
       "  applied ${coalesce(local.status.applied_at, "at an unknown time")}; last observation ${coalesce(local.status.drift_observed_at, "none")}. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector's discovery is running.",
     ] : []
     port_not_narrowed = [
-      for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, "-")}: ${n.message} (change set ${coalesce(n.reason, "unknown")}, reverted ${coalesce(n.since, "at an unknown time")})" if n.code == "portNotNarrowed"
+      for c in local.unnarrowed_port_causes : "  ${join(", ", c.workloads)}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, reverted ${coalesce(c.since, "at an unknown time")})"
     ]
     unpublished = local.status.published ? [] : [
       "  check that the provider points at the right Xshield tenant, and that the account and region are onboarded for pipeline delivery.",
