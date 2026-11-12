@@ -31,6 +31,11 @@ output "security_group_ids" {
   value       = { for id, asset in local.snap.assets : id => asset.security_group == null ? null : aws_security_group.this[asset.security_group].id }
 }
 
+output "attachment_keys" {
+  description = "The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The recovery and hand-over import blocks import only these."
+  value       = keys(local.attachments_with_room)
+}
+
 output "directory" {
   description = "The SSM parameter each owning workspace's aws-group-lookup reads, keyed by handle."
   value       = { for handle, entry in local.snap.directory : handle => entry.parameter_name }

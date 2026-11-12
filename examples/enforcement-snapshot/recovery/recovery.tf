@@ -6,6 +6,8 @@
 # in-place change on each security group and each directory parameter: an import cannot read a group's
 # revoke_rules_on_delete, and it reads a parameter into value where the module declares insecure_value,
 # so the parameter is written again with the value it holds. No group, rule or attachment changes.
+# If an instance in the last receipt has since been terminated, the receipt is also sent again, without
+# that instance's attachment.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
@@ -38,8 +40,10 @@ import {
   id       = each.value
 }
 
+# An interface that went with its instance since the last receipt has no attachment to import: the
+# module declares none for it.
 import {
-  for_each = data.xshield_enforcement_status.recover.applied_attachments
+  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_attachments : k => v if contains(module.xshield_enforcement.attachment_keys, k) }
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
   id       = each.value
 }

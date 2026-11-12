@@ -85,6 +85,7 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `summary` | Counts of groups, rules and attachments, the handles owning workspaces attach, and groups being withdrawn. |
 | `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
 | `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
+| `attachment_keys` | The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The import blocks in `recovery/` and `handover/` import only these. |
 | `directory` | The SSM parameter each owning workspace reads, keyed by handle. |
 
 Requires Terraform 1.7 and the AWS provider 6 or later. `terraform test` runs the tests in `tests/` offline, with both providers mocked.

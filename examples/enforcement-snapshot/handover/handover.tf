@@ -34,8 +34,10 @@ import {
   id       = each.value
 }
 
+# An interface that went with its instance since the connector last looked has no attachment to
+# import: the module declares none for it.
 import {
-  for_each = data.xshield_enforcement_status.handover.handover_attachments
+  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_attachments : k => v if contains(module.xshield_enforcement.attachment_keys, k) }
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
   id       = each.value
 }
