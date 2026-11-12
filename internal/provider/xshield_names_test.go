@@ -14,8 +14,7 @@ import (
 // field's name in snake case. Xshield and its cloud connector keep their own names, so this is the whole of the
 // mapping between the two, and each entry keeps Xshield's word and adds only the noun Terraform's naming asks for.
 var xshieldNamesChangedForTerraform = map[string]map[string]string{
-	"the snapshot":           {"directory": "directory_entries", "withdrawing": "withdrawing_security_groups"},
-	"a notice of the status": {"group": "security_group"},
+	"the snapshot": {"directory": "directory_entries", "withdrawing": "withdrawing_security_groups"},
 }
 
 func snakeCase(camel string) string {

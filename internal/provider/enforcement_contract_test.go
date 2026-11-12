@@ -190,11 +190,11 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		len(attachments) != len(st.Applied.Resources.Attachments) || len(groups) == 0 {
 		t.Errorf("applied IDs %d groups %d rules %d attachments, want every resource the receipt records", len(groups), len(rules), len(attachments))
 	}
-	if len(data.Notices) != 2 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].SecurityGroup.IsNull() ||
+	if len(data.Notices) != 2 || data.Notices[0].Reason.ValueString() != "NO_FREE_SLOT" || !data.Notices[0].Group.IsNull() ||
 		data.Notices[0].AssetName.ValueString() != "rds/db-1" || !data.Notices[0].Since.IsNull() {
 		t.Errorf("notices %+v", data.Notices)
 	}
-	if len(data.Notices) == 2 && (data.Notices[1].Since.ValueString() != "2026-11-01T09:00:00Z" || data.Notices[1].SecurityGroup.ValueString() != "vpc-1/web") {
+	if len(data.Notices) == 2 && (data.Notices[1].Since.ValueString() != "2026-11-01T09:00:00Z" || data.Notices[1].Group.ValueString() != "vpc-1/web") {
 		t.Errorf("waiting notice %+v, want its group and since when it has waited", data.Notices[1])
 	}
 	kinds := []string{}

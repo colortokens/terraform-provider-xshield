@@ -154,12 +154,12 @@ locals {
       for f in local.status.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "medium"
     ]
     workload_not_enforced = [
-      for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, n.security_group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
+      for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
     ]
     apply_overdue = local.status.state == "pending" && local.pending_overdue ? local.pending_lines : []
     never_applied = local.status.state == "unapplied" && local.pending_overdue ? local.pending_lines : []
     owner_apply_overdue = [
-      for n in local.status.notices : "  ${coalesce(n.security_group, n.asset_name, n.asset_id, "-")}: ${n.message} (change set ${coalesce(n.reason, "unknown")}, waiting since ${coalesce(n.since, "an unknown time")})"
+      for n in local.status.notices : "  ${coalesce(n.group, n.asset_name, n.asset_id, "-")}: ${n.message} (change set ${coalesce(n.reason, "unknown")}, waiting since ${coalesce(n.since, "an unknown time")})"
       if n.code == "changeSetHeld" && (n.since == null || timecmp(timeadd(coalesce(n.since, local.now), var.max_owner_apply_age), local.now) < 0)
     ]
     pipeline_stopped = local.status.published && local.status.last_checked_at != null && local.run_overdue ? [
