@@ -119,6 +119,12 @@ func (a cloudSnapshotAPI) publishedGroupChanges(ctx context.Context, account, re
 	if err != nil {
 		diags.AddError("Cannot read the changes Xshield made to customer groups in "+account+"/"+region,
 			err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")
+		return changes, true, diags
+	}
+	// Changes are matched to a group by VPC and name alone, so another account's would take a rule out of a group here.
+	if changes.CloudAccountID != account || changes.Region != region {
+		diags.AddError("Xshield served the changes to customer groups of another account or region",
+			fmt.Sprintf("asked for %s/%s, got %s/%s; no rule is left out", account, region, changes.CloudAccountID, changes.Region))
 	}
 	return changes, true, diags
 }

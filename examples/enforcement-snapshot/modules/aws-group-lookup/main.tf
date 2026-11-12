@@ -34,6 +34,6 @@ locals {
 check "directory_entry" {
   assert {
     condition     = local.found || !var.warn_when_unlisted
-    error_message = "Xshield lists no entry for ${local.handle} at ${local.parameter_name}. This is expected on the run that creates the resource, until Xshield has discovered it and the enforcement workspace has applied, and while Xshield's policy gives the resource nothing to attach. Otherwise, compare the handle with the enforcement module's directory output, and look for the resource among the assetRefused and groupRefused notices of the xshield_enforcement_status data source."
+    error_message = "Xshield lists no entry for ${local.handle} at ${local.parameter_name}. This is expected on the run that creates the resource, until Xshield has discovered it and the enforcement workspace has applied, and while Xshield's policy gives the resource nothing to attach. Otherwise, compare the handle with the enforcement module's directory_entries output, and look for the resource among the assetRefused and groupRefused notices of the xshield_enforcement_status data source."
   }
 }

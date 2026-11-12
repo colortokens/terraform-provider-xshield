@@ -3,7 +3,8 @@
 # already have. Under Full control Xshield also narrows a broad rule of a group
 # of your own, and in pipeline delivery that goes through the code of the
 # workspace that owns the group. So the team changed two things, once, both
-# marked below. What the team added is in xshield.tf.
+# marked below. What the team added is in xshield.tf, with the moved blocks
+# that carry each existing rule into the module.
 
 terraform {
   required_version = ">= 1.7.0"

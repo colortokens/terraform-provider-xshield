@@ -2,10 +2,12 @@
 # declared until an approved change narrows one, which then leaves once every workload that still needs it
 # carries its ct-cohort- group. A group no change applies to never reads its rules from Xshield, so its plan
 # shows nothing from Xshield beyond the record kept in state, and its VPC and rules may be values the plan learns
-# only at apply.
+# only at apply. Its name may be too, while no change is published for the account and region at all.
 
 locals {
-  vpcs_with_a_change = lookup(var.xshield_changes.groups, var.group_name, [])
+  # With no change published for the account and region no name can match one, so a name the plan learns only
+  # at apply, as name_prefix gives a group on the run that creates it, is never looked up.
+  vpcs_with_a_change = length(var.xshield_changes.groups) == 0 ? [] : lookup(var.xshield_changes.groups, var.group_name, [])
   # The VPC is compared only when a group with this name has a change, so a VPC the plan creates stays unknown.
   changed = length(local.vpcs_with_a_change) > 0 ? contains(local.vpcs_with_a_change, var.vpc_id) : false
 }

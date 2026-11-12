@@ -36,7 +36,8 @@ resource "xshield_enforcement_receipt" "this" {
     { for key, rule in aws_vpc_security_group_ingress_rule.this : key => rule.security_group_rule_id },
     { for key, rule in aws_vpc_security_group_egress_rule.this : key => rule.security_group_rule_id },
   )
-  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => attachment.id }
+  # The attachment's import ID, which recovery needs: the resource's own id puts the group first.
+  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
 }
 ```
 
@@ -54,7 +55,7 @@ resource "xshield_enforcement_receipt" "this" {
 
 ### Optional
 
-- `attachments` (Map of String) Attachment ID created for each key in the snapshot's `interface_attachments`.
+- `attachments` (Map of String) The import ID of the attachment created for each key in the snapshot's `interface_attachments`, `<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.
 - `cloud` (String) Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.
 
 ### Read-Only

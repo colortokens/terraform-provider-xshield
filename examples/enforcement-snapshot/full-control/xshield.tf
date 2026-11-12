@@ -31,3 +31,20 @@ output "xshield_review" {
   description = "What Xshield takes out of this workspace's security groups, in words. Empty while no approved change applies to them."
   value       = module.web_rules.review
 }
+
+# One for each rule the workspace already managed as a resource of its own, so the plan shows the rule as moved into
+# the module and nothing in AWS is added or destroyed. Remove them once that plan is applied.
+moved {
+  from = aws_vpc_security_group_ingress_rule.https_all
+  to   = module.web_rules.aws_vpc_security_group_ingress_rule.this["https_all"]
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.ssh_office
+  to   = module.web_rules.aws_vpc_security_group_ingress_rule.this["ssh_office"]
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.all
+  to   = module.web_rules.aws_vpc_security_group_egress_rule.this["all"]
+}

@@ -77,3 +77,34 @@ func TestGroupChangesFailThePlanWhenXshieldCannotBeRead(t *testing.T) {
 		t.Errorf("ok=%v %q: a listing that cannot be read must fail the plan, as an empty one would keep every rule", ok, errs)
 	}
 }
+
+// A document for another account can hold a key that matches a group here, as in a shared VPC, and would take a
+// declared rule out of a group no change applies to.
+func TestGroupChangesServedForAnotherAccountOrRegionAreRefused(t *testing.T) {
+	t.Parallel()
+	for name, misplace := range map[string]func(*wireCustomerGroupChanges){
+		"another account": func(c *wireCustomerGroupChanges) { c.CloudAccountID = "999999999999" },
+		"another region":  func(c *wireCustomerGroupChanges) { c.Region = "eu-west-1" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changes := narrowed(loadJSON[wireCustomerGroupChanges](t, "customer_group_changes.json"))
+			misplace(&changes)
+			served, err := json.Marshal(changes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusOK, string(served)}})
+			var listing awsSecurityGroupChangesDataSourceModel
+			if ok, errs := readDataSource(t, &awsSecurityGroupChangesDataSource{api: api}, pointArgs(), &listing); ok || !strings.Contains(errs, "another account or region") {
+				t.Errorf("listing: ok=%v %q, want the read refused", ok, errs)
+			}
+			args := pointArgs()
+			args["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
+			args["group_name"] = tftypes.NewValue(tftypes.String, "web")
+			var rules awsSecurityGroupRulesDataSourceModel
+			if ok, errs := readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, args, &rules); ok || !strings.Contains(errs, "another account or region") {
+				t.Errorf("rules: ok=%v %q, want the read refused so no declared rule is left out", ok, errs)
+			}
+		})
+	}
+}

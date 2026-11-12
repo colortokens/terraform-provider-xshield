@@ -98,7 +98,8 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			},
 			"security_groups": idMap("Security group ID created for each key in the snapshot's `security_groups`.", true),
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
-			"attachments":     idMap("Attachment ID created for each key in the snapshot's `interface_attachments`.", false),
+			"attachments": idMap("The import ID of the attachment created for each key in the snapshot's `interface_attachments`, "+
+				"`<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.", false),
 			"run_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise.",

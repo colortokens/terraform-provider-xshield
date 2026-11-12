@@ -12,5 +12,6 @@ resource "xshield_enforcement_receipt" "this" {
     { for key, rule in aws_vpc_security_group_ingress_rule.this : key => rule.security_group_rule_id },
     { for key, rule in aws_vpc_security_group_egress_rule.this : key => rule.security_group_rule_id },
   )
-  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => attachment.id }
+  # The attachment's import ID, which recovery needs: the resource's own id puts the group first.
+  attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
 }

@@ -187,3 +187,22 @@ run "a_changed_group_keeps_a_record_in_state_that_says_so" {
     error_message = "the record must say an approved change applied to the group at this apply"
   }
 }
+
+# aws_security_group gives a group declared with name_prefix its name only at apply. With no change published for
+# the account and region, no name can match one, so the plan must not need it.
+run "a_group_whose_name_is_known_only_at_apply_plans_while_no_change_is_published" {
+  command = plan
+
+  module {
+    source = "./tests/fixtures/name-from-apply"
+  }
+
+  variables {
+    xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = {} }
+  }
+
+  assert {
+    condition     = output.ingress_keys == tolist(["https_all"])
+    error_message = "with no change published, a group named only at apply must plan with the rules the caller passes"
+  }
+}
