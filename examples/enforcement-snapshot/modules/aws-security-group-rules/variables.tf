@@ -53,3 +53,10 @@ variable "egress_rules" {
   }))
   default = {}
 }
+
+variable "fail_on_unacknowledged_carriers" {
+  description = "Fail the plan, rather than warn, while Xshield names a resource that carries the group, that it does not enforce on, and that nobody acknowledged when the change was approved."
+  type        = bool
+  default     = false
+  nullable    = false
+}

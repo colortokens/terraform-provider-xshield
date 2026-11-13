@@ -42,6 +42,13 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   referenced_security_group_id = each.value.referenced_security_group_id
   description                  = each.value.description
   tags                         = each.value.tags
+
+  lifecycle {
+    precondition {
+      condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
+      error_message = local.unacknowledged_carriers_message
+    }
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "this" {
@@ -57,6 +64,13 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   referenced_security_group_id = each.value.referenced_security_group_id
   description                  = each.value.description
   tags                         = each.value.tags
+
+  lifecycle {
+    precondition {
+      condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
+      error_message = local.unacknowledged_carriers_message
+    }
+  }
 }
 
 # Held in Terraform's state alone, with nothing in AWS. A plan that stops declaring the group's rules through this
@@ -70,5 +84,12 @@ resource "terraform_data" "xshield_routed" {
     group_name        = var.group_name
     security_group_id = var.security_group_id
     changed           = local.changed
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
+      error_message = local.unacknowledged_carriers_message
+    }
   }
 }
