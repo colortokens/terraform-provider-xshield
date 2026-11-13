@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Reports to Xshield that an enforcement snapshot has been applied, and which AWS resource was created for each key in it. The aws enforcement module sends it for you.
   Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose hash does not match the snapshot, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged.
-  A new receipt is sent only when the applied version or a resource ID changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
+  A new receipt is sent only when the applied version, a resource ID or exclusive_rules changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
   A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place.
   Destroying it removes it from state and leaves the receipt history in Xshield.
 ---
@@ -16,7 +16,7 @@ Reports to Xshield that an enforcement snapshot has been applied, and which AWS 
 
 Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose hash does not match the snapshot, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged.
 
-A new receipt is sent only when the applied version or a resource ID changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
+A new receipt is sent only when the applied version, a resource ID or `exclusive_rules` changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
 
 A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place.
 
@@ -60,6 +60,7 @@ resource "xshield_enforcement_receipt" "this" {
 
 - `attachments` (Map of String) The import ID of the attachment created for each key in the snapshot's `interface_attachments`, `<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.
 - `cloud` (String) Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.
+- `exclusive_rules` (Boolean) Whether each security group in `security_groups` holds only the rules in `rules`, so the next apply removes a rule added to it outside Terraform. The `aws` enforcement module sets it from `enable_exclusive_rules`. Xshield then reports such a rule as one the pipeline removes; when false, as one a person must remove. Changing it sends the receipt again; it does not replace it.
 
 ### Read-Only
 

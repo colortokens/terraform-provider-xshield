@@ -173,7 +173,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"`kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. " +
 					"`severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. " +
 					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` when Terraform cannot see it " +
-					"and it must be removed by hand, `workload` when the owning workspace's attachment must change. " +
+					"and it must be removed by hand, `workload` when the owning workspace's attachment must change. A rule added " +
+					"to an Xshield group outside Terraform is `pipeline` when the latest receipt set `exclusive_rules`, otherwise `manual`. " +
 					"`resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. " +
 					"`resource_name`: for an attachment finding, the workload as AWS names it, its instance ID or its handle. " +
 					"`key`: snapshot key involved, when there is one. " +

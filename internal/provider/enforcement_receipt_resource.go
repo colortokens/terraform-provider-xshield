@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -43,6 +44,7 @@ type enforcementReceiptResourceModel struct {
 	SecurityGroups  types.Map    `tfsdk:"security_groups"`
 	Rules           types.Map    `tfsdk:"rules"`
 	Attachments     types.Map    `tfsdk:"attachments"`
+	ExclusiveRules  types.Bool   `tfsdk:"exclusive_rules"`
 	RunID           types.String `tfsdk:"run_id"`
 	AppliedAt       types.String `tfsdk:"applied_at"`
 }
@@ -62,7 +64,7 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only " +
 			"sent once they all exist. Xshield rejects a receipt whose hash does not match the snapshot, or whose " +
 			"resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged.\n\n" +
-			"A new receipt is sent only when the applied version or a resource ID changes, so it adds nothing to a " +
+			"A new receipt is sent only when the applied version, a resource ID or `exclusive_rules` changes, so it adds nothing to a " +
 			"plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer " +
 			"this one, the next plan proposes sending it again.\n\n" +
 			"A plan that creates the receipt while Xshield already holds one for the account and region warns, and " +
@@ -103,6 +105,15 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
 			"attachments": idMap("The import ID of the attachment created for each key in the snapshot's `interface_attachments`, "+
 				"`<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.", false),
+			"exclusive_rules": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "Whether each security group in `security_groups` holds only the rules in `rules`, so the next apply removes " +
+					"a rule added to it outside Terraform. The `aws` enforcement module sets it from `enable_exclusive_rules`. " +
+					"Xshield then reports such a rule as one the pipeline removes; when false, as one a person must remove. " +
+					"Changing it sends the receipt again; it does not replace it.",
+			},
 			"run_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise.",
@@ -135,12 +146,13 @@ type wireRenderedResources struct {
 }
 
 type wireReceipt struct {
-	ReceiptID string                `json:"receiptId,omitempty"`
-	Version   string                `json:"version"`
-	Workspace string                `json:"workspace"`
-	RunID     string                `json:"runId,omitempty"`
-	AppliedAt *time.Time            `json:"appliedAt,omitempty"`
-	Resources wireRenderedResources `json:"resources"`
+	ReceiptID      string                `json:"receiptId,omitempty"`
+	Version        string                `json:"version"`
+	Workspace      string                `json:"workspace"`
+	RunID          string                `json:"runId,omitempty"`
+	AppliedAt      *time.Time            `json:"appliedAt,omitempty"`
+	Resources      wireRenderedResources `json:"resources"`
+	ExclusiveRules bool                  `json:"exclusiveRules"`
 }
 
 type wireConvergence struct {
@@ -166,6 +178,7 @@ func receiptRequest(ctx context.Context, data *enforcementReceiptResourceModel, 
 			Rules:          ids(data.Rules),
 			Attachments:    ids(data.Attachments),
 		},
+		ExclusiveRules: data.ExclusiveRules.ValueBool(),
 	}
 	return req, diags
 }
@@ -252,6 +265,10 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 		data.Cloud = types.StringValue(cloudAWS)
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud"), cloudAWS)...)
 	}
+	if data.ExclusiveRules.IsNull() {
+		data.ExclusiveRules = types.BoolValue(false)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("exclusive_rules"), false)...)
+	}
 
 	var status wireConvergence
 	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
@@ -336,6 +353,7 @@ func (r *enforcementReceiptResource) adopt(ctx context.Context, data *enforcemen
 	data.SecurityGroups = toMap(a.Resources.SecurityGroups)
 	data.Rules = toMap(a.Resources.Rules)
 	data.Attachments = toMap(a.Resources.Attachments)
+	data.ExclusiveRules = types.BoolValue(a.ExclusiveRules)
 	data.RunID = types.StringValue(a.RunID)
 	data.AppliedAt = appliedAtValue(a.AppliedAt)
 }
