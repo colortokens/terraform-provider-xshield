@@ -22,6 +22,13 @@ variable "workspace" {
   default     = null
 }
 
+variable "enable_exclusive_rules" {
+  description = "Whether each security group this module creates holds only the rules the snapshot declares for it, so the next apply removes a rule added to one of them outside Terraform. Set it to false to leave such a rule in place until a person removes it. Security groups of your own are never managed this way."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "review_max_groups" {
   description = "How many groups the review output describes in words. Cohort groups come first, then the rest by key. Groups past this number are counted, not described."
   type        = number

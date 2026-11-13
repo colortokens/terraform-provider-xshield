@@ -114,6 +114,21 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   }
 }
 
+# Each group the module creates holds only the rules the snapshot declares for it, so the next
+# apply removes a rule added to it outside Terraform. Removing this resource revokes nothing.
+locals {
+  ingress_keys_by_group = { for key, rule in local.snap.ingress_rules : rule.security_group => key... }
+  egress_keys_by_group  = { for key, rule in local.snap.egress_rules : rule.security_group => key... }
+}
+
+resource "aws_vpc_security_group_rules_exclusive" "this" {
+  for_each = var.enable_exclusive_rules ? local.snap.security_groups : {}
+
+  security_group_id = aws_security_group.this[each.key].id
+  ingress_rule_ids  = [for key in lookup(local.ingress_keys_by_group, each.key, []) : aws_vpc_security_group_ingress_rule.this[key].security_group_rule_id]
+  egress_rule_ids   = [for key in lookup(local.egress_keys_by_group, each.key, []) : aws_vpc_security_group_egress_rule.this[key].security_group_rule_id]
+}
+
 # An instance's interfaces go with the instance, often before discovery tells
 # Xshield, so an attachment is planned only while its interface exists: a
 # terminated instance never fails the apply. Xshield accepts a receipt that
@@ -232,6 +247,7 @@ resource "xshield_enforcement_receipt" "this" {
   region           = local.snap.region
   workspace        = local.workspace
   snapshot_version = local.snap.version
+  exclusive_rules  = var.enable_exclusive_rules
 
   security_groups = { for key, group in aws_security_group.this : key => group.id }
   rules = merge(
@@ -241,5 +257,5 @@ resource "xshield_enforcement_receipt" "this" {
   # Recorded as the attachment's import ID, so a lost state can be rebuilt from the receipt.
   attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
 
-  depends_on = [aws_ssm_parameter.directory]
+  depends_on = [aws_ssm_parameter.directory, aws_vpc_security_group_rules_exclusive.this]
 }

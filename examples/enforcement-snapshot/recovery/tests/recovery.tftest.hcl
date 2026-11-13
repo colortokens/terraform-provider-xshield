@@ -60,6 +60,14 @@ override_resource {
   values = { id = "sg-00000000000000002" }
 }
 override_resource {
+  target = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this["i-1"]
+  values = { id = "sg-00000000000000001" }
+}
+override_resource {
+  target = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this["i-2"]
+  values = { id = "sg-00000000000000002" }
+}
+override_resource {
   target = module.xshield_enforcement.aws_network_interface_sg_attachment.this["i-1/eni-1"]
   values = { id = "sg-00000000000000001_eni-1" }
 }

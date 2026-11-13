@@ -6,6 +6,8 @@
 # in-place change on each security group and each directory parameter: an import cannot read a group's
 # revoke_rules_on_delete, and it reads a parameter into value where the module declares insecure_value,
 # so the parameter is written again with the value it holds. No group, rule or attachment changes.
+# A rule added to an Xshield group outside Terraform shows as an in-place change of that group's
+# exclusive rules resource, and the apply removes it.
 # If an instance in the last receipt has since been terminated, the receipt is also sent again, without
 # that instance's attachment.
 data "aws_caller_identity" "recover" {}
@@ -51,6 +53,12 @@ import {
 import {
   for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
+  id       = each.value
+}
+
+import {
+  for_each = module.xshield_enforcement.exclusive_rules_enabled ? data.xshield_enforcement_status.recover.applied_security_groups : {}
+  to       = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this[each.key]
   id       = each.value
 }
 

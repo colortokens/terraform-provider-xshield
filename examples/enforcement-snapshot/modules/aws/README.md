@@ -12,6 +12,7 @@ It creates, from `xshield_aws_enforcement_snapshot`:
 
 - one `aws_security_group` per workload, named and tagged as the Xshield cloud connector names its own, so the connector recognises it;
 - one `aws_vpc_security_group_ingress_rule` or `_egress_rule` per rule;
+- one `aws_vpc_security_group_rules_exclusive` per group, naming exactly that group's rules, so the next apply removes a rule added to the group outside Terraform;
 - one `aws_network_interface_sg_attachment` per instance interface, which adds the group and keeps the interface's other groups;
 - one `aws_ssm_parameter` per database, function or service, read by the `aws-group-lookup` module;
 - the `xshield_enforcement_receipt` that tells Xshield what was applied.
@@ -23,6 +24,8 @@ To stop enforcing, withdraw the policy in Xshield. Xshield then publishes a vers
 An interface that filled up since Xshield last discovered it cannot take a new group, and AWS would refuse the apply. So an attachment neither the last receipt holds nor a hand-over offers goes only on an interface with room for every new group, against the limit Xshield discovered. Any other is left out with a warning naming the interface and its instance, the receipt leaves it out, and Xshield refuses the workload once discovery shows the interface full. A new group the interface already carries takes no further room: an apply that attached it and then failed sent no receipt, and the run after it keeps the attachment. Only those interfaces and groups are read, with `ec2:DescribeNetworkInterfaces` and `ec2:DescribeSecurityGroups`.
 
 A group's new rules are created before its old ones are removed, as the cloud connector writes them, so access a change keeps holds throughout the apply, and a rule AWS refuses leaves the old rules in place. While it changes, a group holds its old and new rules at once. When that would take it past the account's quota of rules per security group but its new rules alone fit, the apply first removes the old rules no new rule replaces, and the next apply adds the new ones: access both versions allow holds throughout, while a port the change moves closes on its old number one apply before it opens on its new one. A change that does not fit even then leaves the group as last applied. Either way Xshield says so in a `groupRefused` notice of `xshield_enforcement_status`, with how many rules past the quota the group would be. To make such a change in one apply, first remove rules from the policy that the change does not replace, and apply that, or raise the quota. A rule naming another workload's Xshield group counts once in each address family and comes out only once the new rules are in, so when that workload stops carrying its group while this one is at the quota, the group stays on that workload, without rules, until the change fits: the notice names that group, and the group's `withdrawing` notice points back to it.
+
+Each group holds only the rules the snapshot declares for it. A rule added to it outside Terraform shows in the next plan as an in-place change of the group's `aws_vpc_security_group_rules_exclusive`, and the apply removes it. Set `enable_exclusive_rules = false` to leave such rules until a person removes them; the receipt tells Xshield which applies, and deleting the resources revokes no rule. The first apply that adds these resources removes any rule in the groups that the snapshot does not declare, and its plan shows only the rules each group keeps. Security groups of your own are never managed this way. Rules are revoked with `ec2:DescribeSecurityGroupRules`, `ec2:RevokeSecurityGroupIngress` and `ec2:RevokeSecurityGroupEgress`.
 
 Resource keys are instance IDs and handles, so a plan names the workload each change is for.
 
@@ -74,6 +77,7 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `snapshot_version` | `null` | Pins a version for break-glass rollback. Xshield reports the account as pending while it is set. |
 | `workspace` | `xshield-enforcement-<account>-<region>` | Name Xshield shows for the workspace that applied a version. |
 | `tags` | `{}` | Added to every resource. `ManagedBy` and `ct:*` are reserved. |
+| `enable_exclusive_rules` | `true` | Each group this module creates holds only the rules the snapshot declares, so the next apply removes a rule added outside Terraform. Set `false` to leave such a rule until a person removes it. |
 | `review_max_groups` | `50` | How many groups the `review` output describes in words. Groups past this number are counted, not described. |
 
 ## Outputs
@@ -82,10 +86,11 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 |--|--|
 | `published` | False while Xshield has published nothing for the account and region. |
 | `version` | Snapshot version applied. Null while nothing is published. |
+| `exclusive_rules_enabled` | Whether each group this module creates holds only the rules the snapshot declares. The receipt tells Xshield the same. |
 | `summary` | Counts of groups, rules and attachments, the handles owning workspaces attach, and groups being withdrawn. |
 | `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
 | `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
 | `attachment_keys` | The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The import blocks in `recovery/` and `handover/` import only these. |
 | `directory_entries` | The SSM parameter each owning workspace reads, keyed by handle. |
 
-Requires Terraform 1.7 and the AWS provider 6 or later. `terraform test` runs the tests in `tests/` offline, with both providers mocked.
+Requires Terraform 1.7 and the AWS provider 6.29.0 or later, the first release with `aws_vpc_security_group_rules_exclusive`. `terraform test` runs the tests in `tests/` offline, with both providers mocked.

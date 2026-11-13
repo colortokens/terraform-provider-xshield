@@ -1,6 +1,8 @@
 # Takes over an account from connector delivery without creating its groups again: the plan imports
 # the groups, rules and attachments the cloud connector created, which stay in place and enforced, and
 # the directory parameters an earlier spell on pipeline delivery left, and adds only what is missing.
+# A rule in one of those groups that the snapshot does not declare shows as an in-place change of the
+# group's exclusive rules resource, and the apply removes it.
 # Add this file to the enforcement workspace for the first apply after the account moves to pipeline
 # delivery, then delete it.
 data "aws_caller_identity" "handover" {}
@@ -31,6 +33,12 @@ import {
 import {
   for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if contains(keys(data.xshield_aws_enforcement_snapshot.handover.egress_rules), k) }
   to       = module.xshield_enforcement.aws_vpc_security_group_egress_rule.this[each.key]
+  id       = each.value
+}
+
+import {
+  for_each = module.xshield_enforcement.exclusive_rules_enabled ? data.xshield_enforcement_status.handover.handover_security_groups : {}
+  to       = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this[each.key]
   id       = each.value
 }
 

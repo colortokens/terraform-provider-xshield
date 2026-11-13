@@ -8,6 +8,11 @@ output "published" {
   value       = local.snap.published
 }
 
+output "exclusive_rules_enabled" {
+  description = "Whether each security group this module creates holds only the rules the snapshot declares for it, so the next apply removes a rule added outside Terraform. The receipt tells Xshield the same."
+  value       = var.enable_exclusive_rules
+}
+
 output "summary" {
   description = "What the applied version holds, for plan review and run logs."
   value = {
