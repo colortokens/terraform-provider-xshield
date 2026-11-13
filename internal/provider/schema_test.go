@@ -144,6 +144,14 @@ var dataSourceLookupAttributes = map[string][]string{
 	"xshield_criteria":              {"criteria"},
 	"xshield_policy_changes":        {"criteria", "direction"},
 	"xshield_deployment_simulation": {"asset_id", "direction"},
+
+	// Enforcement point: the account and region select the snapshot. version is
+	// an optional pin and deliberately not a lookup key, since omitting it is
+	// what makes the read converge on the expected version.
+	"xshield_aws_enforcement_snapshot":   {"cloud_account_id", "region"},
+	"xshield_enforcement_status":         {"cloud_account_id", "region"},
+	"xshield_aws_security_group_changes": {"cloud_account_id", "region"},
+	"xshield_aws_security_group_rules":   {"cloud_account_id", "region", "vpc_id", "group_name"},
 }
 
 func TestDataSourceLookupKeysAreConfigurable(t *testing.T) {
@@ -250,6 +258,8 @@ var resourcesWithoutDataSource = map[string]string{
 	"xshield_policy_deployment": "a deployment is an action, not a stored object: " +
 		"the API has no read-by-id for one. xshield_policy_changes and " +
 		"xshield_deployment_simulation are its read-only counterparts.",
+	"xshield_enforcement_receipt": "a receipt reports an apply rather than storing an " +
+		"object Terraform reads back. xshield_enforcement_status is its read-only counterpart.",
 }
 
 // TestEveryResourceHasADataSource keeps the two registrations in step; a

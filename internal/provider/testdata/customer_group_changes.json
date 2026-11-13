@@ -1,0 +1,30 @@
+{
+  "cloudAccountId": "123456789012",
+  "customerGroupChanges": {
+    "vpc-1/web": {
+      "changeSets": [
+        {
+          "id": "cs-1",
+          "moves": [
+            {
+              "cidrIpv4": "0.0.0.0/0",
+              "cidrIpv6": null,
+              "direction": "ingress",
+              "fromPort": 443,
+              "ipProtocol": "tcp",
+              "keptByEveryMember": [],
+              "prefixListId": null,
+              "referencedSecurityGroupId": null,
+              "toPort": 443
+            }
+          ],
+          "state": "attaching"
+        }
+      ],
+      "groupId": "sg-web",
+      "revoke": []
+    }
+  },
+  "region": "us-east-1",
+  "version": "163e3e2f969222356d0ceab0a265f0b687abf07a6b1954c2cc1347a0ff1405537bd5ca758e5fa08c46e13eae4973377243766f13b3116a274d5b432bf802d4f8"
+}

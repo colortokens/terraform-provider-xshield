@@ -1,0 +1,9 @@
+# never commit: local provider build, provider caches, private keys
+bin/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.pem
+.dev.tfrc
+.terraform.lock.hcl
+policies/sentinel/.sentinel/

@@ -1,0 +1,114 @@
+{
+  "applied": {
+    "appliedAt": "2026-10-28T04:08:58.328808Z",
+    "receiptId": "rcpt-e943028453120d0e",
+    "resources": {
+      "attachments": {
+        "i-app-1/eni-app-1": "sg-00000000000000000_eni-app-1",
+        "i-app-1/eni-app-1-data": "sg-00000000000000001_eni-app-1-data",
+        "i-app-2/eni-app-2": "sg-00000000000000002_eni-app-2",
+        "i-db-1/eni-db-1": "sg-00000000000000003_eni-db-1",
+        "i-db-2/eni-db-2": "sg-00000000000000004_eni-db-2"
+      },
+      "rules": {
+        "i-app-1/in/tcp/443/0.0.0.0/0": "sgr-00000000000000000",
+        "i-app-1/in/tcp/443/::/0": "sgr-00000000000000001",
+        "i-app-1/in/tcp/8080/10.0.0.0/8": "sgr-00000000000000002",
+        "i-app-1/in/tcp/8080/172.16.0.0/12": "sgr-00000000000000003",
+        "i-app-1/in/tcp/8080/192.168.0.0/16": "sgr-00000000000000004",
+        "i-app-1/in/tcp/8443/10.20.1.11/32": "sgr-00000000000000005",
+        "i-app-1/in/tcp/8443/10.20.1.12/32": "sgr-00000000000000006",
+        "i-app-1/in/tcp/8443/10.20.2.21/32": "sgr-00000000000000007",
+        "i-app-1/in/tcp/8443/10.20.2.22/32": "sgr-00000000000000008",
+        "i-app-1/out/tcp/443/198.51.100.0/24": "sgr-00000000000000009",
+        "i-app-1/out/tcp/443/203.0.113.0/24": "sgr-0000000000000000a",
+        "i-app-2/in/tcp/443/0.0.0.0/0": "sgr-0000000000000000b",
+        "i-app-2/in/tcp/443/::/0": "sgr-0000000000000000c",
+        "i-app-2/in/tcp/8080/10.0.0.0/8": "sgr-0000000000000000d",
+        "i-app-2/in/tcp/8080/172.16.0.0/12": "sgr-0000000000000000e",
+        "i-app-2/in/tcp/8080/192.168.0.0/16": "sgr-0000000000000000f",
+        "i-app-2/in/tcp/8443/10.20.1.11/32": "sgr-00000000000000010",
+        "i-app-2/in/tcp/8443/10.20.1.12/32": "sgr-00000000000000011",
+        "i-app-2/in/tcp/8443/10.20.2.21/32": "sgr-00000000000000012",
+        "i-app-2/in/tcp/8443/10.20.2.22/32": "sgr-00000000000000013",
+        "i-app-2/out/tcp/443/198.51.100.0/24": "sgr-00000000000000014",
+        "i-app-2/out/tcp/443/203.0.113.0/24": "sgr-00000000000000015",
+        "i-db-1/in/tcp/5432/10.20.1.11/32": "sgr-00000000000000016",
+        "i-db-1/in/tcp/5432/10.20.1.12/32": "sgr-00000000000000017",
+        "i-db-1/in/tcp/8443/10.20.1.11/32": "sgr-00000000000000018",
+        "i-db-1/in/tcp/8443/10.20.1.12/32": "sgr-00000000000000019",
+        "i-db-1/in/tcp/8443/10.20.2.21/32": "sgr-0000000000000001a",
+        "i-db-1/in/tcp/8443/10.20.2.22/32": "sgr-0000000000000001b",
+        "i-db-1/out/tcp/443/198.51.100.0/24": "sgr-0000000000000001c",
+        "i-db-1/out/tcp/443/203.0.113.0/24": "sgr-0000000000000001d",
+        "i-db-2/in/tcp/5432/10.20.1.11/32": "sgr-0000000000000001e",
+        "i-db-2/in/tcp/5432/10.20.1.12/32": "sgr-0000000000000001f",
+        "i-db-2/in/tcp/8443/10.20.1.11/32": "sgr-00000000000000020",
+        "i-db-2/in/tcp/8443/10.20.1.12/32": "sgr-00000000000000021",
+        "i-db-2/in/tcp/8443/10.20.2.21/32": "sgr-00000000000000022",
+        "i-db-2/in/tcp/8443/10.20.2.22/32": "sgr-00000000000000023",
+        "i-db-2/in/tcp/9999/10.1.2.3/32": "sgr-00000000000000024",
+        "i-db-2/out/tcp/443/198.51.100.0/24": "sgr-00000000000000025",
+        "i-db-2/out/tcp/443/203.0.113.0/24": "sgr-00000000000000026",
+        "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.11/32": "sgr-00000000000000027",
+        "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.12/32": "sgr-00000000000000028",
+        "rds/orders-db/in/tcp/5432/10.20.1.11/32": "sgr-00000000000000029",
+        "rds/orders-db/in/tcp/5432/10.20.1.12/32": "sgr-0000000000000002a"
+      },
+      "securityGroups": {
+        "i-app-1": "sg-00000000000000000",
+        "i-app-2": "sg-00000000000000001",
+        "i-db-1": "sg-00000000000000002",
+        "i-db-2": "sg-00000000000000003",
+        "rds-cluster/orders-cluster": "sg-00000000000000004",
+        "rds/orders-db": "sg-00000000000000005"
+      }
+    },
+    "runId": "",
+    "version": "5737ad40fe0e9439117b99518b906056680a6d7117bc3ec3086e0696803f5f5339e51ad2382f9232785e9da97c704c784bdeb75c2bee960abaae89637b878d7f",
+    "workspace": "xshield-enforcement-123456789012-us-east-1"
+  },
+  "cloudAccountId": "123456789012",
+  "cloudProvider": "aws",
+  "drift": {
+    "findings": [
+      {
+        "detail": "the asset is missing its group sg-00000000000000005; it is not enforced",
+        "kind": "memberUnattached",
+        "resource": "a-orders-db",
+        "restoration": "workload",
+        "severity": "high"
+      },
+      {
+        "detail": "approved rule was removed out of band; traffic it allows is now blocked",
+        "key": "i-db-1/in/tcp/5432/10.20.1.11/32",
+        "kind": "ruleMissing",
+        "resource": "sgr-00000000000000016",
+        "restoration": "pipeline",
+        "severity": "medium"
+      }
+    ],
+    "observationStale": false,
+    "observedAt": "2099-01-01T00:00:00Z"
+  },
+  "expected": {
+    "publishedAt": "2026-10-28T04:08:58.329853Z",
+    "version": "cbfb84e59e594c7a215146f86ad3f74a04bd225712a1969f960a5d25981ad37cdf89b21afea3be74ff2943bf35f4ee6d0634cdfb09969d3f0a7ab83ba172c8c4"
+  },
+  "lastCheckedAt": "2026-10-28T04:08:58.327961Z",
+  "notices": [],
+  "pendingDelta": {
+    "attachmentsAdded": [],
+    "rulesAdded": [
+      "i-db-1/in/tcp/6432/10.20.1.11/32",
+      "i-db-1/in/tcp/6432/10.20.1.12/32",
+      "i-db-2/in/tcp/6432/10.20.1.11/32",
+      "i-db-2/in/tcp/6432/10.20.1.12/32"
+    ],
+    "rulesRemoved": [],
+    "securityGroupsAdded": []
+  },
+  "pendingSince": "2026-10-28T04:08:58.329853Z",
+  "region": "us-east-1",
+  "state": "pending"
+}

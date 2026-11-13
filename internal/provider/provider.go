@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ type XshieldProviderModel struct {
 	PrincipalId        types.String  `tfsdk:"user_id"`
 	FingerPrint        types.String  `tfsdk:"fingerprint"`
 	PrivateKeyLocation types.String  `tfsdk:"private_key_path"`
+	PrivateKey         types.String  `tfsdk:"private_key"`
 	ProxyURL           types.String  `tfsdk:"proxy_url"`
 	ProxyCreds         types.String  `tfsdk:"proxy_creds"`
 	RequestTimeout     types.Int64   `tfsdk:"request_timeout"`
@@ -58,23 +60,29 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 		Description: `ColorTokens Core API: API for managing lifecycle of core micro-segmentation resources (tags, assets & groups)`,
 		Attributes: map[string]schema.Attribute{
 			"server_url": schema.StringAttribute{
-				MarkdownDescription: "Server URL (defaults to https://ng.colortokens.com)",
+				MarkdownDescription: "Your Xshield URL, such as `https://<tenant>.colortokens.com`. Can also be set with `XSHIELD_SERVER_URL`. Defaults to `https://ng.colortokens.com`.",
 				Optional:            true,
-				Required:            false,
 			},
 			"tenancy_id": schema.StringAttribute{
-				Required:  true,
-				Sensitive: false,
+				MarkdownDescription: "Tenancy ID of the API key, shown with the key in Xshield under **Settings > API Keys**. Can also be set with `XSHIELD_TENANCY_ID`.",
+				Optional:            true,
 			},
 			"user_id": schema.StringAttribute{
-				Required:  true,
-				Sensitive: false,
-			}, "fingerprint": schema.StringAttribute{
-				Required:  true,
-				Sensitive: false,
-			}, "private_key_path": schema.StringAttribute{
-				Required:  true,
-				Sensitive: false,
+				MarkdownDescription: "User ID of the API key. Can also be set with `XSHIELD_USER_ID`.",
+				Optional:            true,
+			},
+			"fingerprint": schema.StringAttribute{
+				MarkdownDescription: "Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`.",
+				Optional:            true,
+			},
+			"private_key_path": schema.StringAttribute{
+				MarkdownDescription: "Path to the API key's PEM private key. Can also be set with `XSHIELD_PRIVATE_KEY_PATH`. Set this or `private_key`.",
+				Optional:            true,
+			},
+			"private_key": schema.StringAttribute{
+				MarkdownDescription: "The API key's PEM private key itself, for runners that hold it as a secret rather than a file. Can also be set with `XSHIELD_PRIVATE_KEY`. Set this or `private_key_path`.",
+				Optional:            true,
+				Sensitive:           true,
 			},
 			// HTTP request config
 			"request_timeout": schema.Int64Attribute{
@@ -120,7 +128,10 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
-	ServerURL := data.ServerURL.ValueString()
+	if refuseUnknown(resp, "server_url", "XSHIELD_SERVER_URL", data.ServerURL) {
+		return
+	}
+	ServerURL := withEnv(data.ServerURL, "XSHIELD_SERVER_URL")
 
 	if ServerURL == "" {
 		ServerURL = "https://ng.colortokens.com"
@@ -228,33 +239,69 @@ func newHTTPClientWithOptions(data XshieldProviderModel) (*http.Client, error) {
 	return client, nil
 }
 
+// withEnv is the configured value, or the environment variable's when the
+// configuration leaves the attribute unset.
+func withEnv(v types.String, name string) string {
+	if !v.IsNull() && !v.IsUnknown() && v.ValueString() != "" {
+		return v.ValueString()
+	}
+	return os.Getenv(name)
+}
+
+// refuseUnknown reports a value the plan does not know yet. The environment does not stand in for it: the
+// configuration says the value comes from elsewhere, so the environment's would be another key's.
+func refuseUnknown(resp *provider.ConfigureResponse, attr, env string, v types.String) bool {
+	if !v.IsUnknown() {
+		return false
+	}
+	resp.Diagnostics.AddAttributeError(path.Root(attr), "Unknown Xshield "+attr,
+		"The value of "+attr+" is not known until apply, and the provider needs it to plan. Give it a value that is "+
+			"known when the plan starts, or leave it out of the xshield provider block and set "+env+".")
+	return true
+}
+
 func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {
-	if data.TenancyId.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("tenancy_id"), "required attribute is missing or empty", "")
+	need := func(attr, env string, v types.String, where string) string {
+		if refuseUnknown(resp, attr, env, v) {
+			return ""
+		}
+		value := withEnv(v, env)
+		if value == "" {
+			resp.Diagnostics.AddAttributeError(path.Root(attr), "Missing Xshield "+attr,
+				"Set "+attr+" in the xshield provider block, or the "+env+" environment variable. "+where)
+		}
+		return value
 	}
-
-	if data.PrincipalId.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("user_id"), "required attribute is missing or empty", "")
+	const fromKey = "It is shown with the API key in Xshield under Settings > API Keys."
+	tenancy := need("tenancy_id", "XSHIELD_TENANCY_ID", data.TenancyId, fromKey)
+	user := need("user_id", "XSHIELD_USER_ID", data.PrincipalId, fromKey)
+	fingerprint := need("fingerprint", "XSHIELD_FINGERPRINT", data.FingerPrint, fromKey)
+	keyPath := withEnv(data.PrivateKeyLocation, "XSHIELD_PRIVATE_KEY_PATH")
+	key := withEnv(data.PrivateKey, "XSHIELD_PRIVATE_KEY")
+	keyUnknown := refuseUnknown(resp, "private_key_path", "XSHIELD_PRIVATE_KEY_PATH", data.PrivateKeyLocation)
+	keyUnknown = refuseUnknown(resp, "private_key", "XSHIELD_PRIVATE_KEY", data.PrivateKey) || keyUnknown
+	switch {
+	case keyUnknown:
+	case keyPath == "" && key == "":
+		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "Missing Xshield private key",
+			"Set private_key_path (or XSHIELD_PRIVATE_KEY_PATH) to the API key's PEM file, or private_key (or XSHIELD_PRIVATE_KEY) to its contents.")
+	case keyPath != "" && key != "":
+		resp.Diagnostics.AddAttributeError(path.Root("private_key"), "Two Xshield private keys",
+			"Both a private key and a private key path are set, from the provider block or the environment. Set only one.")
 	}
-
-	if data.FingerPrint.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("fingerprint"), "required attribute is missing or empty", "")
-	}
-
-	if data.PrivateKeyLocation.ValueString() == "" {
-		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "required attribute is missing or empty", "")
-	}
-
 	if resp.Diagnostics.HasError() {
 		return nil
 	}
-
-	return shared.NewRawConfigProvider(data.TenancyId.ValueString(), data.PrincipalId.ValueString(), data.FingerPrint.ValueString(), data.PrivateKeyLocation.ValueString())
+	if key != "" {
+		return shared.NewDirectConfigProvider(tenancy, user, fingerprint, key)
+	}
+	return shared.NewRawConfigProvider(tenancy, user, fingerprint, keyPath)
 }
 
 func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAssetResource,
+		newEnforcementReceiptResource,
 		NewNamedNetworkResource,
 		NewPolicyDeploymentResource,
 		NewSegmentResource,
@@ -289,6 +336,11 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		NewPathsDataSource,
 		NewPolicyChangesDataSource,
 		NewWorkRequestDataSource,
+
+		newAWSEnforcementSnapshotDataSource,
+		newEnforcementStatusDataSource,
+		newAWSSecurityGroupChangesDataSource,
+		newAWSSecurityGroupRulesDataSource,
 	}
 }
 
