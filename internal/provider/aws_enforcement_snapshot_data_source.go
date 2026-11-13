@@ -217,10 +217,12 @@ type wireRuleMatch struct {
 }
 
 // wireCustomerGroupChange is a Full control change to one of the customer's own groups; GroupID is its AWS id.
+// A server that predates UnacknowledgedCarriers never sends it.
 type wireCustomerGroupChange struct {
-	GroupID    string               `json:"groupId"`
-	Revoke     []wireRuleMatch      `json:"revoke"`
-	ChangeSets []wireGroupChangeSet `json:"changeSets"`
+	GroupID                string               `json:"groupId"`
+	Revoke                 []wireRuleMatch      `json:"revoke"`
+	ChangeSets             []wireGroupChangeSet `json:"changeSets"`
+	UnacknowledgedCarriers []string             `json:"unacknowledgedCarriers,omitempty"`
 }
 
 type wireGroupChangeSet struct {

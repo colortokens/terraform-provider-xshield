@@ -55,6 +55,7 @@ type awsSecurityGroupRulesDataSourceModel struct {
 	ReopeningRules           []sgrReopenModel        `tfsdk:"reopening_rules"`
 	UndeclaredRestoringRules []sgrMoveModel          `tfsdk:"undeclared_restoring_rules"`
 	UndeclaredPendingRules   []sgrMoveModel          `tfsdk:"undeclared_pending_rules"`
+	UnacknowledgedCarriers   []types.String          `tfsdk:"unacknowledged_carriers"`
 }
 
 var sgrRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
@@ -156,6 +157,11 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 					"once it is safe. A rule a change already leaves out is not listed. " +
 					"`direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. " +
 					"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination."},
+			"unacknowledged_carriers": schema.ListAttribute{Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "The names of the resources Xshield does not enforce on, such as a load balancer or a VPC endpoint, " +
+					"that carry the group and that nobody acknowledged when the change was approved, most often because they were " +
+					"attached after it. Each loses the rules Xshield takes out of the group when this workspace applies. Empty when " +
+					"Xshield names none, and from a platform that does not report them."},
 		},
 	}
 }
@@ -210,8 +216,14 @@ func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wir
 	data.RevokedRules, data.PendingRules = []types.String{}, []types.String{}
 	data.SecurityGroupID, data.ReopeningRules = types.StringNull(), []sgrReopenModel{}
 	data.UndeclaredRestoringRules, data.UndeclaredPendingRules = []sgrMoveModel{}, []sgrMoveModel{}
+	data.UnacknowledgedCarriers = []types.String{}
 	if change != nil && change.GroupID != "" {
 		data.SecurityGroupID = types.StringValue(change.GroupID)
+	}
+	if change != nil {
+		for _, carrier := range change.UnacknowledgedCarriers {
+			data.UnacknowledgedCarriers = append(data.UnacknowledgedCarriers, types.StringValue(carrier))
+		}
 	}
 	for _, dir := range []struct {
 		name     string
