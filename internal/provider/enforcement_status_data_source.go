@@ -142,8 +142,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"has never read the size of, or a failed read of the region's prefix lists by the cloud connector. Xshield's count " +
 					"of the rules of each group whose rules name such a list, or any list while the read fails, against the quota of " +
 					"rules per security group is a guess until the connector reads them, so AWS may refuse those rules as over the " +
-					"quota. Its message names the lists and the groups, an Auto Scaling group by the handle of the group its launch " +
-					"template carries, such as `asg/web`, ten of each and how many more. " +
+					"quota. Its message names the lists, and the groups by their names in AWS, such as `ct-policy-0a1b2c3d4e5f`, ten of " +
+					"each and how many more. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed` or `prefixListSizeUnknown`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld` and `portNotNarrowed` the change set's ID, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
