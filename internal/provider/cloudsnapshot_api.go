@@ -93,6 +93,7 @@ type snapshotAPIError struct {
 	Status           int
 	Code             string
 	Detail           string
+	Advice           string
 }
 
 // Xshield sends this code for an expected absence; a 404 without one, such as
@@ -105,7 +106,26 @@ func isAPIRefusal(err error, status int, code string) bool {
 }
 
 func (e *snapshotAPIError) Error() string {
-	return fmt.Sprintf("%s %s -> %d: %s", e.Method, e.Endpoint, e.Status, e.Detail)
+	msg := fmt.Sprintf("%s %s -> %d: %s", e.Method, e.Endpoint, e.Status, e.Detail)
+	if e.Advice != "" {
+		msg += ". " + e.Advice
+	}
+	return msg
+}
+
+// gatewayBodyLimit is the largest request body whose signature Xshield's gateway checks today.
+const gatewayBodyLimit = 8 << 10
+
+// unauthorizedAdvice names what Xshield's gateway checks, because it answers each failed check alike.
+func unauthorizedAdvice(bodyBytes int) string {
+	advice := "Check that the API key is still active under Settings > API Keys, that tenancy_id, user_id and fingerprint are " +
+		"that key's, and that this machine's clock is right: Xshield refuses a request dated more than 10 seconds before it arrives"
+	if bodyBytes > gatewayBodyLimit {
+		advice += fmt.Sprintf(". This request's body is %d KB, and Xshield's gateway does not yet check the signature of a body "+
+			"over about 8 KB, so sending it again fails the same way: report it to ColorTokens support with this message",
+			(bodyBytes+1023)/1024)
+	}
+	return advice
 }
 
 func (a cloudSnapshotAPI) do(ctx context.Context, method, endpoint string, body []byte, wantStatus int, out any) error {
@@ -123,7 +143,11 @@ func (a cloudSnapshotAPI) do(ctx context.Context, method, endpoint string, body 
 		return fmt.Errorf("%s %s: %w", method, endpoint, err)
 	}
 	if res.StatusCode != wantStatus {
-		return &snapshotAPIError{Method: method, Endpoint: endpoint, Status: res.StatusCode, Code: apiErrorCode(res.Body), Detail: describeAPIError(res.Body)}
+		apiErr := &snapshotAPIError{Method: method, Endpoint: endpoint, Status: res.StatusCode, Code: apiErrorCode(res.Body), Detail: describeAPIError(res.Body)}
+		if res.StatusCode == http.StatusUnauthorized {
+			apiErr.Advice = unauthorizedAdvice(len(body))
+		}
+		return apiErr
 	}
 	if out == nil {
 		return nil

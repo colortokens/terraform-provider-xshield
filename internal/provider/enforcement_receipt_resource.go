@@ -197,6 +197,8 @@ func receiptAdvice(err error) string {
 	case http.StatusNotFound:
 		return "Xshield published no such version for this account and region. Pass snapshot_version from the same " +
 			"xshield_aws_enforcement_snapshot the resources were created from."
+	case http.StatusUnauthorized:
+		return "The resources were created. Once the cause is fixed, run apply again to send the receipt."
 	}
 	return "The resources were created; run apply again to send the receipt."
 }
