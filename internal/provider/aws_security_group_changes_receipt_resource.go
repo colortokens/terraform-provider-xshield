@@ -78,8 +78,8 @@ func (r *awsSecurityGroupChangesReceiptResource) Schema(ctx context.Context, req
 			"and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the " +
 			"change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield " +
 			"refuses that `applying` receipt, and the apply stops before any rule changes.\n\n" +
-			"Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget that ID, so no " +
-			"revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the " +
+			"Changing what it reports sends it again under the same `id`. Destroying the receipt that generated the ID tells " +
+			"Xshield to forget it, so no revert waits on it; destroying one sent under `receipt_id` sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the " +
 			"workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in " +
 			"any configuration, and destroy it.",
 		Attributes: map[string]schema.Attribute{
@@ -104,7 +104,8 @@ func (r *awsSecurityGroupChangesReceiptResource) Schema(ctx context.Context, req
 				Validators: []validator.String{stringvalidator.RegexMatches(groupChangesReceiptID,
 					"must be a lowercase UUID, the id of the receipt sent before the rules")},
 				MarkdownDescription: "The ID to send the receipt under instead of a generated one: on the `applied` receipt, the " +
-					"`id` of the `applying` receipt sent before the same rules, so Xshield matches the two.",
+					"`id` of the `applying` receipt sent before the same rules, so Xshield matches the two. Destroying a receipt " +
+					"that sets it leaves the ID to the receipt that generated it.",
 			},
 			"cloud_account_id": schema.StringAttribute{
 				Required:            true,
@@ -228,8 +229,13 @@ func (r *awsSecurityGroupChangesReceiptResource) receiptsEndpoint(data awsSecuri
 	return r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), append([]string{"customergroupchanges", "receipts"}, id...)...)
 }
 
-// codeNotNarrowing refuses a receipt listing a change set narrowing a group that Xshield no longer publishes so.
-const codeNotNarrowing = "notNarrowing"
+const (
+	// codeNotNarrowing refuses a receipt listing a change set narrowing a group that Xshield no longer publishes so.
+	codeNotNarrowing = "notNarrowing"
+	// codeChangeSetsChanged refuses an applying receipt listing a change set attaching or restoring a group that Xshield
+	// no longer publishes so.
+	codeChangeSetsChanged = "changeSetsChanged"
+)
 
 // groupChangesReceiptAdvice says what the apply did: an applying receipt is sent before the rules, which wait for it.
 func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
@@ -237,6 +243,8 @@ func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
 	switch {
 	case isAPIRefusal(err, http.StatusConflict, codeNotNarrowing):
 		return notNarrowingAdvice(body, applying)
+	case isAPIRefusal(err, http.StatusConflict, codeChangeSetsChanged) && applying:
+		return changeSetsChangedAdvice(body)
 	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished) && applying:
 		return "Xshield has no published snapshot for this account and region, so the changes this plan read no longer exist. " +
 			"No rule was changed. Run a new plan and apply it."
@@ -275,6 +283,28 @@ func notNarrowingAdvice(body wireGroupChangesReceipt, applying bool) string {
 		return advice + ". No rule was changed. Run a new plan and apply it."
 	}
 	return advice + ", and this apply has taken " + its + " moved rules out of " + where + ": run a new plan and apply it now to put them back."
+}
+
+// changeSetsChangedAdvice names what the receipt listed other than narrowing; Xshield's refusal names which of those it
+// no longer publishes as listed.
+func changeSetsChangedAdvice(body wireGroupChangesReceipt) string {
+	var listed []string
+	for _, g := range body.Groups {
+		for _, cs := range g.ChangeSets {
+			if cs.State != changeSetNarrowing {
+				listed = append(listed, fmt.Sprintf("change set %s as %s %s", cs.ID, cs.State, g.GroupID))
+			}
+		}
+	}
+	lead := "a change set this plan read, as its refusal names: its revert ended or it was"
+	switch {
+	case len(listed) == 1:
+		lead = listed[0] + ": its revert ended or it was"
+	case len(listed) > 1:
+		lead = "one or more of the change sets this plan read, as its refusal names (" + strings.Join(listed, ", ") +
+			"): their reverts ended or they were"
+	}
+	return "Xshield no longer publishes " + lead + " withdrawn after this plan was made. No rule was changed. Run a new plan and apply it."
 }
 
 // send reports whether Xshield may hold the receipt now, which it does unless it answered with a refusal.
@@ -337,10 +367,12 @@ func (r *awsSecurityGroupChangesReceiptResource) Update(ctx context.Context, req
 func (r *awsSecurityGroupChangesReceiptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 }
 
+// Delete forgets the id only for the receipt that generated it. One sent under receipt_id shares the id with the receipt
+// sent before the same rules, whose report must outlive a replacement of this one.
 func (r *awsSecurityGroupChangesReceiptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var data awsSecurityGroupChangesReceiptModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
+	if resp.Diagnostics.HasError() || !data.ReceiptID.IsNull() {
 		return
 	}
 	err := r.api.do(ctx, http.MethodDelete, r.receiptsEndpoint(data, url.PathEscape(data.ID.ValueString())), nil, http.StatusNoContent, nil)

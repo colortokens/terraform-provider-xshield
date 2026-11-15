@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Tells Xshield which changes to your own security groups a workspace applies. The aws-security-group-rules module declares two for each group an approved Full control change applies to, under one ID: one with stage = "applying" that the group's rules depend on, so it is sent before any rule changes, and one with stage = "applied" that depends on the rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
   When a change is reverted, Xshield keeps the access it moved into ct-cohort- groups until every receipt ID that reported the change narrowing a group sends an applied receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that applying receipt, and the apply stops before any rule changes.
-  Changing what it reports sends it again under the same id. Destroying it tells Xshield to forget that ID, so no revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
+  Changing what it reports sends it again under the same id. Destroying the receipt that generated the ID tells Xshield to forget it, so no revert waits on it; destroying one sent under receipt_id sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 ---
 
 # xshield_aws_security_group_changes_receipt (Resource)
@@ -14,7 +14,7 @@ Tells Xshield which changes to your own security groups a workspace applies. The
 
 When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that `applying` receipt, and the apply stops before any rule changes.
 
-Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget that ID, so no revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
+Changing what it reports sends it again under the same `id`. Destroying the receipt that generated the ID tells Xshield to forget it, so no revert waits on it; destroying one sent under `receipt_id` sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 
 ## Example Usage
 
@@ -73,7 +73,7 @@ resource "xshield_aws_security_group_changes_receipt" "applied" {
 ### Optional
 
 - `label` (String) What Xshield's notices call this receipt besides its `id`, such as the workspace that sends it: at most 256 letters, digits, spaces and `. _ : / @ -`. Defaults to the HCP Terraform or Terraform Enterprise workspace's name, `TFC_WORKSPACE_NAME`, and is null where that is not set.
-- `receipt_id` (String) The ID to send the receipt under instead of a generated one: on the `applied` receipt, the `id` of the `applying` receipt sent before the same rules, so Xshield matches the two.
+- `receipt_id` (String) The ID to send the receipt under instead of a generated one: on the `applied` receipt, the `id` of the `applying` receipt sent before the same rules, so Xshield matches the two. Destroying a receipt that sets it leaves the ID to the receipt that generated it.
 
 ### Read-Only
 

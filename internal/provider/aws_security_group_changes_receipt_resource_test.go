@@ -341,7 +341,8 @@ func TestAReceiptIsSentUnderOneIDAsTheContractSaysUntilItIsDestroyed(t *testing.
 }
 
 // The receipt sent once the rules are applied goes under the id of the one sent before them, so Xshield matches the
-// two, and destroying it forgets that id.
+// two. Destroying it sends nothing: replacing it alone must not forget what that id reports, and the receipt that
+// generated the id forgets it when destroyed, after the rules that depend on it.
 func TestAnAppliedReceiptIsSentUnderItsApplyingReceiptsID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -368,7 +369,6 @@ func TestAnAppliedReceiptIsSentUnderItsApplyingReceiptsID(t *testing.T) {
 
 	want := []signedRequest{
 		{http.MethodPost, receiptsPath, []byte(contractBody(applyingReceiptID, "applied", "", 1, `{"id":"cs-1","state":"narrowing"}`))},
-		{http.MethodDelete, receiptsPath + "/" + applyingReceiptID, nil},
 	}
 	seen := g.requests()
 	if len(seen) != len(want) {
@@ -578,6 +578,42 @@ func TestARefusalOfSeveralNarrowingChangeSetsNamesEach(t *testing.T) {
 		"plan was made. No rule was changed. Run a new plan and apply it."
 	if !resp.Diagnostics.HasError() || !strings.HasSuffix(resp.Diagnostics.Errors()[0].Detail(), want) {
 		t.Errorf("diagnostics %v, want the detail to end:\n%s", resp.Diagnostics, want)
+	}
+}
+
+// A plan read during a revert lists the change set restoring or attaching. Once that revert ends, Xshield refuses the
+// receipt sent before the rules, which then wait: the advice is a new plan, since applying this one again is refused again.
+func TestAnApplyingReceiptListingAChangeSetNoLongerPublishedAsReadSaysToPlanAgain(t *testing.T) {
+	t.Parallel()
+	const refusal = `{"status":409,"code":"changeSetsChanged","message":"Xshield no longer publishes change set cs-2 as restoring sg-0web"}`
+	for name, test := range map[string]struct {
+		groups map[string]map[string]string
+		want   string
+	}{
+		"one listed": {map[string]map[string]string{"sg-0web": {"cs-1": "narrowing", "cs-2": "restoring"}},
+			"Xshield no longer publishes change set cs-2 as restoring sg-0web: its revert ended or it was withdrawn after this " +
+				"plan was made. No rule was changed. Run a new plan and apply it."},
+		"several listed": {map[string]map[string]string{"sg-0web": {"cs-2": "restoring"}, "sg-0db": {"cs-3": "attaching", "cs-4": "narrowing"}},
+			"Xshield no longer publishes one or more of the change sets this plan read, as its refusal names (change set cs-3 as " +
+				"attaching sg-0db, change set cs-2 as restoring sg-0web): their reverts ended or they were withdrawn after this " +
+				"plan was made. No rule was changed. Run a new plan and apply it."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, objectType, absent := receiptResourceSchema(t)
+			r.api = apiAnswering(t, http.StatusConflict, refusal)
+			planned := narrowingWeb()
+			planned.stage = "applying"
+			planned.groups = test.groups
+			resp := resource.CreateResponse{State: absent}
+			r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &resp)
+			if !resp.Diagnostics.HasError() || !resp.State.Raw.IsNull() {
+				t.Fatalf("error %v and state %v, want an error and no receipt in state", resp.Diagnostics, resp.State.Raw)
+			}
+			if detail := resp.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, test.want) || strings.Contains(detail, "Apply again") {
+				t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, test.want)
+			}
+		})
 	}
 }
 
