@@ -43,6 +43,9 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   description                  = each.value.description
   tags                         = each.value.tags
 
+  # Xshield refuses the applying receipt of a plan made before a revert, so no rule changes in such an apply.
+  depends_on = [xshield_aws_security_group_changes_receipt.applying]
+
   lifecycle {
     precondition {
       condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
@@ -64,6 +67,9 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   referenced_security_group_id = each.value.referenced_security_group_id
   description                  = each.value.description
   tags                         = each.value.tags
+
+  # Xshield refuses the applying receipt of a plan made before a revert, so no rule changes in such an apply.
+  depends_on = [xshield_aws_security_group_changes_receipt.applying]
 
   lifecycle {
     precondition {

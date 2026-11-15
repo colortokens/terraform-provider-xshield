@@ -52,6 +52,11 @@ mock_provider "xshield" {
       pending_rules = []
     }
   }
+
+  # A receipt's ID is a lowercase UUID, which the applied receipt's receipt_id must be.
+  mock_resource "xshield_aws_security_group_changes_receipt" {
+    defaults = { id = "0f8fad5b-d9cb-469f-a165-70867728950e" }
+  }
 }
 
 variables {

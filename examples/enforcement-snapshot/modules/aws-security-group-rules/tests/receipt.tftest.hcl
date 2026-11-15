@@ -21,6 +21,11 @@ mock_provider "xshield" {
       pending_rules = []
     }
   }
+
+  # A receipt's ID is a lowercase UUID, which the applied receipt's receipt_id must be.
+  mock_resource "xshield_aws_security_group_changes_receipt" {
+    defaults = { id = "0f8fad5b-d9cb-469f-a165-70867728950e" }
+  }
 }
 
 variables {
@@ -34,7 +39,7 @@ variables {
   }
 }
 
-run "a_changed_group_reports_the_read_its_rules_came_from" {
+run "a_changed_group_reports_the_read_its_rules_came_from_before_and_after_them" {
   command = plan
 
   variables {
@@ -43,40 +48,46 @@ run "a_changed_group_reports_the_read_its_rules_came_from" {
   }
 
   assert {
-    condition     = length(xshield_aws_security_group_changes_receipt.this) == 1
-    error_message = "a group an approved change applies to must send one receipt"
+    condition     = length(xshield_aws_security_group_changes_receipt.applying) == 1 && length(xshield_aws_security_group_changes_receipt.applied) == 1
+    error_message = "a group an approved change applies to must send one applying and one applied receipt"
   }
   assert {
     condition = (
-      xshield_aws_security_group_changes_receipt.this[0].cloud_account_id == data.xshield_aws_security_group_rules.this[0].cloud_account_id
-      && xshield_aws_security_group_changes_receipt.this[0].region == data.xshield_aws_security_group_rules.this[0].region
-      && xshield_aws_security_group_changes_receipt.this[0].version == data.xshield_aws_security_group_rules.this[0].version
-      && xshield_aws_security_group_changes_receipt.this[0].version == "v7"
+      xshield_aws_security_group_changes_receipt.applying[0].stage == "applying"
+      && xshield_aws_security_group_changes_receipt.applied[0].stage == "applied"
+      && xshield_aws_security_group_changes_receipt.applying[0].receipt_id == null
     )
-    error_message = "the receipt must report the account, region and version of the read the group's rules came from"
+    error_message = "one receipt must be sent at stage applying under a generated ID and the other at stage applied"
   }
   assert {
-    condition     = xshield_aws_security_group_changes_receipt.this[0].groups == tomap({ (data.xshield_aws_security_group_rules.this[0].security_group_id) = data.xshield_aws_security_group_rules.this[0].change_sets })
-    error_message = "the receipt must report the group by the ID Xshield served, with each change set in the state it was read in"
-  }
-  assert {
-    condition     = xshield_aws_security_group_changes_receipt.this[0].groups == tomap({ sg-0example = tomap({ cs-1 = "narrowing", cs-2 = "restoring" }) })
-    error_message = "the receipt must list both change sets of sg-0example in the states the mock served"
-  }
-  assert {
-    condition     = xshield_aws_security_group_changes_receipt.this[0].label == "owner-web"
-    error_message = "the receipt must carry the label the caller passes"
+    condition = alltrue([for receipt in [xshield_aws_security_group_changes_receipt.applying[0], xshield_aws_security_group_changes_receipt.applied[0]] : (
+      receipt.cloud_account_id == data.xshield_aws_security_group_rules.this[0].cloud_account_id
+      && receipt.region == data.xshield_aws_security_group_rules.this[0].region
+      && receipt.version == data.xshield_aws_security_group_rules.this[0].version
+      && receipt.version == "v7"
+      && receipt.groups == tomap({ (data.xshield_aws_security_group_rules.this[0].security_group_id) = data.xshield_aws_security_group_rules.this[0].change_sets })
+      && receipt.groups == tomap({ sg-0example = tomap({ cs-1 = "narrowing", cs-2 = "restoring" }) })
+      && receipt.label == "owner-web"
+    )])
+    error_message = "both receipts must report the account, region, version and change sets of the read the group's rules came from, by the group ID Xshield served, with the label passed"
   }
 }
 
-run "a_changed_group_applies_its_rules_and_its_receipt" {
+run "a_changed_group_applies_its_rules_between_two_receipts_under_one_id" {
   variables {
     xshield_changes = { cloud_account_id = "111111111111", region = "us-east-1", groups = { web = ["vpc-0example"] } }
   }
 
   assert {
-    condition     = toset(keys(aws_vpc_security_group_ingress_rule.this)) == toset(["ssh_office"]) && length(xshield_aws_security_group_changes_receipt.this) == 1
-    error_message = "the apply must declare the rules Xshield serves and send one receipt"
+    condition     = toset(keys(aws_vpc_security_group_ingress_rule.this)) == toset(["ssh_office"])
+    error_message = "the apply must declare the rules Xshield serves"
+  }
+  assert {
+    condition = (
+      xshield_aws_security_group_changes_receipt.applied[0].receipt_id == xshield_aws_security_group_changes_receipt.applying[0].id
+      && xshield_aws_security_group_changes_receipt.applied[0].receipt_id != null
+    )
+    error_message = "the applied receipt must be sent under the applying receipt's ID"
   }
 }
 
@@ -88,7 +99,7 @@ run "a_group_no_change_applies_to_sends_no_receipt" {
   }
 
   assert {
-    condition     = length(xshield_aws_security_group_changes_receipt.this) == 0
+    condition     = length(xshield_aws_security_group_changes_receipt.applying) + length(xshield_aws_security_group_changes_receipt.applied) == 0
     error_message = "a group no change applies to must send no receipt"
   }
 }
@@ -101,7 +112,7 @@ run "nothing_published_sends_no_receipt" {
   }
 
   assert {
-    condition     = length(xshield_aws_security_group_changes_receipt.this) == 0
+    condition     = length(xshield_aws_security_group_changes_receipt.applying) + length(xshield_aws_security_group_changes_receipt.applied) == 0
     error_message = "with nothing published the module must send no receipt"
   }
 }
