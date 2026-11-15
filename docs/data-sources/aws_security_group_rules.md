@@ -84,6 +84,7 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
 
 ### Read-Only
 
+- `change_sets` (Map of String) Each change set that applies to the group, by its ID, with its state as Xshield serves it: `attaching`, `narrowing` or `restoring`. Once the group's rules are applied, report them to Xshield with `security_group_id` and `version` through `xshield_aws_security_group_changes_receipt`, as the rules module does. Empty when no approved change applies to the group.
 - `egress_rules` (Map of Object) The declared egress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_egress_rule`, not the input. Each holds what its declared rule holds: `ip_protocol`, `from_port`, `to_port`, `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`, `description` and `tags`. (see [below for nested schema](#nestedatt--egress_rules))
 - `ingress_rules` (Map of Object) The declared ingress rules to keep, under the same keys and with the same arguments. Declare these with `aws_vpc_security_group_ingress_rule`, not the input. Each holds what its declared rule holds: `ip_protocol`, `from_port`, `to_port`, `cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`, `description` and `tags`. (see [below for nested schema](#nestedatt--ingress_rules))
 - `pending_rules` (List of String) The declared rules an approved change will leave out once every workload that keeps them carries its cohort.

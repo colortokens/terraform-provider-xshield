@@ -56,6 +56,7 @@ type awsSecurityGroupRulesDataSourceModel struct {
 	UndeclaredRestoringRules []sgrMoveModel          `tfsdk:"undeclared_restoring_rules"`
 	UndeclaredPendingRules   []sgrMoveModel          `tfsdk:"undeclared_pending_rules"`
 	UnacknowledgedCarriers   []types.String          `tfsdk:"unacknowledged_carriers"`
+	ChangeSets               map[string]string       `tfsdk:"change_sets"`
 }
 
 var sgrRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
@@ -162,6 +163,11 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 					"that carry the group and that nobody acknowledged when the change was approved, most often because they were " +
 					"attached after it. Each loses the rules Xshield takes out of the group when this workspace applies. Empty when " +
 					"Xshield names none, and from a platform that does not report them."},
+			"change_sets": schema.MapAttribute{Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "Each change set that applies to the group, by its ID, with its state as Xshield serves it: " +
+					"`attaching`, `narrowing` or `restoring`. Once the group's rules are applied, report them to Xshield with " +
+					"`security_group_id` and `version` through `xshield_aws_security_group_changes_receipt`, as the rules module does. " +
+					"Empty when no approved change applies to the group."},
 		},
 	}
 }
@@ -217,6 +223,12 @@ func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wir
 	data.SecurityGroupID, data.ReopeningRules = types.StringNull(), []sgrReopenModel{}
 	data.UndeclaredRestoringRules, data.UndeclaredPendingRules = []sgrMoveModel{}, []sgrMoveModel{}
 	data.UnacknowledgedCarriers = []types.String{}
+	data.ChangeSets = map[string]string{}
+	if change != nil {
+		for _, cs := range change.ChangeSets {
+			data.ChangeSets[cs.ID] = cs.State
+		}
+	}
 	if change != nil && change.GroupID != "" {
 		data.SecurityGroupID = types.StringValue(change.GroupID)
 	}
