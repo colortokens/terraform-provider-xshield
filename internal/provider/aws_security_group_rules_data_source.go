@@ -165,9 +165,11 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 					"Xshield names none, and from a platform that does not report them."},
 			"change_sets": schema.MapAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "Each change set that applies to the group, by its ID, with its state as Xshield serves it: " +
-					"`attaching`, `narrowing` or `restoring`. Once the group's rules are applied, report them to Xshield with " +
-					"`security_group_id` and `version` through `xshield_aws_security_group_changes_receipt`, as the rules module does. " +
-					"Empty when no approved change applies to the group."},
+					"`attaching`, `narrowing` or `restoring`. A change set narrowing the group reads `attaching` when none of the " +
+					"declared rules is one it moves: several workspaces can declare one group's rules, and only one that declares " +
+					"a moved rule takes it out. Report them to Xshield with `security_group_id` and `version` through " +
+					"`xshield_aws_security_group_changes_receipt`, before and after the group's rules are applied, as the rules " +
+					"module does. Empty when no approved change applies to the group."},
 		},
 	}
 }
@@ -226,7 +228,7 @@ func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wir
 	data.ChangeSets = map[string]string{}
 	if change != nil {
 		for _, cs := range change.ChangeSets {
-			data.ChangeSets[cs.ID] = cs.State
+			data.ChangeSets[cs.ID] = changeSetStateForDeclared(data, cs)
 		}
 	}
 	if change != nil && change.GroupID != "" {
@@ -263,6 +265,25 @@ func filterDeclaredRules(data *awsSecurityGroupRulesDataSourceModel, change *wir
 		data.UndeclaredRestoringRules = undeclaredMoves(data, change, changeSetRestoring)
 		data.UndeclaredPendingRules = undeclaredMoves(data, change, changeSetAttaching)
 	}
+}
+
+// changeSetStateForDeclared reads a narrowing change set as attaching for code that declares none of the rules it moves:
+// that code takes none of them out, so a revert need not wait for its receipts.
+func changeSetStateForDeclared(data *awsSecurityGroupRulesDataSourceModel, cs wireGroupChangeSet) string {
+	if cs.State != changeSetNarrowing {
+		return cs.State
+	}
+	for _, dir := range []struct {
+		name     string
+		declared map[string]sgrRuleModel
+	}{{"ingress", data.DeclaredIngressRules}, {"egress", data.DeclaredEgressRules}} {
+		for _, rule := range dir.declared {
+			if matchesAnyMove(dir.name, rule, cs.Moves) {
+				return changeSetNarrowing
+			}
+		}
+	}
+	return changeSetAttaching
 }
 
 func pendingMove(direction string, rule sgrRuleModel, change *wireCustomerGroupChange) bool {

@@ -199,6 +199,9 @@ func gatewayVerifies(r *http.Request, body []byte, pub *rsa.PublicKey) error {
 
 func versionOf(n int) string { return strings.Repeat(fmt.Sprintf("%02x", n), 64) }
 
+// httpsAllMove is the rule the served change sets move, which the configurations declare.
+const httpsAllMove = `{"direction":"ingress","ipProtocol":"tcp","fromPort":443,"toPort":443,"cidrIpv4":"0.0.0.0/0"}`
+
 func servedChanges(version int, changeSets string) string {
 	return fmt.Sprintf(`{"cloudAccountId":"123456789012","region":"us-east-1","version":%q,"customerGroupChanges":{`+
 		`"vpc-0web/web":{"groupId":"sg-0web","revoke":[],"changeSets":[%s]}}}`, versionOf(version), changeSets)
@@ -735,6 +738,10 @@ data "xshield_aws_security_group_rules" "web" {
   region           = "us-east-1"
   vpc_id           = "vpc-0web"
   group_name       = "web"
+
+  declared_ingress_rules = {
+    https_all = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
+  }
 }
 
 resource "xshield_aws_security_group_changes_receipt" "web" {
@@ -790,7 +797,7 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tfresource.TestStep{
 			{
-				PreConfig: func() { g.serve(servedChanges(1, `{"id":"cs-1","state":"narrowing","moves":[]}`)) },
+				PreConfig: func() { g.serve(servedChanges(1, `{"id":"cs-1","state":"narrowing","moves":[`+httpsAllMove+`]}`)) },
 				Config:    config,
 				ConfigStateChecks: []statecheck.StateCheck{
 					sameID.AddStateValue(changesReceiptAddress, tfjsonpath.New("id")),
@@ -807,7 +814,7 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 			},
 			{
 				PreConfig: func() {
-					g.serve(servedChanges(2, `{"id":"cs-2","state":"attaching","moves":[]},{"id":"cs-1","state":"restoring","moves":[]}`))
+					g.serve(servedChanges(2, `{"id":"cs-2","state":"attaching","moves":[`+httpsAllMove+`]},{"id":"cs-1","state":"restoring","moves":[`+httpsAllMove+`]}`))
 				},
 				Config: config,
 				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
@@ -817,11 +824,11 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 				Check:             expectReceiptPosted(g, 2, `{"id":"cs-1","state":"restoring"},{"id":"cs-2","state":"attaching"}`),
 			},
 			{
-				PreConfig: func() { g.serve(servedChanges(3, `{"id":"cs-2","state":"narrowing","moves":[]}`)) },
+				PreConfig: func() { g.serve(servedChanges(3, `{"id":"cs-2","state":"narrowing","moves":[`+httpsAllMove+`]}`)) },
 				Config:    config,
 				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 					plancheck.ExpectResourceAction(changesReceiptAddress, plancheck.ResourceActionUpdate),
-					changesServedBeforeApply{g: g, changes: servedChanges(4, `{"id":"cs-2","state":"restoring","moves":[]}`), at: &savedPlanAppliedAt},
+					changesServedBeforeApply{g: g, changes: servedChanges(4, `{"id":"cs-2","state":"restoring","moves":[`+httpsAllMove+`]}`), at: &savedPlanAppliedAt},
 				}},
 				ExpectNonEmptyPlan: true,
 				ConfigStateChecks:  []statecheck.StateCheck{sameID.AddStateValue(changesReceiptAddress, tfjsonpath.New("id"))},
@@ -902,6 +909,10 @@ data "xshield_aws_security_group_rules" "web" {
   region           = "us-east-1"
   vpc_id           = "vpc-0web"
   group_name       = "web"
+
+  declared_ingress_rules = {
+    https_all = { ip_protocol = "tcp", from_port = 443, to_port = 443, cidr_ipv4 = "0.0.0.0/0" }
+  }
 }
 
 resource "xshield_aws_security_group_changes_receipt" "applying" {
@@ -972,7 +983,7 @@ func TestAccAPlanMadeBeforeARevertIsRefusedBeforeItsRulesChange(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []tfresource.TestStep{
 			{
-				PreConfig: func() { g.serve(servedChanges(1, `{"id":"cs-1","state":"attaching","moves":[]}`)) },
+				PreConfig: func() { g.serve(servedChanges(1, `{"id":"cs-1","state":"attaching","moves":[`+httpsAllMove+`]}`)) },
 				Config:    config,
 				Check: tfresource.ComposeTestCheckFunc(
 					expectReceiptsPosted(g, 1, `{"id":"cs-1","state":"attaching"}`),
@@ -980,11 +991,11 @@ func TestAccAPlanMadeBeforeARevertIsRefusedBeforeItsRulesChange(t *testing.T) {
 				),
 			},
 			{
-				PreConfig: func() { g.serve(servedChanges(2, `{"id":"cs-1","state":"narrowing","moves":[]}`)) },
+				PreConfig: func() { g.serve(servedChanges(2, `{"id":"cs-1","state":"narrowing","moves":[`+httpsAllMove+`]}`)) },
 				Config:    config,
 				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 					plancheck.ExpectResourceAction("terraform_data.rules", plancheck.ResourceActionUpdate),
-					changesServedBeforeApply{g: g, changes: servedChanges(3, `{"id":"cs-1","state":"restoring","moves":[]}`), at: &refusedAt},
+					changesServedBeforeApply{g: g, changes: servedChanges(3, `{"id":"cs-1","state":"restoring","moves":[`+httpsAllMove+`]}`), at: &refusedAt},
 				}},
 				ExpectError: wrappedText("-> 409", "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or "+
 					"withdrawn after this plan was made. No rule was changed. Run a new plan and apply it."),
