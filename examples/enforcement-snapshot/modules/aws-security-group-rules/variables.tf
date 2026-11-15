@@ -62,7 +62,7 @@ variable "fail_on_unacknowledged_carriers" {
 }
 
 variable "receipt_label" {
-  description = "What Xshield's notices call the receipt this module sends for the group, besides its ID: at most 256 letters, digits, spaces and . _ : / @ -. Null labels it with the HCP Terraform or Terraform Enterprise workspace's name where the run has one."
+  description = "What Xshield's notices call the receipts this module sends for the group, besides their shared ID: at most 256 letters, digits, spaces and . _ : / @ -. Null labels it with the HCP Terraform or Terraform Enterprise workspace's name where the run has one."
   type        = string
   default     = null
 }

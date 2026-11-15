@@ -347,7 +347,7 @@ What a plan of this workspace shows:
 - When an approved change applies to the group, the module asks Xshield which declared rules to keep. A group is matched by its name and its VPC, so a group of the same name in another VPC is not affected. A rule is matched by what it allows: its direction, protocol, ports and source or destination. Its key plays no part in the match.
 - A rule Xshield narrows stays in the plan until every workload that still needs it carries a `ct-cohort-` group that keeps that access. The enforcement workspace creates those groups, so run it first. The next plan of this workspace then removes the rule, and no workload loses access part-way.
 - Until this workspace has applied, the group keeps its broad rule. `xshield_enforcement_status` reads `waiting` while the change waits for this workspace, and the monitor reports `owner_apply_overdue` when the wait passes `max_owner_apply_age`.
-- While an approved change applies to the group, the plan also shows an `xshield_aws_security_group_changes_receipt`. The apply sends it once the group's rules are applied, to tell Xshield which change sets the rules came from: see [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace).
+- While an approved change applies to the group, the plan also shows two `xshield_aws_security_group_changes_receipt` resources, `applying` and `applied`. They tell Xshield which change sets the rules came from. The apply sends `applying` before any rule of the group changes and `applied` once the rules are applied: see [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace).
 
 Keep every rule in the map, before and after Xshield leaves it out. If you delete a rule yourself before Xshield leaves it out, the workloads that still rely on it lose that traffic early. If the change is reverted, the rule comes back only while your code still declares it. Do not add a rule that gives back traffic a change took away: every workload in the group gets that traffic again.
 
@@ -365,30 +365,47 @@ A plan of this workspace fails when Xshield cannot be reached. A plan that stops
 
 #### How a revert waits for this workspace
 
-While an approved change applies to a group, the module also declares an `xshield_aws_security_group_changes_receipt`. The apply sends it once the group's rules are applied. It tells Xshield which change sets the rules came from, and the state each was in when the plan read it: `attaching`, `narrowing` or `restoring`. It keeps one ID for the module's life, and each apply that changes what it reports sends it again under that ID.
+While an approved change applies to a group, the module also declares two `xshield_aws_security_group_changes_receipt` resources. Both tell Xshield which change sets the group's rules came from, and the state each was in when the plan read it: `attaching`, `narrowing` or `restoring`.
+
+- The apply sends the `applying` receipt first, before any rule of the group changes: the rules wait for it.
+- The apply sends the `applied` receipt once the group's rules are applied.
+
+The two share one ID, kept for the module's life, and each apply that changes what they report sends both again under that ID. The module reports a change set as `narrowing` only when the group's code declares a rule the set takes out. Otherwise it reports the set as `attaching`, and a revert of it does not wait for this workspace.
 
 When a change that narrowed the group is reverted, every workload keeps the access its `ct-cohort-` group gave until both of these are true:
 
-- each receipt that reported the change narrowing the group has been sent again, after the revert, without it narrowing the group;
+- each receipt ID that reported the change narrowing the group has sent an `applied` receipt, after the revert, without it narrowing the group;
 - Xshield then sees the group holding the rule again.
 
 So after a revert, plan and apply each workspace that owns such a group. Until then `xshield_enforcement_status` reads `waiting`. A `changeSetHeld` notice names each workspace by its receipt's label and ID.
 
-A receipt sends what its plan read. A plan saved before the revert and applied after it takes the rule out of the group again, and its receipt still reports the change narrowing the group. Xshield catches it:
+A receipt sends what its plan read, so a plan saved before a revert still reports the change narrowing the group. Once the revert has been requested, Xshield refuses that plan's `applying` receipt, and the apply stops before any rule changes:
 
-- it keeps the access;
-- the notice says the module applied a plan made before the revert.
+```text
+Xshield no longer publishes change set <change set ID> as narrowing <group ID>: it was reverted or withdrawn after this plan was made. No rule was changed. Run a new plan and apply it.
+```
 
-Run a new plan in that workspace and apply it. The rule comes back, and the receipt reports the revert.
+Run a new plan in that workspace and apply it.
 
-A receipt's label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. Elsewhere, set `receipt_label` in the module call, for example to the pipeline's name, so that the notice says which workspace to apply. If Xshield cannot take the receipt, the apply fails after the group's rules are applied. Fix the cause and apply again: the apply sends the receipt. Until Xshield has it, a revert of a change it reports keeps the access.
+A revert can also be requested while such an apply runs, after Xshield took its `applying` receipt. The apply then takes the rule out of the group. The revert already waits for this workspace, so every workload Xshield enforces on keeps the access through its `ct-cohort-` group. The notice says the module applied a plan made before the revert. Run a new plan in that workspace and apply it: the rule comes back, and the `applied` receipt reports the revert.
 
-Removing the module call, or destroying the workspace, destroys the receipt, and Xshield forgets it. A workspace deleted without being destroyed leaves its receipt behind, and a revert of a change it reported keeps waiting for it. The notice names the receipt's ID. To remove the receipt:
+If Xshield no longer publishes the change set at all when the `applied` receipt is sent, it refuses that receipt too, and the error says the apply has taken the moved rules out of the group. Run a new plan and apply it at once to put them back.
+
+A receipt's label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. Elsewhere, set `receipt_label` in the module call, for example to the pipeline's name, so that the notice says which workspace to apply. If Xshield cannot take the `applying` receipt, the apply stops before any rule of the group changes: fix the cause and apply again. If Xshield cannot take the `applied` receipt, the apply fails after the group's rules are applied. Fix the cause and apply again: the apply sends the receipt. Until Xshield has it, a revert of a change it reports keeps the access.
+
+Removing the module call, or destroying the workspace, destroys both receipts, and Xshield forgets their ID. Xshield keeps waiting for a receipt ID that no workspace declares any more, when a revert is of a change that ID reported narrowing a group. That happens when:
+
+- the receipts are taken out of the workspace's state with `terraform state rm`, or by a `removed` block that does not destroy them;
+- the workspace's state is rolled back to a version that holds another receipt ID, or none;
+- the workspace is deleted without being destroyed.
+
+The notice names the receipt's ID. A module's two receipts share that ID, so one import and one destroy make Xshield forget it:
 
 1. In a new directory, configure the `xshield` provider and declare a receipt with any values:
 
    ```hcl
    resource "xshield_aws_security_group_changes_receipt" "orphan" {
+     stage            = "applied"
      cloud_account_id = "123456789012"
      region           = "us-east-1"
      version          = "orphan"
@@ -404,7 +421,7 @@ Removing the module call, or destroying the workspace, destroys the receipt, and
    terraform destroy
    ```
 
-A module version from before receipts sends none. A revert of a change no receipt reported narrowing the group waits only until Xshield sees the group holding the rule again. A plan saved before the revert is then not caught: once the access has gone, applying it takes the rule out again. The notice for such a group suggests upgrading. Upgrade the module's `ref`, and the `colortokens/xshield` provider, to versions that have `xshield_aws_security_group_changes_receipt`. The first plan after the upgrade adds a receipt for each group a change applies to, and changes nothing in AWS.
+A module version from before receipts sends none. A revert of a change no receipt reported narrowing the group waits only until Xshield sees the group holding the rule again. A plan saved before the revert is then not caught. Applied after the revert has ended, it takes the rule out again, and the workloads that relied on the rule lose that access: no `ct-cohort-` group keeps it any more. The notice for such a group suggests upgrading. Upgrade the module's `ref`, and the `colortokens/xshield` provider, to versions that have `xshield_aws_security_group_changes_receipt`. The first plan after the upgrade adds the two receipts for each group a change applies to, and changes nothing in AWS.
 
 ### 5. Monitor
 
@@ -526,8 +543,10 @@ Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and
 | The enforcement pipeline stops running | No change. Nothing newly approved is applied. | `last_checked_at` stops moving, whatever `state` says. The monitor reports `pipeline_stopped` after `max_run_gap`. | Start the pipeline again. The monitor runs as a workspace of its own, so it still reports. |
 | Under Full control, the workspace that owns a group has not applied | The group keeps its broad rule, so the change is not in force for that group. No workload loses access. | `state` is `waiting`, and a `changeSetHeld` notice says what the change waits for. The monitor reports `owner_apply_overdue` after `max_owner_apply_age`. | Apply the workspace that owns the group. If it does not declare the group through `modules/aws-security-group-rules` yet, do step 4 first. |
 | Under Full control, a change is reverted and a workspace that owns a group it narrowed has not applied since | The group still lacks the rule the change took out, and every workload keeps the access through its `ct-cohort-` group. | `state` is `waiting`, and a `changeSetHeld` notice names the workspace by its receipt's label and ID. | Plan and apply that workspace. |
-| Under Full control, a plan saved before a revert is applied after it | The apply takes the rule out of the group again. No workload loses access: Xshield keeps its `ct-cohort-` group. | `state` is `waiting`, and a `changeSetHeld` notice says the workspace applied a plan made before the revert. | Run a new plan in that workspace and apply it. |
-| Under Full control, a workspace that owns a group is deleted without being destroyed | The group's rules stay as that workspace last applied them. | A revert of a change its receipt reported waits, and the `changeSetHeld` notice names the receipt's ID. | Import the receipt and destroy it, as [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace) shows. |
+| Under Full control, a plan saved before a revert is applied after the revert was requested | No rule changes: Xshield refuses the apply's `applying` receipt before any rule of the group changes. | The apply fails with `-> 409` and `No rule was changed`. | Run a new plan in that workspace and apply it. |
+| Under Full control, a revert is requested while a workspace applies a plan that narrows its group, after Xshield took the apply's `applying` receipt | The apply takes the rule out of the group. Every workload Xshield enforces on keeps the access through its `ct-cohort-` group, because the revert waits for that workspace. | `state` is `waiting`, and a `changeSetHeld` notice says the workspace applied a plan made before the revert. | Run a new plan in that workspace and apply it. |
+| Under Full control, a workspace whose module version sends no receipts applies a plan saved before a revert, after the revert has ended | The apply takes the rule out of the group again, and the workloads that relied on it lose that access: no `ct-cohort-` group keeps it any more. | No receipt reports the apply. | Run a new plan in that workspace and apply it, which puts the rule back. Then upgrade the module, as [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace) says. |
+| Under Full control, a workspace no longer declares the receipts it sent: they were taken out of its state, its state was rolled back, or it was deleted without being destroyed | The group's rules stay as that workspace last applied them. | A revert of a change the receipt ID reported narrowing a group waits, and the `changeSetHeld` notice names the receipt's ID. | Import the receipt and destroy it, as [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace) shows. |
 | Under Full control, a change narrows a rule of a group that a load balancer, a VPC endpoint or another resource Xshield does not enforce on also carries | When the workspace that owns the group applies, that resource loses the rule with everything else in the group, and it has no `ct-cohort-` group to keep the access. | The change's review named the resource in a `MEMBERS_LOSE_MOVED_RULE` warning, and the change was approved only once it was acknowledged. A resource attached after the approval is named in a warning from the `unacknowledged_carriers` check in the owning workspace's plan. | Before that workspace applies, deploy the change again in Xshield and acknowledge the resource, or give it a group of its own. Once it has lost the rule, revert the change in Xshield and apply the workspace that owns the group, which puts the rule back. Give the resource a group of its own, then approve the change again. |
 | A Full control change is reverted while a port it narrowed stays deployed | Your group again allows more than the port's policy. | A `portNotNarrowed` notice for each workload. The monitor reports `port_not_narrowed`. | Deploy the port again and approve its change, or undeploy the port. |
 | A workspace sets an instance's or an interface's security groups without `ignore_changes` | That workspace's next apply takes Xshield's groups off the instance or interface. Under Full control this can cut access a `ct-cohort-` group kept for the workload. | A `memberUnattached` drift finding of high severity. The monitor reports `drift_high`. | Add `ignore_changes` as in step 3, then run the enforcement workspace to attach the groups again. |
@@ -596,8 +615,11 @@ Deleting such a resource in AWS also clears the error, but only while nothing re
 | `Cannot read the changes Xshield made to customer groups in A/R` | Xshield could not be reached as configured, or the API key's user cannot read cloud snapshots. An account and region with nothing published is not an error: every group keeps the rules its code declares | Check `XSHIELD_SERVER_URL` and the key's role |
 | `Invalid count argument` or `Invalid for_each argument` in a `aws-security-group-rules` module | An approved Full control change applies to a group with this name, and the plan cannot know the group's VPC or one of its declared rules until apply: the same run creates the VPC or a group a rule references, or the module has a `depends_on` with pending changes. Or a change applies to some group in the account and region, and this group's own name is not known until apply, as `name_prefix` gives it on the run that creates the group. The plan stops rather than declare a rule Xshield has left out | Apply the new VPC or group first, for example with `-target`, then plan again; or drop the module's `depends_on`. While no change is published for the account and region, no group stops here |
 | Warning: `Security group <name> is also carried by <resources>`, or the same as an error with `fail_on_unacknowledged_carriers` set | An approved Full control change takes rules out of the group, and each named resource carries the group, is not a workload Xshield enforces on, and was not acknowledged at approval, most often because it was attached since | Deploy the change again in Xshield and acknowledge each resource, or give each a security group of its own, then plan again |
-| `Xshield did not accept the customer group changes receipt` | The group's rules are applied, and Xshield could not be reached, refused the API key, or failed. Until Xshield has the receipt, a revert of a change it reports keeps the access | Fix the cause, such as the key's role, then apply again: the apply sends the receipt |
-| `Xshield did not accept the customer group changes receipt` with `-> 404` and `no published snapshot` | The account and region have no published snapshot any more, so the changes this plan read no longer exist | Run a new plan and apply it |
+| `Xshield did not accept the customer group changes receipt` with `No rule was changed: the group's rules wait for this receipt` | Xshield could not be reached, refused the API key or the `applying` receipt, or failed. The apply stopped before any rule of the group changed | Fix the cause, such as the key's role, then apply again |
+| `Xshield did not accept the customer group changes receipt` with `The group's rules are applied` | The group's rules are applied, and Xshield could not be reached, refused the API key or the `applied` receipt, or failed. Until Xshield has the receipt, a revert of a change it reports keeps the access | Fix the cause, such as the key's role, then apply again: the apply sends the receipt |
+| `Xshield did not accept the customer group changes receipt` with `-> 409` and `No rule was changed. Run a new plan and apply it` | The plan was made before a change set it read as narrowing the group was reverted or withdrawn. Xshield refused the `applying` receipt, and no rule of the group changed | Run a new plan and apply it |
+| `Xshield did not accept the customer group changes receipt` with `-> 409` and `this apply has taken` | Xshield no longer publishes a change set the plan read as narrowing the group. The apply took the set's moved rules out of the group before Xshield refused the `applied` receipt | Run a new plan and apply it now, to put the rules back |
+| `Xshield did not accept the customer group changes receipt` with `-> 404` and `no published snapshot` | The account and region have no published snapshot any more, so the changes this plan read no longer exist. When the error says `No rule was changed`, the `applying` receipt was refused and no rule of the group changed | Run a new plan and apply it |
 | `Xshield did not forget the customer group changes receipt` | Destroying the receipt failed: Xshield could not be reached, refused the API key, or failed. Until it forgets the receipt, a revert of a change it reported keeps waiting | Fix the cause, then destroy again |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
 | Warning: `Xshield lists no entry for <handle>`, with `warn_when_unlisted` set | The resource is new and Xshield has not yet discovered it, Xshield's policy gives it nothing to attach, Xshield refuses it, or the handle is misspelt | Nothing for a new resource. Otherwise compare the handle with the enforcement module's `directory_entries` output, and look for the resource among the `assetRefused` and `groupRefused` notices of `xshield_enforcement_status` |
