@@ -79,11 +79,7 @@ func (a cloudSnapshotAPI) customerGroupChanges(ctx context.Context, account, reg
 	value, _ := customerGroupChangesReads.LoadOrStore(customerGroupChangesKey{client: a.client, account: account, region: region}, &customerGroupChangesRead{})
 	read := value.(*customerGroupChangesRead)
 	read.once.Do(func() {
-		endpoint := a.endpoint(cloudAWS, account, region, "customergroupchanges")
-		if workspace := a.client.WorkspaceID(); workspace != "" {
-			endpoint += "?" + url.Values{"workspace": {workspace}}.Encode()
-		}
-		read.err = a.get(ctx, endpoint, &read.changes)
+		read.err = a.get(ctx, a.endpoint(cloudAWS, account, region, "customergroupchanges"), &read.changes)
 	})
 	return read.changes, read.err
 }

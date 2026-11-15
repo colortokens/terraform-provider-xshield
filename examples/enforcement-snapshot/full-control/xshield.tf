@@ -15,10 +15,6 @@
 #      group, which the enforcement workspace creates.
 #   4. The next plan of this workspace destroys that rule, and the
 #      xshield_review output says why.
-#
-# Outside HCP Terraform and Terraform Enterprise, set workspace_id in the block
-# to a value only this workspace uses, such as its state key, so a revert waits
-# for this workspace's next plan.
 
 provider "xshield" {}
 

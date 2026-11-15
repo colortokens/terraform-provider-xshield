@@ -27,7 +27,6 @@ import (
 type changesRequest struct {
 	requestURI string
 	header     http.Header
-	workspace  []string
 }
 
 // changesServer answers every customergroupchanges read with one published change and records each request.
@@ -37,7 +36,7 @@ func changesServer(t *testing.T) (string, func() []changesRequest) {
 	var seen []changesRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
-		seen = append(seen, changesRequest{requestURI: r.RequestURI, header: r.Header.Clone(), workspace: r.URL.Query()["workspace"]})
+		seen = append(seen, changesRequest{requestURI: r.RequestURI, header: r.Header.Clone()})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"cloudAccountId":"123456789012","region":"us-east-1","version":"v-2","customerGroupChanges":{"vpc-1/web":{"groupId":"sg-0web"}}}`)
@@ -116,56 +115,7 @@ func readChangesThroughTheProvider(t *testing.T, providerData any) {
 	}
 }
 
-// A revert keeps the access Xshield moved into cohort groups until the workspace that owns the group has read the
-// changes again, so each read says which workspace made it: HCP Terraform's own workspace ID first, then the
-// provider block's workspace_id.
-func TestCustomerGroupChangesReadNamesTheWorkspace(t *testing.T) {
-	for name, test := range map[string]struct {
-		tfcWorkspaceID string
-		workspaceID    *string
-		want           []string
-	}{
-		"in HCP Terraform":                   {tfcWorkspaceID: "ws-AbC123", want: []string{"ws-AbC123"}},
-		"from the provider block":            {workspaceID: ptr("owner/web & db"), want: []string{"owner/web & db"}},
-		"HCP Terraform's ID over the block":  {tfcWorkspaceID: "ws-AbC123", workspaceID: ptr("owner-web"), want: []string{"ws-AbC123"}},
-		"neither":                            {},
-		"an empty workspace_id in the block": {workspaceID: ptr("")},
-	} {
-		t.Run(name, func(t *testing.T) {
-			clearXshieldEnv(t)
-			t.Setenv("TFC_WORKSPACE_ID", test.tfcWorkspaceID)
-			serverURL, requests := changesServer(t)
-			block, pub := signedBlock(t, serverURL)
-			if test.workspaceID != nil {
-				block["workspace_id"] = tftypes.NewValue(tftypes.String, *test.workspaceID)
-			}
-			providerData, diags := configureProvider(t, block)
-			if diags.HasError() {
-				t.Fatal(diags)
-			}
-
-			readChangesThroughTheProvider(t, providerData)
-
-			seen := requests()
-			if len(seen) != 1 {
-				t.Fatalf("requested %d times, want one read shared by both data sources", len(seen))
-			}
-			got := seen[0]
-			if !strings.HasPrefix(got.requestURI, "/api/policies/cloudsnapshots/aws/123456789012/us-east-1/customergroupchanges") {
-				t.Errorf("requested %s", got.requestURI)
-			}
-			if strings.Join(got.workspace, ",") != strings.Join(test.want, ",") {
-				t.Errorf("sent workspace %q in %s, want %q", got.workspace, got.requestURI, test.want)
-			}
-			if test.want == nil && strings.Contains(got.requestURI, "?") {
-				t.Errorf("requested %s, want no query when no workspace is known", got.requestURI)
-			}
-			verifySignedAsTheGatewayChecks(t, got, pub)
-		})
-	}
-}
-
-// The gateway checks the signature over the request target with its query, so the workspace must be part of what is signed.
+// verifySignedAsTheGatewayChecks checks the signature over the request target with its query, as the gateway does.
 func verifySignedAsTheGatewayChecks(t *testing.T, got changesRequest, pub *rsa.PublicKey) {
 	t.Helper()
 	match := regexp.MustCompile(`signature="([^"]+)"`).FindStringSubmatch(got.header.Get("Authorization"))
@@ -188,21 +138,33 @@ func verifySignedAsTheGatewayChecks(t *testing.T, got changesRequest, pub *rsa.P
 	}
 }
 
-// A workspace_id the plan learns only at apply would leave the plan's own read unnamed, and the revert would not
-// wait for it.
-func TestAWorkspaceIDUnknownAtPlanIsRefused(t *testing.T) {
+// A revert waits on the receipts the owner module sends when it applies, not on who read the changes, so a read
+// names no workspace wherever it runs, and the provider block takes no workspace_id.
+func TestAReadOfTheChangesNamesNoWorkspace(t *testing.T) {
 	clearXshieldEnv(t)
-	t.Setenv("TFC_WORKSPACE_ID", "")
-	block, _ := signedBlock(t, "http://127.0.0.1:1")
-	block["workspace_id"] = tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
-	_, diags := configureProvider(t, block)
-	if !diags.HasError() {
-		t.Fatal("configured a provider whose workspace_id is not known")
+	t.Setenv("TFC_WORKSPACE_ID", "ws-AbC123")
+	t.Setenv("TFC_WORKSPACE_NAME", "owner-web")
+	serverURL, requests := changesServer(t)
+	block, pub := signedBlock(t, serverURL)
+	providerData, diags := configureProvider(t, block)
+	if diags.HasError() {
+		t.Fatal(diags)
 	}
-	for _, d := range diags.Errors() {
-		withPath, ok := d.(diag.DiagnosticWithPath)
-		if !ok || withPath.Path().String() != "workspace_id" {
-			t.Errorf("error %q is not on workspace_id", d.Summary())
-		}
+
+	readChangesThroughTheProvider(t, providerData)
+
+	seen := requests()
+	if len(seen) != 1 {
+		t.Fatalf("requested %d times, want one read shared by both data sources", len(seen))
+	}
+	if got, want := seen[0].requestURI, "/api/policies/cloudsnapshots/aws/123456789012/us-east-1/customergroupchanges"; got != want {
+		t.Errorf("requested %s, want %s", got, want)
+	}
+	verifySignedAsTheGatewayChecks(t, seen[0], pub)
+
+	var schemaResp fwprovider.SchemaResponse
+	New("test")().Schema(context.Background(), fwprovider.SchemaRequest{}, &schemaResp)
+	if _, ok := schemaResp.Schema.Attributes["workspace_id"]; ok {
+		t.Error("the provider block takes workspace_id, which Xshield no longer reads")
 	}
 }

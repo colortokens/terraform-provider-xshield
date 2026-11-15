@@ -72,7 +72,6 @@ type sdkConfiguration struct {
 	RetryConfig       *retry.Config
 	Hooks             *hooks.Hooks
 	Timeout           *time.Duration
-	WorkspaceID       string
 }
 
 func (c *sdkConfiguration) GetServerDetails() (string, map[string]string) {
