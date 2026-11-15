@@ -218,7 +218,7 @@ locals {
       for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
     ]
     prefix_list_size_unknown = [
-      for n in local.status.notices : "  ${coalesce(n.group, n.asset_name, n.asset_id, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if n.code == "prefixListSizeUnknown"
+      for n in local.status.notices : "  ${coalesce(n.group, n.asset_name, n.asset_id, "-")}: ${n.message}" if n.code == "prefixListSizeUnknown"
     ]
     apply_overdue = local.status.state == "pending" && local.pending_overdue ? local.pending_lines : []
     never_applied = local.status.state == "unapplied" && local.pending_overdue ? local.pending_lines : []

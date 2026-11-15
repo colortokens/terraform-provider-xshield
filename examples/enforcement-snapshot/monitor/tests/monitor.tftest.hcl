@@ -162,7 +162,7 @@ run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_co
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the connector could not read the prefix lists, so the rule count is a guess" },
+        { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the Xshield connector could not read the region's prefix lists (UnauthorizedOperation), so the rule count is a guess" },
         { code = "prefixListSizeUnknown", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "prefix list pl-0a1 is not sized, so the rule count is a guess" },
         { code = "codeThisMonitorDoesNotKnow", reason = "ANY", asset_id = null, asset_name = null, group = "i-0db1", since = null, message = "a notice from a newer Xshield" },
       ]
@@ -175,7 +175,7 @@ run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_co
     condition = output.problems == {
       prefix_list_size_unknown = [
         "Xshield's count of the rules of these groups in 123456789012/us-east-1 is a guess, so AWS may refuse their rules as over the quota of rules per security group:",
-        "  i-0web1: the connector could not read the prefix lists, so the rule count is a guess (UnauthorizedOperation)",
+        "  i-0web1: the Xshield connector could not read the region's prefix lists (UnauthorizedOperation), so the rule count is a guess",
         "  asg/web: prefix list pl-0a1 is not sized, so the rule count is a guess",
       ]
     }
