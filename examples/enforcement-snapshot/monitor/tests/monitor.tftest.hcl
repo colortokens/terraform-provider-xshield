@@ -152,7 +152,7 @@ run "warns_on_a_refused_workload" {
   }
 }
 
-run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_connector_reason" {
+run "warns_once_per_cause_on_groups_whose_rule_count_is_a_guess_and_gives_the_connector_reason" {
   command = plan
 
   override_data {
@@ -162,8 +162,8 @@ run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_co
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
       notices = [
-        { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the Xshield connector could not read the region's prefix lists (UnauthorizedOperation), so the rule count is a guess" },
-        { code = "prefixListSizeUnknown", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "prefix list pl-0a1 is not sized, so the rule count is a guess" },
+        { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = null, since = null, message = "the Xshield connector could not read the region's prefix lists, so Xshield's count of the rules is a guess until it can for each group whose rules name one: asg/web, i-0web1. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list at the size it last read, or as one rule if it never read it: let the connector read them (ec2:DescribeManagedPrefixLists)" },
+        { code = "prefixListSizeUnknown", reason = null, asset_id = null, asset_name = null, group = null, since = null, message = "Xshield has not sized prefix list(s) pl-0a1, pl-0b2, so Xshield's count of the rules is a guess for each group whose rules name one: asg/web, i-0web1. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list it has not sized as one rule until the Xshield connector's discovery reads the region's prefix lists" },
         { code = "codeThisMonitorDoesNotKnow", reason = "ANY", asset_id = null, asset_name = null, group = "i-0db1", since = null, message = "a notice from a newer Xshield" },
       ]
     }
@@ -175,8 +175,8 @@ run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_co
     condition = output.problems == {
       prefix_list_size_unknown = [
         "Xshield's count of the rules of these groups in 123456789012/us-east-1 is a guess, so AWS may refuse their rules as over the quota of rules per security group:",
-        "  i-0web1: the Xshield connector could not read the region's prefix lists (UnauthorizedOperation), so the rule count is a guess",
-        "  asg/web: prefix list pl-0a1 is not sized, so the rule count is a guess",
+        "  the Xshield connector could not read the region's prefix lists, so Xshield's count of the rules is a guess until it can for each group whose rules name one: asg/web, i-0web1. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list at the size it last read, or as one rule if it never read it: let the connector read them (ec2:DescribeManagedPrefixLists) (UnauthorizedOperation)",
+        "  Xshield has not sized prefix list(s) pl-0a1, pl-0b2, so Xshield's count of the rules is a guess for each group whose rules name one: asg/web, i-0web1. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list it has not sized as one rule until the Xshield connector's discovery reads the region's prefix lists",
       ]
     }
     error_message = "Reported ${jsonencode(output.problems)}."

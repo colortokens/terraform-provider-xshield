@@ -138,17 +138,20 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"A `portNotNarrowed` notice is about a port still deployed in Xshield on a workload whose customer security " +
 					"group a reverted Full control change no longer narrows: the group again allows more than the port's " +
 					"policy, until the port is deployed again and its change approved, or undeployed. " +
-					"A `prefixListSizeUnknown` notice is about a group whose rules name a prefix list Xshield has never read the size of, " +
-					"or any prefix list while the cloud connector's read of the region's prefix lists fails: Xshield's count of the " +
-					"group's rules against the quota of rules per security group is a guess until the connector reads them, so AWS may " +
-					"refuse the group's rules as over the quota. " +
+					"A `prefixListSizeUnknown` notice is about the account and region, with one for each cause: the prefix lists Xshield " +
+					"has never read the size of, or a failed read of the region's prefix lists by the cloud connector. Xshield's count " +
+					"of the rules of each group whose rules name such a list, or any list while the read fails, against the quota of " +
+					"rules per security group is a guess until the connector reads them, so AWS may refuse those rules as over the " +
+					"quota. Its message names the lists and the groups, an Auto Scaling group by the handle of the group its launch " +
+					"template carries, such as `asg/web`, ten of each and how many more. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed` or `prefixListSizeUnknown`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld` and `portNotNarrowed` the change set's ID, " +
-					"or for `prefixListSizeUnknown` why the connector's read of the prefix lists fails, null while it reads them. " +
+					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
+					"and null for prefix lists Xshield has not sized. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
 					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld` and `portNotNarrowed`, or the Auto Scaling group by " +
-					"its handle for `asgPolicyDiffers` and for a `prefixListSizeUnknown` notice about the group its launch template carries. " +
+					"its handle for `asgPolicyDiffers`; null for `prefixListSizeUnknown`, whose message names its groups. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
 					"for `portNotNarrowed`, when the revert was requested; null for every other code. " +
