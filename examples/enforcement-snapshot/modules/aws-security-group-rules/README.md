@@ -1,6 +1,6 @@
 # aws-security-group-rules module
 
-Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables in `variables.tf` and the outputs in `outputs.tf` describe themselves. [`full-control/`](../../full-control/) is a whole workspace that uses the module. This page covers the `review` output and the record the module keeps in state.
+Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables in `variables.tf` and the outputs in `outputs.tf` describe themselves. [`full-control/`](../../full-control/) is a whole workspace that uses the module. This page covers the `review` output, the record the module keeps in state, and the receipt it sends.
 
 ## Reading what Xshield changed, in words
 
@@ -73,3 +73,9 @@ A plan shows it three times in a group's life. The first plan with this version 
 That last plan is why it exists. Once a workspace stops calling the module and stops reading `xshield_aws_security_group_changes`, its plan reads nothing from Xshield, so nothing in the plan says a change applies to the group. The deleted record still does, and a policy check can read it to stop a plan that would put back a rule a change took out.
 
 To take a group out of the module while a change applies to it, revert the change in Xshield first, apply the workspace so the group's rules return as declared, and then remove the module call.
+
+## The receipt it sends
+
+While an approved change applies to the group, the module declares `xshield_aws_security_group_changes_receipt` and has it wait for the group's rules, so the apply sends it once they are applied. It tells Xshield which change sets the rules came from and their states, as the plan read them from `xshield_aws_security_group_rules`. A revert of a change waits for it, and a plan saved before the revert is caught: see [How a revert waits for this workspace](../../README.md#how-a-revert-waits-for-this-workspace).
+
+Xshield's notices name the receipt by `receipt_label` and its ID. The label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. The API key's user must be able to create enforcement receipts as well as read cloud snapshots, as the built-in ADMIN and USER roles can.
