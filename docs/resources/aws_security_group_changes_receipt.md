@@ -3,26 +3,51 @@
 page_title: "xshield_aws_security_group_changes_receipt Resource - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  Tells Xshield which changes to your own security groups a workspace has applied. The aws-security-group-rules module declares one for each group an approved Full control change applies to, after the group's rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
-  When a change is reverted, Xshield keeps the access it moved into ct-cohort- groups until every receipt that reported the change narrowing a group reports, after the revert, that it no longer does, and it then sees the group hold the rules again. The receipt sends what the plan read, so a plan saved before the revert and applied after it reports the change still narrowing the group: Xshield keeps the access, and a notice says to plan and apply that workspace again.
-  Changing what it reports sends it again under the same id. Destroying it tells Xshield to forget it, so no revert waits on it. A receipt whose workspace was deleted without being destroyed keeps a revert waiting: import it by the id the notice names, in any configuration, and destroy it.
+  Tells Xshield which changes to your own security groups a workspace applies. The aws-security-group-rules module declares two for each group an approved Full control change applies to, under one ID: one with stage = "applying" that the group's rules depend on, so it is sent before any rule changes, and one with stage = "applied" that depends on the rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
+  When a change is reverted, Xshield keeps the access it moved into ct-cohort- groups until every receipt ID that reported the change narrowing a group sends an applied receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that applying receipt, and the apply stops before any rule changes.
+  Changing what it reports sends it again under the same id. Destroying it tells Xshield to forget that ID, so no revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 ---
 
 # xshield_aws_security_group_changes_receipt (Resource)
 
-Tells Xshield which changes to your own security groups a workspace has applied. The `aws-security-group-rules` module declares one for each group an approved Full control change applies to, after the group's rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
+Tells Xshield which changes to your own security groups a workspace applies. The `aws-security-group-rules` module declares two for each group an approved Full control change applies to, under one ID: one with `stage = "applying"` that the group's rules depend on, so it is sent before any rule changes, and one with `stage = "applied"` that depends on the rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
 
-When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt that reported the change narrowing a group reports, after the revert, that it no longer does, and it then sees the group hold the rules again. The receipt sends what the plan read, so a plan saved before the revert and applied after it reports the change still narrowing the group: Xshield keeps the access, and a notice says to plan and apply that workspace again.
+When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that `applying` receipt, and the apply stops before any rule changes.
 
-Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget it, so no revert waits on it. A receipt whose workspace was deleted without being destroyed keeps a revert waiting: import it by the `id` the notice names, in any configuration, and destroy it.
+Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget that ID, so no revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 
 ## Example Usage
 
 ```terraform
-# The aws-security-group-rules module sends this for you. Written by hand, it
-# reports what the same read of xshield_aws_security_group_rules gave, and
-# depends on the rules it applied, so it is sent only once they are applied.
-resource "xshield_aws_security_group_changes_receipt" "web" {
+# The aws-security-group-rules module sends these for you. Written by hand, both
+# report what the same read of xshield_aws_security_group_rules gave. The rules
+# depend on the applying receipt, so Xshield can refuse a plan made before a
+# revert before any rule changes, and the applied receipt depends on the rules.
+resource "xshield_aws_security_group_changes_receipt" "applying" {
+  stage            = "applying"
+  cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
+  region           = data.xshield_aws_security_group_rules.web.region
+  version          = data.xshield_aws_security_group_rules.web.version
+  groups = {
+    (data.xshield_aws_security_group_rules.web.security_group_id) = data.xshield_aws_security_group_rules.web.change_sets
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "web" {
+  for_each = data.xshield_aws_security_group_rules.web.ingress_rules
+
+  security_group_id = aws_security_group.web.id
+  ip_protocol       = each.value.ip_protocol
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  cidr_ipv4         = each.value.cidr_ipv4
+
+  depends_on = [xshield_aws_security_group_changes_receipt.applying]
+}
+
+resource "xshield_aws_security_group_changes_receipt" "applied" {
+  stage            = "applied"
+  receipt_id       = xshield_aws_security_group_changes_receipt.applying.id
   cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
   region           = data.xshield_aws_security_group_rules.web.region
   version          = data.xshield_aws_security_group_rules.web.version
@@ -30,7 +55,7 @@ resource "xshield_aws_security_group_changes_receipt" "web" {
     (data.xshield_aws_security_group_rules.web.security_group_id) = data.xshield_aws_security_group_rules.web.change_sets
   }
 
-  depends_on = [aws_vpc_security_group_ingress_rule.web, aws_vpc_security_group_egress_rule.web]
+  depends_on = [aws_vpc_security_group_ingress_rule.web]
 }
 ```
 
@@ -42,15 +67,17 @@ resource "xshield_aws_security_group_changes_receipt" "web" {
 - `cloud_account_id` (String) AWS account the groups are in.
 - `groups` (Map of Map of String) The groups whose rules were applied, each by its AWS ID, the `security_group_id` of `xshield_aws_security_group_rules`, with the state of each change set that applies to it, its `change_sets`, as the plan read them.
 - `region` (String) AWS region the groups are in.
+- `stage` (String) When in the apply the receipt is sent. `applying`: before the rules it reports are changed, which `depends_on` it, so Xshield can refuse a plan made before a revert while no rule has changed. `applied`: once those rules are applied, which it `depends_on`.
 - `version` (String) Version of the changes to customer groups the plan read, the `version` of `xshield_aws_security_group_rules`.
 
 ### Optional
 
 - `label` (String) What Xshield's notices call this receipt besides its `id`, such as the workspace that sends it: at most 256 letters, digits, spaces and `. _ : / @ -`. Defaults to the HCP Terraform or Terraform Enterprise workspace's name, `TFC_WORKSPACE_NAME`, and is null where that is not set.
+- `receipt_id` (String) The ID to send the receipt under instead of a generated one: on the `applied` receipt, the `id` of the `applying` receipt sent before the same rules, so Xshield matches the two.
 
 ### Read-Only
 
-- `id` (String) A UUID generated when the receipt is created and kept for its life. Each apply replaces what this ID reported before, and Xshield names it in a notice that waits on it.
+- `id` (String) The receipt's ID: `receipt_id` where it is set, and otherwise a UUID generated when the receipt is created. It is kept for the receipt's life. Each apply replaces what this ID reported before at this stage, and Xshield names it in a notice that waits on it.
 
 ## Import
 
@@ -59,7 +86,8 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Import a receipt by account, region and the receipt id an Xshield notice names, to destroy one
-# whose workspace was deleted without destroying it, so a revert no longer waits on it.
+# Import a receipt by account, region and the receipt id an Xshield notice names, to destroy one that
+# no workspace declares any more, so a revert no longer waits on it. The applying and applied receipts
+# share that id, so one import and destroy forgets both.
 terraform import xshield_aws_security_group_changes_receipt.orphan "123456789012/us-east-1/0f8fad5b-d9cb-469f-a165-70867728950e"
 ```

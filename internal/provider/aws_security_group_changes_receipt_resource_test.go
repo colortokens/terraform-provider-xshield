@@ -22,9 +22,12 @@ import (
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/retry"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -167,12 +170,13 @@ func servedChanges(version int, changeSets string) string {
 		`"vpc-0web/web":{"groupId":"sg-0web","revoke":[],"changeSets":[%s]}}}`, versionOf(version), changeSets)
 }
 
-func contractBody(id, label string, version int, changeSets string) string {
+func contractBody(id, stage, label string, version int, changeSets string) string {
 	labelField := ""
 	if label != "" {
 		labelField = fmt.Sprintf(`"label":%q,`, label)
 	}
-	return fmt.Sprintf(`{"id":%q,%s"version":%q,"groups":[{"groupId":"sg-0web","changeSets":[%s]}]}`, id, labelField, versionOf(version), changeSets)
+	return fmt.Sprintf(`{"id":%q,"stage":%q,%s"version":%q,"groups":[{"groupId":"sg-0web","changeSets":[%s]}]}`, id, stage, labelField,
+		versionOf(version), changeSets)
 }
 
 func expectNoWorkspaceOrQuery(seen []signedRequest) error {
@@ -185,10 +189,12 @@ func expectNoWorkspaceOrQuery(seen []signedRequest) error {
 }
 
 type receiptValues struct {
-	id      tftypes.Value
-	version int
-	groups  map[string]map[string]string
-	label   tftypes.Value
+	id        tftypes.Value
+	stage     string
+	receiptID tftypes.Value
+	version   int
+	groups    map[string]map[string]string
+	label     tftypes.Value
 }
 
 func receiptResourceSchema(t *testing.T) (*awsSecurityGroupChangesReceiptResource, tftypes.Object, tfsdk.State) {
@@ -212,6 +218,8 @@ func receiptValue(objectType tftypes.Object, v receiptValues) tftypes.Value {
 	}
 	return tftypes.NewValue(objectType, map[string]tftypes.Value{
 		"id":               v.id,
+		"stage":            tftypes.NewValue(tftypes.String, v.stage),
+		"receipt_id":       v.receiptID,
 		"cloud_account_id": tftypes.NewValue(tftypes.String, "123456789012"),
 		"region":           tftypes.NewValue(tftypes.String, "us-east-1"),
 		"version":          tftypes.NewValue(tftypes.String, versionOf(v.version)),
@@ -220,11 +228,16 @@ func receiptValue(objectType tftypes.Object, v receiptValues) tftypes.Value {
 	})
 }
 
-var unknownID = tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+var (
+	unknownID = tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+	noString  = tftypes.NewValue(tftypes.String, nil)
+)
+
+const applyingReceiptID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 
 func narrowingWeb() receiptValues {
-	return receiptValues{id: unknownID, version: 1, groups: map[string]map[string]string{"sg-0web": {"cs-1": "narrowing"}},
-		label: tftypes.NewValue(tftypes.String, nil)}
+	return receiptValues{id: unknownID, stage: "applied", receiptID: noString, version: 1,
+		groups: map[string]map[string]string{"sg-0web": {"cs-1": "narrowing"}}, label: noString}
 }
 
 // A receipt is posted as Xshield's contract describes it and signed as the gateway checks; it keeps the id it was
@@ -237,6 +250,7 @@ func TestAReceiptIsSentUnderOneIDAsTheContractSaysUntilItIsDestroyed(t *testing.
 	r.api = g.api()
 
 	created := narrowingWeb()
+	created.stage = "applying"
 	created.label = tftypes.NewValue(tftypes.String, "owner-web")
 	createResp := resource.CreateResponse{State: absent}
 	r.Create(ctx, resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, created)}}, &createResp)
@@ -248,9 +262,9 @@ func TestAReceiptIsSentUnderOneIDAsTheContractSaysUntilItIsDestroyed(t *testing.
 		t.Fatalf("id %q (%v), want a version 4 UUID", id, diags)
 	}
 
-	updated := receiptValues{id: tftypes.NewValue(tftypes.String, id), version: 2,
+	updated := receiptValues{id: tftypes.NewValue(tftypes.String, id), stage: "applying", receiptID: noString, version: 2,
 		groups: map[string]map[string]string{"sg-0web": {"cs-2": "attaching", "cs-1": "restoring"}, "sg-0db": {}},
-		label:  tftypes.NewValue(tftypes.String, nil)}
+		label:  noString}
 	updateResp := resource.UpdateResponse{State: createResp.State}
 	r.Update(ctx, resource.UpdateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, updated)}, State: createResp.State}, &updateResp)
 	if updateResp.Diagnostics.HasError() {
@@ -268,8 +282,8 @@ func TestAReceiptIsSentUnderOneIDAsTheContractSaysUntilItIsDestroyed(t *testing.
 	}
 
 	want := []signedRequest{
-		{http.MethodPost, receiptsPath, []byte(contractBody(id, "owner-web", 1, `{"id":"cs-1","state":"narrowing"}`))},
-		{http.MethodPost, receiptsPath, []byte(fmt.Sprintf(`{"id":%q,"version":%q,"groups":[`+
+		{http.MethodPost, receiptsPath, []byte(contractBody(id, "applying", "owner-web", 1, `{"id":"cs-1","state":"narrowing"}`))},
+		{http.MethodPost, receiptsPath, []byte(fmt.Sprintf(`{"id":%q,"stage":"applying","version":%q,"groups":[`+
 			`{"groupId":"sg-0db","changeSets":[]},`+
 			`{"groupId":"sg-0web","changeSets":[{"id":"cs-1","state":"restoring"},{"id":"cs-2","state":"attaching"}]}]}`, id, versionOf(2)))},
 		{http.MethodDelete, receiptsPath + "/" + id, nil},
@@ -286,6 +300,78 @@ func TestAReceiptIsSentUnderOneIDAsTheContractSaysUntilItIsDestroyed(t *testing.
 	}
 	if err := expectNoWorkspaceOrQuery(seen); err != nil {
 		t.Error(err)
+	}
+}
+
+// The receipt sent once the rules are applied goes under the id of the one sent before them, so Xshield matches the
+// two, and destroying it forgets that id.
+func TestAnAppliedReceiptIsSentUnderItsApplyingReceiptsID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	g := newGatewayServer(t)
+	r, objectType, absent := receiptResourceSchema(t)
+	r.api = g.api()
+
+	applied := narrowingWeb()
+	applied.receiptID = tftypes.NewValue(tftypes.String, applyingReceiptID)
+	createResp := resource.CreateResponse{State: absent}
+	r.Create(ctx, resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, applied)}}, &createResp)
+	if createResp.Diagnostics.HasError() {
+		t.Fatal(createResp.Diagnostics)
+	}
+	var id string
+	if createResp.State.GetAttribute(ctx, path.Root("id"), &id); id != applyingReceiptID {
+		t.Errorf("id %q, want the receipt_id %q", id, applyingReceiptID)
+	}
+	var deleteResp resource.DeleteResponse
+	r.Delete(ctx, resource.DeleteRequest{State: createResp.State}, &deleteResp)
+	if deleteResp.Diagnostics.HasError() {
+		t.Fatal(deleteResp.Diagnostics)
+	}
+
+	want := []signedRequest{
+		{http.MethodPost, receiptsPath, []byte(contractBody(applyingReceiptID, "applied", "", 1, `{"id":"cs-1","state":"narrowing"}`))},
+		{http.MethodDelete, receiptsPath + "/" + applyingReceiptID, nil},
+	}
+	seen := g.requests()
+	if len(seen) != len(want) {
+		t.Fatalf("%d requests, want %d", len(seen), len(want))
+	}
+	for i := range want {
+		if seen[i].method != want[i].method || seen[i].requestURI != want[i].requestURI || string(seen[i].body) != string(want[i].body) {
+			t.Errorf("request %d:\n%s %s %s\nwant\n%s %s %s", i, seen[i].method, seen[i].requestURI, seen[i].body,
+				want[i].method, want[i].requestURI, want[i].body)
+		}
+	}
+}
+
+// stage takes only the two stages Xshield knows, and receipt_id only the lowercase UUID Xshield takes as an id.
+func TestAReceiptsStageAndReceiptIDAreThoseXshieldTakes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	r, _, _ := receiptResourceSchema(t)
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	for attribute, values := range map[string]map[string]bool{
+		"stage":      {"applying": true, "applied": true, "": false, "Applied": false, "apply": false},
+		"receipt_id": {applyingReceiptID: true, strings.ToUpper(applyingReceiptID): false, "receipt-1": false},
+	} {
+		for value, valid := range values {
+			var diags diag.Diagnostics
+			for _, v := range schemaResp.Schema.Attributes[attribute].(schema.StringAttribute).Validators {
+				resp := validator.StringResponse{}
+				v.ValidateString(ctx, validator.StringRequest{Path: path.Root(attribute), ConfigValue: types.StringValue(value)}, &resp)
+				diags.Append(resp.Diagnostics...)
+			}
+			if diags.HasError() == valid {
+				t.Errorf("%s %q: error %v, want valid %v", attribute, value, diags, valid)
+			}
+		}
+	}
+	for attribute, want := range map[string]bool{"stage": true, "receipt_id": false} {
+		if got := schemaResp.Schema.Attributes[attribute].IsRequired(); got != want {
+			t.Errorf("%s required %v, want %v", attribute, got, want)
+		}
 	}
 }
 
@@ -394,7 +480,7 @@ func TestAnUpdateXshieldRefusesKeepsWhatWasLastSent(t *testing.T) {
 	r, objectType, absent := receiptResourceSchema(t)
 	r.api = apiAnswering(t, http.StatusBadRequest, `{"message":"malformed customer group changes receipt"}`)
 	sent := narrowingWeb()
-	sent.id = tftypes.NewValue(tftypes.String, "0f8fad5b-d9cb-469f-a165-70867728950e")
+	sent.id = tftypes.NewValue(tftypes.String, applyingReceiptID)
 	planned := sent
 	planned.version = 2
 	prior := tfsdk.State{Schema: absent.Schema, Raw: receiptValue(objectType, sent)}
@@ -427,7 +513,7 @@ func TestADestroyedReceiptIsForgottenOrSaysWhyNot(t *testing.T) {
 			r, objectType, absent := receiptResourceSchema(t)
 			r.api = apiAnswering(t, test.status, `{"message":"no"}`)
 			stored := narrowingWeb()
-			stored.id = tftypes.NewValue(tftypes.String, "0f8fad5b-d9cb-469f-a165-70867728950e")
+			stored.id = tftypes.NewValue(tftypes.String, applyingReceiptID)
 			var resp resource.DeleteResponse
 			r.Delete(context.Background(), resource.DeleteRequest{State: tfsdk.State{Schema: absent.Schema, Raw: receiptValue(objectType, stored)}}, &resp)
 			if resp.Diagnostics.HasError() != test.wantErr {
@@ -515,6 +601,7 @@ data "xshield_aws_security_group_rules" "web" {
 }
 
 resource "xshield_aws_security_group_changes_receipt" "web" {
+  stage            = "applied"
   cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
   region           = data.xshield_aws_security_group_rules.web.region
   version          = data.xshield_aws_security_group_rules.web.version
@@ -529,7 +616,7 @@ func expectReceiptPosted(g *gatewayServer, version int, changeSets string) tfres
 	return func(s *terraform.State) error {
 		seen := g.requests()
 		last := seen[len(seen)-1]
-		want := contractBody(s.RootModule().Resources[changesReceiptAddress].Primary.ID, "owner-web", version, changeSets)
+		want := contractBody(s.RootModule().Resources[changesReceiptAddress].Primary.ID, "applied", "owner-web", version, changeSets)
 		if last.method != http.MethodPost || last.requestURI != receiptsPath || string(last.body) != want {
 			return fmt.Errorf("last request %s %s %s, want POST %s %s", last.method, last.requestURI, last.body, receiptsPath, want)
 		}
@@ -623,7 +710,7 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 					return "123456789012/us-east-1/" + s.RootModule().Resources[changesReceiptAddress].Primary.ID, nil
 				},
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"version", "groups", "label"},
+				ImportStateVerifyIgnore: []string{"stage", "version", "groups", "label"},
 			},
 		},
 		CheckDestroy: func(s *terraform.State) error {
@@ -641,7 +728,7 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 func TestAccAnOrphanedReceiptIsImportedAndDestroyed(t *testing.T) {
 	clearXshieldEnv(t)
 	g := newGatewayServer(t)
-	const orphanID = "0f8fad5b-d9cb-469f-a165-70867728950e"
+	const orphanID = applyingReceiptID
 
 	tfresource.Test(t, tfresource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -649,6 +736,7 @@ func TestAccAnOrphanedReceiptIsImportedAndDestroyed(t *testing.T) {
 			{
 				Config: g.providerBlock() + `
 resource "xshield_aws_security_group_changes_receipt" "orphan" {
+  stage            = "applied"
   cloud_account_id = "123456789012"
   region           = "us-east-1"
   version          = "orphan"

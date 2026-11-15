@@ -42,6 +42,8 @@ type awsSecurityGroupChangesReceiptResource struct {
 
 type awsSecurityGroupChangesReceiptModel struct {
 	ID             types.String `tfsdk:"id"`
+	Stage          types.String `tfsdk:"stage"`
+	ReceiptID      types.String `tfsdk:"receipt_id"`
 	CloudAccountID types.String `tfsdk:"cloud_account_id"`
 	Region         types.String `tfsdk:"region"`
 	Version        types.String `tfsdk:"version"`
@@ -53,6 +55,11 @@ var groupChangesReceiptLabel = regexp.MustCompile(`^[A-Za-z0-9 ._:/@-]+$`)
 
 const groupChangesReceiptLabelMaxLength = 256
 
+const (
+	receiptStageApplying = "applying"
+	receiptStageApplied  = "applied"
+)
+
 func (r *awsSecurityGroupChangesReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_security_group_changes_receipt"
 }
@@ -60,24 +67,44 @@ func (r *awsSecurityGroupChangesReceiptResource) Metadata(ctx context.Context, r
 func (r *awsSecurityGroupChangesReceiptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	replace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Tells Xshield which changes to your own security groups a workspace has applied. The " +
-			"`aws-security-group-rules` module declares one for each group an approved Full control change applies to, " +
-			"after the group's rules, so it is sent once they are applied. The API key's user needs permission to create " +
-			"enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.\n\n" +
-			"When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt that " +
-			"reported the change narrowing a group reports, after the revert, that it no longer does, and it then sees the " +
-			"group hold the rules again. The receipt sends what the plan read, so a plan saved before the revert and applied " +
-			"after it reports the change still narrowing the group: Xshield keeps the access, and a notice says to plan and " +
-			"apply that workspace again.\n\n" +
-			"Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget it, so no " +
-			"revert waits on it. A receipt whose workspace was deleted without being destroyed keeps a revert waiting: import " +
-			"it by the `id` the notice names, in any configuration, and destroy it.",
+		MarkdownDescription: "Tells Xshield which changes to your own security groups a workspace applies. The " +
+			"`aws-security-group-rules` module declares two for each group an approved Full control change applies to, " +
+			"under one ID: one with `stage = \"applying\"` that the group's rules depend on, so it is sent before any rule " +
+			"changes, and one with `stage = \"applied\"` that depends on the rules, so it is sent once they are applied. The " +
+			"API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the " +
+			"built-in ADMIN and USER roles both have.\n\n" +
+			"When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID " +
+			"that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, " +
+			"and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the " +
+			"change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield " +
+			"refuses that `applying` receipt, and the apply stops before any rule changes.\n\n" +
+			"Changing what it reports sends it again under the same `id`. Destroying it tells Xshield to forget that ID, so no " +
+			"revert waits on it. A receipt ID that a workspace no longer declares, because its state lost the receipt or the " +
+			"workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in " +
+			"any configuration, and destroy it.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-				MarkdownDescription: "A UUID generated when the receipt is created and kept for its life. Each apply replaces " +
-					"what this ID reported before, and Xshield names it in a notice that waits on it.",
+				MarkdownDescription: "The receipt's ID: `receipt_id` where it is set, and otherwise a UUID generated when the " +
+					"receipt is created. It is kept for the receipt's life. Each apply replaces what this ID reported before " +
+					"at this stage, and Xshield names it in a notice that waits on it.",
+			},
+			"stage": schema.StringAttribute{
+				Required:      true,
+				PlanModifiers: replace,
+				Validators:    []validator.String{stringvalidator.OneOf(receiptStageApplying, receiptStageApplied)},
+				MarkdownDescription: "When in the apply the receipt is sent. `applying`: before the rules it reports are " +
+					"changed, which `depends_on` it, so Xshield can refuse a plan made before a revert while no rule has changed. " +
+					"`applied`: once those rules are applied, which it `depends_on`.",
+			},
+			"receipt_id": schema.StringAttribute{
+				Optional:      true,
+				PlanModifiers: replace,
+				Validators: []validator.String{stringvalidator.RegexMatches(groupChangesReceiptID,
+					"must be a lowercase UUID, the id of the receipt sent before the rules")},
+				MarkdownDescription: "The ID to send the receipt under instead of a generated one: on the `applied` receipt, the " +
+					"`id` of the `applying` receipt sent before the same rules, so Xshield matches the two.",
 			},
 			"cloud_account_id": schema.StringAttribute{
 				Required:            true,
@@ -165,6 +192,7 @@ func (workspaceNameLabel) PlanModifyString(ctx context.Context, req planmodifier
 
 type wireGroupChangesReceipt struct {
 	ID      string                         `json:"id"`
+	Stage   string                         `json:"stage"`
 	Label   string                         `json:"label,omitempty"`
 	Version string                         `json:"version"`
 	Groups  []wireGroupChangesReceiptGroup `json:"groups"`
@@ -184,8 +212,8 @@ type wireGroupChangesReceiptChangeSet struct {
 func groupChangesReceiptRequest(ctx context.Context, data awsSecurityGroupChangesReceiptModel) (wireGroupChangesReceipt, diag.Diagnostics) {
 	var groups map[string]map[string]string
 	diags := data.Groups.ElementsAs(ctx, &groups, false)
-	body := wireGroupChangesReceipt{ID: data.ID.ValueString(), Label: data.Label.ValueString(), Version: data.Version.ValueString(),
-		Groups: []wireGroupChangesReceiptGroup{}}
+	body := wireGroupChangesReceipt{ID: data.ID.ValueString(), Stage: data.Stage.ValueString(), Label: data.Label.ValueString(),
+		Version: data.Version.ValueString(), Groups: []wireGroupChangesReceiptGroup{}}
 	for _, groupID := range slices.Sorted(maps.Keys(groups)) {
 		group := wireGroupChangesReceiptGroup{GroupID: groupID, ChangeSets: []wireGroupChangesReceiptChangeSet{}}
 		for _, changeSetID := range slices.Sorted(maps.Keys(groups[groupID])) {
@@ -234,12 +262,15 @@ func (r *awsSecurityGroupChangesReceiptResource) Create(ctx context.Context, req
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	id, err := newGroupChangesReceiptID()
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot generate the receipt's id", err.Error())
-		return
+	data.ID = data.ReceiptID
+	if data.ReceiptID.IsNull() {
+		id, err := newGroupChangesReceiptID()
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot generate the receipt's id", err.Error())
+			return
+		}
+		data.ID = types.StringValue(id)
 	}
-	data.ID = types.StringValue(id)
 	recorded, diags := r.send(ctx, data)
 	resp.Diagnostics.Append(diags...)
 	if recorded {
