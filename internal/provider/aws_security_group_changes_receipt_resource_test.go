@@ -635,3 +635,38 @@ func TestAccChangesReceiptReportsWhatItsPlanRead(t *testing.T) {
 		},
 	})
 }
+
+// A receipt left behind by a workspace deleted without being destroyed is imported into any configuration and
+// destroyed, as the guide says: that sends only the DELETE of the imported id, never a receipt.
+func TestAccAnOrphanedReceiptIsImportedAndDestroyed(t *testing.T) {
+	clearXshieldEnv(t)
+	g := newGatewayServer(t)
+	const orphanID = "0f8fad5b-d9cb-469f-a165-70867728950e"
+
+	tfresource.Test(t, tfresource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []tfresource.TestStep{
+			{
+				Config: g.providerBlock() + `
+resource "xshield_aws_security_group_changes_receipt" "orphan" {
+  cloud_account_id = "123456789012"
+  region           = "us-east-1"
+  version          = "orphan"
+  groups           = {}
+}
+`,
+				ResourceName:       "xshield_aws_security_group_changes_receipt.orphan",
+				ImportState:        true,
+				ImportStateId:      "123456789012/us-east-1/" + orphanID,
+				ImportStatePersist: true,
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			seen := g.requests()
+			if len(seen) != 1 || seen[0].method != http.MethodDelete || seen[0].requestURI != receiptsPath+"/"+orphanID {
+				return fmt.Errorf("requests %v, want only DELETE %s/%s", seen, receiptsPath, orphanID)
+			}
+			return nil
+		},
+	})
+}
