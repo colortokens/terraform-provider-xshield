@@ -228,8 +228,54 @@ func (r *awsSecurityGroupChangesReceiptResource) receiptsEndpoint(data awsSecuri
 	return r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), append([]string{"customergroupchanges", "receipts"}, id...)...)
 }
 
-const groupChangesReceiptAdvice = "The group's rules are applied. Apply again to send this receipt once the cause is fixed. " +
-	"Until Xshield has it, a revert of a change it reports keeps the access Xshield moved into ct-cohort- groups."
+// codeNotNarrowing refuses a receipt listing a change set narrowing a group that Xshield no longer publishes so.
+const codeNotNarrowing = "notNarrowing"
+
+// groupChangesReceiptAdvice says what the apply did: an applying receipt is sent before the rules, which wait for it.
+func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
+	applying := body.Stage == receiptStageApplying
+	switch {
+	case isAPIRefusal(err, http.StatusConflict, codeNotNarrowing):
+		return notNarrowingAdvice(body, applying)
+	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished) && applying:
+		return "Xshield has no published snapshot for this account and region, so the changes this plan read no longer exist. " +
+			"No rule was changed. Run a new plan and apply it."
+	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished):
+		return "The group's rules are applied, but Xshield has no published snapshot for this account and region, so the " +
+			"changes this plan read no longer exist: run a new plan and apply it."
+	case applying:
+		return "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."
+	}
+	return "The group's rules are applied. Apply again to send this receipt once the cause is fixed. Until Xshield has it, a " +
+		"revert of a change it reports keeps the access Xshield moved into ct-cohort- groups."
+}
+
+// notNarrowingAdvice names what the receipt listed narrowing; Xshield's refusal names which of those it no longer publishes.
+func notNarrowingAdvice(body wireGroupChangesReceipt, applying bool) string {
+	var listed []string
+	group := ""
+	for _, g := range body.Groups {
+		for _, cs := range g.ChangeSets {
+			if cs.State == changeSetNarrowing {
+				listed = append(listed, fmt.Sprintf("change set %s as narrowing %s", cs.ID, g.GroupID))
+				group = g.GroupID
+			}
+		}
+	}
+	lead, its, where := "a change set this plan read as narrowing, as its refusal names: it was", "its", "the group"
+	switch {
+	case len(listed) == 1:
+		lead, where = listed[0]+": it was", group
+	case len(listed) > 1:
+		lead = "one or more of the change sets this plan read as narrowing, as its refusal names (" + strings.Join(listed, ", ") + "): they were"
+		its, where = "their", "those groups"
+	}
+	advice := "Xshield no longer publishes " + lead + " reverted or withdrawn after this plan was made"
+	if applying {
+		return advice + ". No rule was changed. Run a new plan and apply it."
+	}
+	return advice + ", and this apply has taken " + its + " moved rules out of " + where + ": run a new plan and apply it now to put them back."
+}
 
 // send reports whether Xshield may hold the receipt now, which it does unless it answered with a refusal.
 func (r *awsSecurityGroupChangesReceiptResource) send(ctx context.Context, data awsSecurityGroupChangesReceiptModel) (bool, diag.Diagnostics) {
@@ -238,12 +284,7 @@ func (r *awsSecurityGroupChangesReceiptResource) send(ctx context.Context, data 
 		return false, diags
 	}
 	if err := r.api.post(ctx, r.receiptsEndpoint(data), body, http.StatusCreated, nil); err != nil {
-		advice := groupChangesReceiptAdvice
-		if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
-			advice = "The group's rules are applied, but Xshield has no published snapshot for this account and region, so the " +
-				"changes this plan read no longer exist: run a new plan and apply it."
-		}
-		diags.AddError("Xshield did not accept the customer group changes receipt", err.Error()+"\n\n"+advice)
+		diags.AddError("Xshield did not accept the customer group changes receipt", err.Error()+"\n\n"+groupChangesReceiptAdvice(err, body))
 		return mayHaveBeenRecorded(err), diags
 	}
 	return true, diags

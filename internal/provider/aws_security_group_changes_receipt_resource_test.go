@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -125,6 +126,11 @@ func (g *gatewayServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/customergroupchanges"):
 		_, _ = io.WriteString(w, changes)
 	case r.Method == http.MethodPost && r.URL.Path == receiptsPath:
+		if refused := refusedAsNotNarrowing(changes, body); refused != "" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = fmt.Fprintf(w, `{"status":409,"code":"notNarrowing","message":%q}`, refused)
+			return
+		}
 		w.WriteHeader(http.StatusCreated)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, receiptsPath+"/"):
 		w.WriteHeader(http.StatusNoContent)
@@ -132,6 +138,34 @@ func (g *gatewayServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(w, "404 page not found")
 	}
+}
+
+// refusedAsNotNarrowing is Xshield's check of a receipt against what it publishes now: a set listed narrowing a group
+// must be published narrowing it in an applying receipt, and published for it at all in an applied one.
+func refusedAsNotNarrowing(changes string, body []byte) string {
+	var published wireCustomerGroupChanges
+	var receipt wireGroupChangesReceipt
+	if json.Unmarshal([]byte(changes), &published) != nil || json.Unmarshal(body, &receipt) != nil {
+		return ""
+	}
+	var refused []string
+	for _, g := range receipt.Groups {
+		for _, listed := range g.ChangeSets {
+			if listed.State != changeSetNarrowing {
+				continue
+			}
+			ok := false
+			for _, change := range published.Groups {
+				for _, cs := range change.ChangeSets {
+					ok = ok || change.GroupID == g.GroupID && cs.ID == listed.ID && (receipt.Stage == receiptStageApplied || cs.State == changeSetNarrowing)
+				}
+			}
+			if !ok {
+				refused = append(refused, "change set "+listed.ID+" is not published as narrowing "+g.GroupID)
+			}
+		}
+	}
+	return strings.Join(refused, "; ")
 }
 
 // gatewayVerifies checks what the gateway checks: the digest of the body as sent, or of "nil" when there is none, and
@@ -405,6 +439,9 @@ func TestACreatedReceiptStaysInStateOnlyWhenXshieldMayHoldIt(t *testing.T) {
 			return apiAnswering(t, http.StatusBadRequest, `{"message":"malformed customer group changes receipt"}`)
 		}, false},
 		"unauthorized": {func(t *testing.T) cloudSnapshotAPI { return apiAnswering(t, http.StatusUnauthorized, gatewayRefusal) }, false},
+		"a conflict not about narrowing": {func(t *testing.T) cloudSnapshotAPI {
+			return apiAnswering(t, http.StatusConflict, `{"code":"handedOver","message":"handed over"}`)
+		}, false},
 		"failed in Xshield": {func(t *testing.T) cloudSnapshotAPI {
 			return apiAnswering(t, http.StatusInternalServerError, `{"message":"internal error"}`)
 		}, true},
@@ -471,6 +508,106 @@ func TestAReceiptForChangesNoLongerPublishedSaysToPlanAgainWithoutRetrying(t *te
 	r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, narrowingWeb())}}, &resp)
 	if detail := resp.Diagnostics.Errors()[0].Detail(); strings.Contains(detail, "no published snapshot") {
 		t.Errorf("a 404 Xshield did not code as nothing published says nothing is published:\n%s", detail)
+	}
+}
+
+const notNarrowingRefusal = `{"status":409,"code":"notNarrowing","message":"change set cs-1 is not published as narrowing sg-0web"}`
+
+// A receipt that lists a change set narrowing a group Xshield no longer publishes so was made before a revert. Sent
+// before the rules, it stops the apply while no rule has changed; sent after them, the rules are already out.
+func TestAReceiptListingAChangeSetNoLongerNarrowingSaysWhatTheApplyDid(t *testing.T) {
+	t.Parallel()
+	const applyingAdvice = "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or withdrawn after this " +
+		"plan was made. No rule was changed. Run a new plan and apply it."
+	const appliedAdvice = "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or withdrawn after this " +
+		"plan was made, and this apply has taken its moved rules out of sg-0web: run a new plan and apply it now to put them back."
+	for stage, want := range map[string]struct{ advice, never string }{
+		"applying": {applyingAdvice, "this apply has taken"},
+		"applied":  {appliedAdvice, "No rule was changed"},
+	} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			r, objectType, absent := receiptResourceSchema(t)
+			r.api = apiAnswering(t, http.StatusConflict, notNarrowingRefusal)
+			planned := narrowingWeb()
+			planned.stage = stage
+			planned.groups["sg-0web"]["cs-2"] = "restoring"
+
+			created := resource.CreateResponse{State: absent}
+			r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &created)
+			if !created.Diagnostics.HasError() || !created.State.Raw.IsNull() {
+				t.Fatalf("error %v and state %v, want an error and no receipt in state", created.Diagnostics, created.State.Raw)
+			}
+			detail := created.Diagnostics.Errors()[0].Detail()
+			if !strings.HasSuffix(detail, want.advice) || strings.Contains(detail, want.never) {
+				t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, want.advice)
+			}
+
+			sent := planned
+			sent.id = tftypes.NewValue(tftypes.String, applyingReceiptID)
+			sent.groups = map[string]map[string]string{"sg-0web": {"cs-1": "attaching"}}
+			prior := tfsdk.State{Schema: absent.Schema, Raw: receiptValue(objectType, sent)}
+			planned.id = sent.id
+			updated := resource.UpdateResponse{State: prior}
+			r.Update(context.Background(), resource.UpdateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}, State: prior}, &updated)
+			if !updated.Diagnostics.HasError() || !updated.State.Raw.Equal(prior.Raw) {
+				t.Errorf("error %v and state %v after a refused update, want an error and the receipt last sent", updated.Diagnostics, updated.State.Raw)
+			}
+			if detail := updated.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, want.advice) {
+				t.Errorf("update detail:\n%s\nwant it to end:\n%s", detail, want.advice)
+			}
+		})
+	}
+}
+
+// With several change sets listed narrowing, the advice names each and leaves which to Xshield's refusal.
+func TestARefusalOfSeveralNarrowingChangeSetsNamesEach(t *testing.T) {
+	t.Parallel()
+	r, objectType, absent := receiptResourceSchema(t)
+	r.api = apiAnswering(t, http.StatusConflict, notNarrowingRefusal)
+	planned := narrowingWeb()
+	planned.stage = "applying"
+	planned.groups = map[string]map[string]string{"sg-0web": {"cs-1": "narrowing", "cs-3": "attaching"}, "sg-0db": {"cs-2": "narrowing"}}
+	resp := resource.CreateResponse{State: absent}
+	r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &resp)
+	want := "Xshield no longer publishes one or more of the change sets this plan read as narrowing, as its refusal names " +
+		"(change set cs-2 as narrowing sg-0db, change set cs-1 as narrowing sg-0web): they were reverted or withdrawn after this " +
+		"plan was made. No rule was changed. Run a new plan and apply it."
+	if !resp.Diagnostics.HasError() || !strings.HasSuffix(resp.Diagnostics.Errors()[0].Detail(), want) {
+		t.Errorf("diagnostics %v, want the detail to end:\n%s", resp.Diagnostics, want)
+	}
+}
+
+// Any other refusal of a receipt sent before the rules says that no rule changed, since the rules wait for it.
+func TestARefusedApplyingReceiptSaysNoRuleChanged(t *testing.T) {
+	t.Parallel()
+	for name, answer := range map[string]struct {
+		status int
+		body   string
+		want   string
+	}{
+		"a conflict of another kind": {http.StatusConflict, `{"code":"handedOver","message":"handed over"}`,
+			"No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
+		"refused":           {http.StatusBadRequest, `{"message":"malformed"}`, "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
+		"failed in Xshield": {http.StatusInternalServerError, `{"message":"internal error"}`, "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
+		"nothing published": {http.StatusNotFound, xshieldNotPublished, "Xshield has no published snapshot for this account and region, so " +
+			"the changes this plan read no longer exist. No rule was changed. Run a new plan and apply it."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, objectType, absent := receiptResourceSchema(t)
+			r.api = apiAnswering(t, answer.status, answer.body)
+			planned := narrowingWeb()
+			planned.stage = "applying"
+			resp := resource.CreateResponse{State: absent}
+			r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &resp)
+			if !resp.Diagnostics.HasError() {
+				t.Fatal("a refused receipt was created without an error")
+			}
+			if detail := resp.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, answer.want) || strings.Contains(detail, "rules are applied") {
+				t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, answer.want)
+			}
+		})
 	}
 }
 
@@ -755,6 +892,130 @@ resource "xshield_aws_security_group_changes_receipt" "orphan" {
 				return fmt.Errorf("requests %v, want only DELETE %s/%s", seen, receiptsPath, orphanID)
 			}
 			return nil
+		},
+	})
+}
+
+const twoStageConfig = `
+data "xshield_aws_security_group_rules" "web" {
+  cloud_account_id = "123456789012"
+  region           = "us-east-1"
+  vpc_id           = "vpc-0web"
+  group_name       = "web"
+}
+
+resource "xshield_aws_security_group_changes_receipt" "applying" {
+  stage            = "applying"
+  cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
+  region           = data.xshield_aws_security_group_rules.web.region
+  version          = data.xshield_aws_security_group_rules.web.version
+  groups = {
+    (data.xshield_aws_security_group_rules.web.security_group_id) = data.xshield_aws_security_group_rules.web.change_sets
+  }
+}
+
+resource "terraform_data" "rules" {
+  input      = data.xshield_aws_security_group_rules.web.version
+  depends_on = [xshield_aws_security_group_changes_receipt.applying]
+}
+
+resource "xshield_aws_security_group_changes_receipt" "applied" {
+  stage            = "applied"
+  receipt_id       = xshield_aws_security_group_changes_receipt.applying.id
+  cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
+  region           = data.xshield_aws_security_group_rules.web.region
+  version          = data.xshield_aws_security_group_rules.web.version
+  groups = {
+    (data.xshield_aws_security_group_rules.web.security_group_id) = data.xshield_aws_security_group_rules.web.change_sets
+  }
+  depends_on = [terraform_data.rules]
+}
+`
+
+// expectReceiptsPosted checks the last requests were the applying and then the applied receipt, both under the id in state.
+func expectReceiptsPosted(g *gatewayServer, version int, changeSets string) tfresource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		id := s.RootModule().Resources["xshield_aws_security_group_changes_receipt.applying"].Primary.ID
+		if applied := s.RootModule().Resources["xshield_aws_security_group_changes_receipt.applied"].Primary.ID; applied != id {
+			return fmt.Errorf("applied receipt id %q, want the applying receipt's %q", applied, id)
+		}
+		seen := g.requests()
+		for i, stage := range []string{"applying", "applied"} {
+			got := seen[len(seen)-2+i]
+			if want := contractBody(id, stage, "owner-web", version, changeSets); got.method != http.MethodPost || string(got.body) != want {
+				return fmt.Errorf("request %s %s %s, want POST %s", got.method, got.requestURI, got.body, want)
+			}
+		}
+		return nil
+	}
+}
+
+// wrappedText matches each text in order as Terraform prints it, wrapped at any space.
+func wrappedText(texts ...string) *regexp.Regexp {
+	quoted := make([]string, len(texts))
+	for i, text := range texts {
+		quoted[i] = strings.Join(strings.Fields(regexp.QuoteMeta(text)), `\s+`)
+	}
+	return regexp.MustCompile(`(?s)` + strings.Join(quoted, ".*"))
+}
+
+// A plan made while a change set narrows the group and applied after it was reverted is refused at its applying
+// receipt, before the rules that depend on it change; a new plan then applies the revert.
+func TestAccAPlanMadeBeforeARevertIsRefusedBeforeItsRulesChange(t *testing.T) {
+	clearXshieldEnv(t)
+	t.Setenv("TFC_WORKSPACE_NAME", "owner-web")
+	g := newGatewayServer(t)
+	config := g.providerBlock() + twoStageConfig
+	refusedAt := 0
+
+	tfresource.Test(t, tfresource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []tfresource.TestStep{
+			{
+				PreConfig: func() { g.serve(servedChanges(1, `{"id":"cs-1","state":"attaching","moves":[]}`)) },
+				Config:    config,
+				Check: tfresource.ComposeTestCheckFunc(
+					expectReceiptsPosted(g, 1, `{"id":"cs-1","state":"attaching"}`),
+					tfresource.TestCheckResourceAttr("terraform_data.rules", "output", versionOf(1)),
+				),
+			},
+			{
+				PreConfig: func() { g.serve(servedChanges(2, `{"id":"cs-1","state":"narrowing","moves":[]}`)) },
+				Config:    config,
+				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction("terraform_data.rules", plancheck.ResourceActionUpdate),
+					changesServedBeforeApply{g: g, changes: servedChanges(3, `{"id":"cs-1","state":"restoring","moves":[]}`), at: &refusedAt},
+				}},
+				ExpectError: wrappedText("-> 409", "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or "+
+					"withdrawn after this plan was made. No rule was changed. Run a new plan and apply it."),
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: tfresource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						refused := g.requests()[refusedAt:]
+						if len(refused) == 0 || refused[0].method != http.MethodPost || !strings.Contains(string(refused[0].body), `"stage":"applying"`) {
+							return fmt.Errorf("the saved plan's apply sent %v, want the applying receipt first", refused)
+						}
+						for _, r := range refused[1:] {
+							if r.method != http.MethodGet {
+								return fmt.Errorf("after the refused applying receipt the apply sent %s %s %s", r.method, r.requestURI, r.body)
+							}
+						}
+						return nil
+					},
+					tfresource.TestCheckResourceAttr("terraform_data.rules", "output", versionOf(1)),
+					tfresource.TestCheckResourceAttr("xshield_aws_security_group_changes_receipt.applying", "groups.sg-0web.cs-1", "attaching"),
+				),
+			},
+			{
+				Config: config,
+				Check: tfresource.ComposeTestCheckFunc(
+					expectReceiptsPosted(g, 3, `{"id":"cs-1","state":"restoring"}`),
+					tfresource.TestCheckResourceAttr("terraform_data.rules", "output", versionOf(3)),
+				),
+			},
 		},
 	})
 }
