@@ -48,6 +48,7 @@ type XshieldProviderModel struct {
 	MaxInterval        types.Int64   `tfsdk:"max_interval"`
 	MaxElapsedTime     types.Int64   `tfsdk:"max_elapsed_time"`
 	Exponent           types.Float64 `tfsdk:"exponent"`
+	WorkspaceID        types.String  `tfsdk:"workspace_id"`
 }
 
 func (p *XshieldProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -83,6 +84,16 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				MarkdownDescription: "The API key's PEM private key itself, for runners that hold it as a secret rather than a file. Can also be set with `XSHIELD_PRIVATE_KEY`. Set this or `private_key_path`.",
 				Optional:            true,
 				Sensitive:           true,
+			},
+			"workspace_id": schema.StringAttribute{
+				MarkdownDescription: "Names this workspace to Xshield when it reads the changes to your own security groups through " +
+					"`xshield_aws_security_group_changes` or `xshield_aws_security_group_rules`. When a Full control change is reverted, " +
+					"Xshield keeps the access it moved into `ct-cohort-` groups until it sees your group hold the rules again and each " +
+					"workspace that read the group before the revert has read it since. In HCP Terraform and Terraform Enterprise the run's own workspace ID, `TFC_WORKSPACE_ID`, is sent " +
+					"and this is ignored. Elsewhere set it to a value that stays the same on every run of this workspace and differs from " +
+					"every other workspace's, such as its state key. With neither, Xshield cannot tell this workspace's reads apart and " +
+					"does not wait for it.",
+				Optional: true,
 			},
 			// HTTP request config
 			"request_timeout": schema.Int64Attribute{
@@ -138,6 +149,7 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 	}
 
 	config := buildConfigProvider(data, resp)
+	workspaceID := readerWorkspaceID(resp, data.WorkspaceID)
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -157,6 +169,7 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 		sdk.WithServerURL(ServerURL),
 		sdk.WithConfigProvider(config),
 		sdk.WithClient(httpClient),
+		sdk.WithWorkspaceID(workspaceID),
 	}
 
 	// Add timeout if provided
@@ -258,6 +271,20 @@ func refuseUnknown(resp *provider.ConfigureResponse, attr, env string, v types.S
 		"The value of "+attr+" is not known until apply, and the provider needs it to plan. Give it a value that is "+
 			"known when the plan starts, or leave it out of the xshield provider block and set "+env+".")
 	return true
+}
+
+// readerWorkspaceID is HCP Terraform's own workspace ID, else the block's workspace_id, else empty.
+func readerWorkspaceID(resp *provider.ConfigureResponse, configured types.String) string {
+	if id := os.Getenv("TFC_WORKSPACE_ID"); id != "" {
+		return id
+	}
+	if configured.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(path.Root("workspace_id"), "Unknown Xshield workspace_id",
+			"The value of workspace_id is not known until apply, and the plan sends it when it reads the changes to your own "+
+				"security groups. Give it a value that is known when the plan starts.")
+		return ""
+	}
+	return configured.ValueString()
 }
 
 func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {

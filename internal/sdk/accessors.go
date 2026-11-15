@@ -38,6 +38,18 @@ func (s *Xshield) ServerURL() string {
 	return url
 }
 
+// WithWorkspaceID names the Terraform workspace this client reads for, which the reads Xshield records per
+// workspace send with the request.
+func WithWorkspaceID(id string) SDKOption {
+	return func(s *Xshield) {
+		s.sdkConfiguration.WorkspaceID = id
+	}
+}
+
+func (s *Xshield) WorkspaceID() string {
+	return s.sdkConfiguration.WorkspaceID
+}
+
 // DoRaw calls an endpoint the generated operations do not cover through the
 // same client, timeout, retry policy and signing hooks they use, so the
 // provider block's proxy, timeout and credentials apply to it unchanged.
