@@ -109,17 +109,19 @@ func (e *snapshotAPIError) Error() string {
 	return msg
 }
 
-// gatewayBodyLimit is the largest request body whose signature Xshield's gateway checks today.
+// gatewayBodyLimit is the body size above which Xshield's gateway may refuse a correct signature: it passed 10,000
+// bytes and refused 12,000, so the size is named as a possible cause from here on.
 const gatewayBodyLimit = 8 << 10
 
 // unauthorizedAdvice names what Xshield's gateway checks, because it answers each failed check alike.
 func unauthorizedAdvice(bodyBytes int) string {
 	advice := "Check that the API key is still active under Settings > API Keys, that tenancy_id, user_id and fingerprint are " +
-		"that key's, and that this machine's clock is right: Xshield refuses a request dated more than 10 seconds before it arrives"
+		"that key's, that private_key is the private key of the key with that fingerprint, and that this machine's clock is " +
+		"right: Xshield refuses a request dated more than 10 seconds before it arrives"
 	if bodyBytes > gatewayBodyLimit {
-		advice += fmt.Sprintf(". This request's body is %d KB, and Xshield's gateway does not yet check the signature of a body "+
-			"over about 8 KB, so sending it again fails the same way: report it to ColorTokens support with this message",
-			(bodyBytes+1023)/1024)
+		advice += fmt.Sprintf(". This request's body is %d KB, and Xshield's gateway can refuse the signature of a body over "+
+			"about 8 KB, so if the key, the credentials and the clock are right, sending it again may fail the same way: report "+
+			"it to ColorTokens support with this message", (bodyBytes+1023)/1024)
 	}
 	return advice
 }

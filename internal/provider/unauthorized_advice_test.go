@@ -13,7 +13,7 @@ import (
 
 const gatewayRefusal = `{"message":"invalid signature"}`
 
-var unauthorizedCauses = []string{"Settings > API Keys", "tenancy_id, user_id and fingerprint", "clock", "10 seconds"}
+var unauthorizedCauses = []string{"Settings > API Keys", "tenancy_id, user_id and fingerprint", "private_key", "clock", "10 seconds"}
 
 func receiptWithRules(t *testing.T, n int) enforcementReceiptResourceModel {
 	t.Helper()
@@ -41,8 +41,10 @@ func sendReceipt(t *testing.T, status int, answer string, receipt enforcementRec
 	return len(recorder.requests[0].body), diags.Errors()[0].Detail()
 }
 
-// Xshield's gateway answers 401 "invalid signature" for an inactive key, a clock running behind and, until it reads
-// buffered bodies, a body over its buffer, so "run apply again" alone sends a refused request again unchanged.
+// Xshield's gateway answers 401 "invalid signature" for an inactive key, credentials or a private key that are not
+// the key's, a clock running behind and, until it reads buffered bodies, a large body, so "run apply again" alone
+// sends a refused request again unchanged. The gateway passed a body of 10,000 bytes and refused one of 12,000, so a
+// body over 8 KB is named as a possible cause, not as the cause.
 func TestAnUnauthorizedAnswerNamesWhatTheGatewayChecks(t *testing.T) {
 	t.Parallel()
 
@@ -86,9 +88,15 @@ func TestAnUnauthorizedAnswerNamesWhatTheGatewayChecks(t *testing.T) {
 		if sent <= 8<<10 {
 			t.Fatalf("the receipt is %d bytes, want one over 8 KB", sent)
 		}
-		for _, want := range append(unauthorizedCauses, fmt.Sprintf("%d KB", (sent+1023)/1024), "over about 8 KB", "fails the same way") {
+		for _, want := range append(unauthorizedCauses, fmt.Sprintf("%d KB", (sent+1023)/1024), "over about 8 KB", "can refuse",
+			"may fail the same way") {
 			if !strings.Contains(refusal, want) {
 				t.Errorf("the error does not mention %q:\n%s", want, refusal)
+			}
+		}
+		for _, certain := range []string{"does not yet check", "sending it again fails the same way"} {
+			if strings.Contains(refusal, certain) {
+				t.Errorf("the error states the size as the cause, which it may not be: %q\n%s", certain, refusal)
 			}
 		}
 	})
