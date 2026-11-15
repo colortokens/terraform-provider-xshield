@@ -30,9 +30,9 @@ func receiptWithRules(t *testing.T, n int) enforcementReceiptResourceModel {
 		SecurityGroups: types.MapNull(types.StringType), Rules: ruleIDs, Attachments: types.MapNull(types.StringType)}
 }
 
-func sendReceipt(t *testing.T, receipt enforcementReceiptResourceModel) (sentBytes int, refusal string) {
+func sendReceipt(t *testing.T, status int, answer string, receipt enforcementReceiptResourceModel) (sentBytes int, refusal string) {
 	t.Helper()
-	api, recorder, _ := newSnapshotTestAPI(t, http.StatusUnauthorized, gatewayRefusal)
+	api, recorder, _ := newSnapshotTestAPI(t, status, answer)
 	var diags diag.Diagnostics
 	(&enforcementReceiptResource{api: api}).send(context.Background(), &receipt, &diags)
 	if !diags.HasError() || len(recorder.requests) != 1 {
@@ -66,7 +66,7 @@ func TestAnUnauthorizedAnswerNamesWhatTheGatewayChecks(t *testing.T) {
 
 	t.Run("a small receipt", func(t *testing.T) {
 		t.Parallel()
-		sent, refusal := sendReceipt(t, receiptWithRules(t, 3))
+		sent, refusal := sendReceipt(t, http.StatusUnauthorized, gatewayRefusal, receiptWithRules(t, 3))
 		if sent > 8<<10 {
 			t.Fatalf("the receipt is %d bytes, want one under 8 KB", sent)
 		}
@@ -82,7 +82,7 @@ func TestAnUnauthorizedAnswerNamesWhatTheGatewayChecks(t *testing.T) {
 
 	t.Run("a receipt over 8 KB", func(t *testing.T) {
 		t.Parallel()
-		sent, refusal := sendReceipt(t, receiptWithRules(t, 200))
+		sent, refusal := sendReceipt(t, http.StatusUnauthorized, gatewayRefusal, receiptWithRules(t, 200))
 		if sent <= 8<<10 {
 			t.Fatalf("the receipt is %d bytes, want one over 8 KB", sent)
 		}
