@@ -499,9 +499,36 @@ Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and
 | A rule is removed from an Xshield group outside Terraform | The traffic the rule allowed is blocked until the next enforcement apply puts the rule back. | A `ruleMissing` drift finding of medium severity. The monitor reports `drift_medium`, which it does not warn about by default. | Run the enforcement workspace. |
 | A rule is added to an Xshield group outside Terraform | Access is wider than approved until the next enforcement apply removes the rule. Its plan shows the removal as an in-place change of the group's `aws_vpc_security_group_rules_exclusive`. With `enable_exclusive_rules = false`, the rule stays: no enforcement run removes it. | A `ruleUnmanaged` drift finding of high severity. Its `restoration` is `pipeline`, or `manual` with `enable_exclusive_rules = false`. The monitor reports `drift_high`. | Run the enforcement workspace. With `enable_exclusive_rules = false`, remove the rule by hand. |
 | AWS refuses a rule during an enforcement apply | The apply fails. The group keeps its old rules, because new rules are created before old ones are removed. | No receipt is sent, so the version is not recorded as applied. | Fix what AWS refused, then run the workspace again. |
+| An apply stops before Terraform saves what it created: the runner is killed or loses its connection, or the run is force-canceled | AWS keeps what the apply created up to then, such as a group or a rule, and the state does not hold it. The next apply tries to create it again, and AWS refuses with `InvalidGroup.Duplicate` or `InvalidPermission.Duplicate`. | No receipt is sent, so the version is not recorded as applied: `state` stays `pending`, or `unapplied` when nothing was applied before. | Import each resource the error names, as [An interrupted apply](#an-interrupted-apply) shows, then apply again. `recovery/` does not help here: it imports what the last receipt lists, and the interrupted apply sent none. |
 | A workload has no room for another security group, or its group would pass the quota of rules per security group | Nothing new is written for that workload. One that carries an Xshield group keeps it, with the rules last applied. One that carries none gets none. | An `assetRefused` or `groupRefused` notice with the reason, such as `NO_FREE_SLOT`. The monitor reports `workload_not_enforced`. | Free a slot on the workload's interfaces, or raise the quota. For a group over the rule quota, see `modules/aws/README.md`. |
 | `snapshot_version` pins a version | The pinned version stays applied. | Xshield reports the account as `pending` while the pin is in place. | Remove the pin when the rollback is over. |
 | The cloud connector has not observed the account since the last apply | Nothing. | `drift_evaluated` is false and no drift finding is listed, which means nobody looked. The monitor reports `drift_not_evaluated` after `max_unobserved_age`. | Check that the cloud connector's discovery is running. |
+
+### An interrupted apply
+
+Terraform records what an apply creates in state as it goes. An apply stopped part-way, such as by a runner that is killed, can leave a resource that AWS created and the state does not hold. The next apply plans to create it again, and AWS refuses with `InvalidGroup.Duplicate` for a group or `InvalidPermission.Duplicate` for a rule. The error names the resource on its `with` line, such as `with module.xshield_enforcement.aws_security_group.this["i-db-1"]`.
+
+Bring each such resource into state under that address, then apply again:
+
+1. If the state is still locked by the interrupted run, and no run is still applying, release it with `terraform force-unlock` and the lock ID the error gives.
+2. Find each resource's ID in AWS. A group by the name and VPC the plan gives it: `aws ec2 describe-security-groups --filters Name=group-name,Values=<name> Name=vpc-id,Values=<vpc> --query 'SecurityGroups[].GroupId'`. A rule among its group's rules, by the protocol, ports and source or destination the plan gives it: `aws ec2 describe-security-group-rules --filters Name=group-id,Values=<group id>`.
+3. Add an `import` block for each, to the address the error names, plan, and apply. Delete the blocks once applied.
+
+```hcl
+import {
+  to = module.xshield_enforcement.aws_security_group.this["i-db-1"]
+  id = "sg-0123456789abcdef0"
+}
+
+import {
+  to = module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this["i-db-1/in/tcp/5432/10.20.1.11/32"]
+  id = "sgr-0123456789abcdef0"
+}
+```
+
+The plan shows each as an import and creates the rest. Other resources take the import IDs `recovery/recovery.tf` uses: an attachment `<network interface ID>_<security group ID>`, a directory parameter its name. A rule left in a group of your own by an interrupted apply of the workspace that owns it is imported the same way, to `module.<name>.aws_vpc_security_group_ingress_rule.this["<key>"]` or its egress counterpart.
+
+Deleting such a resource in AWS also clears the error, but only while nothing relies on it: AWS does not delete a group an interface carries, and a rule the interrupted apply created may be the one that now carries a workload's traffic.
 
 ## When something goes wrong
 
@@ -520,6 +547,7 @@ Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and
 | Warning: `Security group <name> is also carried by <resources>`, or the same as an error with `fail_on_unacknowledged_carriers` set | An approved Full control change takes rules out of the group, and each named resource carries the group, is not a workload Xshield enforces on, and was not acknowledged at approval, most often because it was attached since | Deploy the change again in Xshield and acknowledge each resource, or give each a security group of its own, then plan again |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
 | Warning: `Xshield lists no entry for <handle>`, with `warn_when_unlisted` set | The resource is new and Xshield has not yet discovered it, Xshield's policy gives it nothing to attach, Xshield refuses it, or the handle is misspelt | Nothing for a new resource. Otherwise compare the handle with the enforcement module's `directory_entries` output, and look for the resource among the `assetRefused` and `groupRefused` notices of `xshield_enforcement_status` |
+| `InvalidGroup.Duplicate` or `InvalidPermission.Duplicate` when applying | An earlier apply stopped after AWS created the group or rule and before Terraform saved it in state | Import it, as [An interrupted apply](#an-interrupted-apply) shows, then apply again |
 | `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |
 | The `monitor` check names a workload with `NO_FREE_SLOT` | Its interfaces already carry as many groups as AWS allows | Free a slot, or raise the account's security groups per interface quota |
 | `These network interfaces carry as many security groups as the account allows` | An interface filled up since Xshield last discovered it, so its new group was left off this run | Free a slot on the named interface, or raise the quota; the next run attaches it |
