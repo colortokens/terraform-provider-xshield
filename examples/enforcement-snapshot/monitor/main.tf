@@ -10,7 +10,11 @@
 #   drift_high             the cloud differs from what was applied, and access may be wider than approved
 #   drift_medium           the cloud differs in a way the next enforcement apply restores (not warned by default)
 #   workload_not_enforced  Xshield could not write a group for a workload
-#   apply_overdue          newer approved policy has waited longer than max_apply_age for an enforcement run
+#   prefix_list_size_unknown
+#                          a group's rules name a prefix list Xshield has not sized, or the connector cannot read the
+#                          prefix lists, so Xshield's count of the group's rules is a guess and AWS may refuse them
+#                          as over the quota of rules per security group
+#   apply_overdue         newer approved policy has waited longer than max_apply_age for an enforcement run
 #   never_applied          published policy has never been applied, for longer than max_apply_age
 #   owner_apply_overdue    a Full control change has waited longer than max_owner_apply_age for the workspace
 #                          that owns a customer security group
@@ -53,14 +57,14 @@ variable "warn_on" {
   description = "Problems to warn about. See the list at the top of this file."
   type        = set(string)
   default = [
-    "drift_high", "workload_not_enforced", "apply_overdue", "never_applied", "owner_apply_overdue",
+    "drift_high", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied", "owner_apply_overdue",
     "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed",
   ]
 
   validation {
     condition = length(setsubtract(var.warn_on, [
-      "drift_high", "drift_medium", "workload_not_enforced", "apply_overdue", "never_applied", "owner_apply_overdue",
-      "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
+      "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
+      "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
       "group_withdrawing", "asg_policy_differs", "workload_contained",
     ])) == 0
     error_message = "The warn_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
@@ -74,8 +78,8 @@ variable "fail_on" {
 
   validation {
     condition = length(setsubtract(var.fail_on, [
-      "drift_high", "drift_medium", "workload_not_enforced", "apply_overdue", "never_applied", "owner_apply_overdue",
-      "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
+      "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
+      "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
       "group_withdrawing", "asg_policy_differs", "workload_contained",
     ])) == 0
     error_message = "The fail_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
@@ -213,6 +217,9 @@ locals {
     workload_not_enforced = [
       for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
     ]
+    prefix_list_size_unknown = [
+      for n in local.status.notices : "  ${coalesce(n.group, n.asset_name, n.asset_id, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if n.code == "prefixListSizeUnknown"
+    ]
     apply_overdue = local.status.state == "pending" && local.pending_overdue ? local.pending_lines : []
     never_applied = local.status.state == "unapplied" && local.pending_overdue ? local.pending_lines : []
     owner_apply_overdue = [
@@ -237,19 +244,20 @@ locals {
   })
 
   headlines = {
-    drift_high            = "Xshield sees high-severity drift in ${local.where}:"
-    drift_medium          = "Xshield sees medium-severity drift in ${local.where}:"
-    workload_not_enforced = "Xshield could not enforce every workload in ${local.where}:"
-    apply_overdue         = "Approved Xshield policy for ${local.where} has waited more than ${var.max_apply_age} for an enforcement run:"
-    never_applied         = "Xshield policy for ${local.where} was published more than ${var.max_apply_age} ago and has never been applied:"
-    owner_apply_overdue   = "A Full control change in ${local.where} has waited more than ${var.max_owner_apply_age} for the workspace that owns a customer security group:"
-    pipeline_stopped      = "No enforcement plan has run for ${local.where} in more than ${var.max_run_gap}:"
-    drift_not_evaluated   = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
-    port_not_narrowed     = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
-    unpublished           = "Xshield has published nothing for ${local.where}:"
-    group_withdrawing     = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
-    asg_policy_differs    = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
-    workload_contained    = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
+    drift_high               = "Xshield sees high-severity drift in ${local.where}:"
+    drift_medium             = "Xshield sees medium-severity drift in ${local.where}:"
+    workload_not_enforced    = "Xshield could not enforce every workload in ${local.where}:"
+    prefix_list_size_unknown = "Xshield's count of the rules of these groups in ${local.where} is a guess, so AWS may refuse their rules as over the quota of rules per security group:"
+    apply_overdue            = "Approved Xshield policy for ${local.where} has waited more than ${var.max_apply_age} for an enforcement run:"
+    never_applied            = "Xshield policy for ${local.where} was published more than ${var.max_apply_age} ago and has never been applied:"
+    owner_apply_overdue      = "A Full control change in ${local.where} has waited more than ${var.max_owner_apply_age} for the workspace that owns a customer security group:"
+    pipeline_stopped         = "No enforcement plan has run for ${local.where} in more than ${var.max_run_gap}:"
+    drift_not_evaluated      = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
+    port_not_narrowed        = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
+    unpublished              = "Xshield has published nothing for ${local.where}:"
+    group_withdrawing        = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
+    asg_policy_differs       = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
+    workload_contained       = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
   }
 
   failing = sort([for name in var.fail_on : name if length(local.problems[name]) > 0])
@@ -274,6 +282,13 @@ check "xshield_workload_not_enforced" {
     # A contained workload and a group being withdrawn are deliberate states, reported as workload_contained and group_withdrawing.
     condition     = !contains(var.warn_on, "workload_not_enforced") || length(local.problems.workload_not_enforced) == 0
     error_message = join("\n", concat([local.headlines.workload_not_enforced], local.problems.workload_not_enforced))
+  }
+}
+
+check "xshield_prefix_list_size_unknown" {
+  assert {
+    condition     = !contains(var.warn_on, "prefix_list_size_unknown") || length(local.problems.prefix_list_size_unknown) == 0
+    error_message = join("\n", concat([local.headlines.prefix_list_size_unknown], local.problems.prefix_list_size_unknown))
   }
 }
 

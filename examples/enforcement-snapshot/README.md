@@ -372,6 +372,7 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 |---|---|
 | `drift_high` | The cloud differs from what was applied and access may be wider than approved. |
 | `workload_not_enforced` | Xshield could not write a group for a workload. The message names it and the reason. |
+| `prefix_list_size_unknown` | A group's rules name a prefix list Xshield has not sized, or the cloud connector cannot read the region's prefix lists, so Xshield's count of the group's rules is a guess and AWS may refuse them as over the quota of rules per security group. One line for each group, which names it and, when the read fails, the connector's reason. |
 | `apply_overdue` | Newer approved policy has waited longer than `max_apply_age` (24h) for an enforcement run. The message counts and lists what is waiting. |
 | `never_applied` | Published policy has never been applied, for longer than `max_apply_age`. |
 | `owner_apply_overdue` | A Full control change has waited longer than `max_owner_apply_age` (24h) for the workspace that owns a customer security group. One line for each change set and group, which lists the workloads it holds. |

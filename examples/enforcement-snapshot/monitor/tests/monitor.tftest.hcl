@@ -152,6 +152,58 @@ run "warns_on_a_refused_workload" {
   }
 }
 
+run "warns_on_a_group_whose_rule_count_is_a_guess_and_names_the_group_and_the_connector_reason" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the connector could not read the prefix lists, so the rule count is a guess" },
+        { code = "prefixListSizeUnknown", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "prefix list pl-0a1 is not sized, so the rule count is a guess" },
+        { code = "codeThisMonitorDoesNotKnow", reason = "ANY", asset_id = null, asset_name = null, group = "i-0db1", since = null, message = "a notice from a newer Xshield" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_prefix_list_size_unknown]
+
+  assert {
+    condition = output.problems == {
+      prefix_list_size_unknown = [
+        "Xshield's count of the rules of these groups in 123456789012/us-east-1 is a guess, so AWS may refuse their rules as over the quota of rules per security group:",
+        "  i-0web1: the connector could not read the prefix lists, so the rule count is a guess (UnauthorizedOperation)",
+        "  asg/web: prefix list pl-0a1 is not sized, so the rule count is a guess",
+      ]
+    }
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_notice_code_the_monitor_does_not_know_is_not_reported" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "codeThisMonitorDoesNotKnow", reason = "ANY", asset_id = null, asset_name = null, group = "i-0db1", since = null, message = "a notice from a newer Xshield" },
+      ]
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
 run "warns_when_approved_policy_has_waited_too_long_and_counts_everything_waiting" {
   command = plan
 
