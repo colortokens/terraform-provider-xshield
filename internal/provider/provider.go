@@ -301,6 +301,7 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewAssetResource,
+		newAWSSecurityGroupChangesReceiptResource,
 		newEnforcementReceiptResource,
 		NewNamedNetworkResource,
 		NewPolicyDeploymentResource,
