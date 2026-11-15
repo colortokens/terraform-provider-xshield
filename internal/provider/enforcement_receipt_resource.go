@@ -203,10 +203,12 @@ func receiptAdvice(err error) string {
 	case http.StatusUnauthorized:
 		return "The resources were created. Once the cause is fixed, run apply again to send the receipt."
 	case http.StatusConflict:
-		return "This account and region's delivery has been handed back to the cloud connector, which keeps the groups, rules " +
-			"and attachments this workspace created, so this workspace no longer delivers its policy: stop applying it. Xshield " +
-			"refuses every receipt from it. Replace the module block with removed blocks that keep them (lifecycle { destroy = " +
-			"false }), as the provider's enforcement-snapshot/leave example shows, then stop running this workspace."
+		if apiErr.Code == codeHandedOver {
+			return "This account and region's delivery has been handed back to the cloud connector, which keeps the groups, rules " +
+				"and attachments this workspace created, so this workspace no longer delivers its policy: stop applying it. Xshield " +
+				"refuses every receipt from it. Replace the module block with removed blocks that keep them (lifecycle { destroy = " +
+				"false }), as the provider's enforcement-snapshot/leave example shows, then stop running this workspace."
+		}
 	}
 	return "The resources were created; run apply again to send the receipt."
 }
