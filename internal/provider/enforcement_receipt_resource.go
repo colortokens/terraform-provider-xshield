@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
@@ -68,7 +69,9 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer " +
 			"this one, the next plan proposes sending it again.\n\n" +
 			"A plan that creates the receipt while Xshield already holds one for the account and region warns, and " +
-			"names the workspace that sent it: the state was lost, or two workspaces apply to the same place.\n\n" +
+			"names the workspace that sent it: the state was lost, or two workspaces apply to the same place. When that receipt " +
+			"is exactly the one the plan sends, as after an apply that did not get Xshield's answer, the warning says so, and " +
+			"applying sends it again.\n\n" +
 			"Destroying it removes it from state and leaves the receipt history in Xshield.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -315,8 +318,35 @@ func (r *enforcementReceiptResource) ModifyPlan(ctx context.Context, req resourc
 	if status.Applied == nil {
 		return
 	}
+	if plansHeldReceipt(ctx, *status.Applied, data) {
+		resp.Diagnostics.AddWarning("Xshield already holds the receipt this plan sends", resentReceiptWarning(*status.Applied, data))
+		return
+	}
 	resp.Diagnostics.AddWarning("Xshield already holds an apply receipt for this account and region",
 		heldReceiptWarning(*status.Applied, data))
+}
+
+// plansHeldReceipt is true when the held receipt is the one this plan sends, as after an apply whose receipt Xshield
+// recorded but whose answer never arrived: the resources it names stay in state and the receipt does not.
+func plansHeldReceipt(ctx context.Context, held wireReceipt, planned enforcementReceiptResourceModel) bool {
+	if planned.SnapshotVersion.IsUnknown() || planned.Workspace.IsUnknown() || planned.ExclusiveRules.IsUnknown() {
+		return false
+	}
+	sent, diags := receiptRequest(ctx, &planned, "")
+	return !diags.HasError() && sent.Version == held.Version && sent.Workspace == held.Workspace &&
+		sent.ExclusiveRules == held.ExclusiveRules &&
+		maps.Equal(sent.Resources.SecurityGroups, held.Resources.SecurityGroups) &&
+		maps.Equal(sent.Resources.Rules, held.Resources.Rules) &&
+		maps.Equal(sent.Resources.Attachments, held.Resources.Attachments)
+}
+
+func resentReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
+	return fmt.Sprintf("Xshield's latest receipt for account %s in %s, sent by workspace %q%s, is exactly what this plan sends: "+
+		"the same snapshot version, security group, rule and attachment IDs, and exclusive_rules. The apply that sent it most "+
+		"likely did not get Xshield's answer, so this workspace's state does not hold the receipt. It names the resources this "+
+		"state holds, so nothing was lost and no other workspace sent it. Applying sends it again, and Xshield records the same "+
+		"apply once more.",
+		planned.CloudAccountID.ValueString(), planned.Region.ValueString(), held.Workspace, appliedOn(held))
 }
 
 func heldReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
@@ -324,16 +354,19 @@ func heldReceiptWarning(held wireReceipt, planned enforcementReceiptResourceMode
 	if !planned.Workspace.IsUnknown() && planned.Workspace.ValueString() == held.Workspace {
 		by = fmt.Sprintf("under this workspace's name, %q,", held.Workspace)
 	}
-	when := ""
-	if held.AppliedAt != nil {
-		when = " on " + held.AppliedAt.UTC().Format(time.RFC3339)
-	}
 	return fmt.Sprintf("Xshield recorded an apply to account %s in %s %s%s, and this workspace's state does not hold that "+
 		"receipt, so this plan does not manage what that apply created.\n\n"+
 		"If another workspace applies to this account and region, only one should: do not apply this one. "+
 		"If this workspace's state was lost, rebuild it from that receipt before applying, as the provider's "+
 		"enforcement-snapshot/recovery example shows. If what that apply created has been destroyed, the plan is as intended.",
-		planned.CloudAccountID.ValueString(), planned.Region.ValueString(), by, when)
+		planned.CloudAccountID.ValueString(), planned.Region.ValueString(), by, appliedOn(held))
+}
+
+func appliedOn(held wireReceipt) string {
+	if held.AppliedAt == nil {
+		return ""
+	}
+	return " on " + held.AppliedAt.UTC().Format(time.RFC3339)
 }
 
 // adopt fills an imported receipt from the one Xshield currently holds, so a

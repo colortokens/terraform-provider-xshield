@@ -121,3 +121,52 @@ func TestAReceiptAboutToBeCreatedWarnsWhenXshieldAlreadyHoldsOne(t *testing.T) {
 		})
 	}
 }
+
+// A receipt Xshield recorded whose answer the apply never got leaves the resources in state and the receipt out of it.
+// The next plan sends exactly that receipt again, and must not tell the team its state was lost or another workspace applies.
+func TestAHeldReceiptThatIsExactlyThePlannedOneSaysSo(t *testing.T) {
+	heldAs := func(resources, exclusive string) cannedResponse {
+		return cannedResponse{http.StatusOK, `{"state":"converged","applied":{"receiptId":"receipt-1","version":"version-1",` +
+			`"workspace":"enforcement","appliedAt":"2026-01-01T00:00:00Z","resources":` + resources + `,"exclusiveRules":` + exclusive + `}}`}
+	}
+	same := `{"securityGroups":{"web":"sg-0web"},"rules":{}}`
+
+	t.Run("the same version, workspace, IDs and exclusive_rules", func(t *testing.T) {
+		warnings, errors := planReceipt(t, receiptPlan{held: heldAs(same, "false"), wantRead: true})
+		if errors != 0 || len(warnings) != 1 {
+			t.Fatalf("want one warning and no error, got %d error(s) and %q", errors, warnings)
+		}
+		for _, want := range []string{"exactly what this plan sends", `"enforcement"`, "2026-01-01T00:00:00Z"} {
+			if !strings.Contains(warnings[0], want) {
+				t.Errorf("the warning does not say %s:\n%s", want, warnings[0])
+			}
+		}
+		for _, wrong := range []string{"do not apply this one", "rebuild it from that receipt"} {
+			if strings.Contains(warnings[0], wrong) {
+				t.Errorf("the warning says %q of the receipt this plan sends:\n%s", wrong, warnings[0])
+			}
+		}
+	})
+
+	ids := tftypes.Map{ElementType: tftypes.String}
+	differs := map[string]receiptPlan{
+		"a rule ID": {held: heldAs(`{"securityGroups":{"web":"sg-0web"},"rules":{"web/in/tcp/443":"sgr-0old"}}`, "false"),
+			planned: map[string]tftypes.Value{"rules": tftypes.NewValue(ids, map[string]tftypes.Value{"web/in/tcp/443": tftypes.NewValue(tftypes.String, "sgr-0new")})}},
+		"exclusive_rules": {held: heldAs(same, "true")},
+		"the workspace":   {held: heldAs(same, "false"), planned: map[string]tftypes.Value{"workspace": tftypes.NewValue(tftypes.String, "enforcement-2")}},
+		"the version":     {held: heldAs(same, "false"), planned: map[string]tftypes.Value{"snapshot_version": tftypes.NewValue(tftypes.String, "version-2")}},
+		"the group IDs the plan does not know yet": {held: heldAs(same, "false"),
+			planned: map[string]tftypes.Value{"security_groups": tftypes.NewValue(ids, tftypes.UnknownValue)}},
+		"a group ID the plan does not know yet": {held: heldAs(same, "false"),
+			planned: map[string]tftypes.Value{"security_groups": tftypes.NewValue(ids, map[string]tftypes.Value{"web": tftypes.NewValue(tftypes.String, tftypes.UnknownValue)})}},
+	}
+	for name, plan := range differs {
+		t.Run(name+" differs", func(t *testing.T) {
+			plan.wantRead = true
+			warnings, _ := planReceipt(t, plan)
+			if len(warnings) != 1 || strings.Contains(warnings[0], "exactly what this plan sends") || !strings.Contains(warnings[0], "enforcement-snapshot/recovery") {
+				t.Fatalf("want the lost-state warning, got %q", warnings)
+			}
+		})
+	}
+}

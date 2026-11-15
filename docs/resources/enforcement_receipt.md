@@ -6,7 +6,7 @@ description: |-
   Reports to Xshield that an enforcement snapshot has been applied, and which AWS resource was created for each key in it. The aws enforcement module sends it for you.
   Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose hash does not match the snapshot, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged.
   A new receipt is sent only when the applied version, a resource ID or exclusive_rules changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
-  A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place.
+  A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place. When that receipt is exactly the one the plan sends, as after an apply that did not get Xshield's answer, the warning says so, and applying sends it again.
   Destroying it removes it from state and leaves the receipt history in Xshield.
 ---
 
@@ -18,7 +18,7 @@ Place it in the same configuration as the snapshot's resources and reference the
 
 A new receipt is sent only when the applied version, a resource ID or `exclusive_rules` changes, so it adds nothing to a plan that has nothing else to do. If Xshield's latest receipt for the account and region is no longer this one, the next plan proposes sending it again.
 
-A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place.
+A plan that creates the receipt while Xshield already holds one for the account and region warns, and names the workspace that sent it: the state was lost, or two workspaces apply to the same place. When that receipt is exactly the one the plan sends, as after an apply that did not get Xshield's answer, the warning says so, and applying sends it again.
 
 Destroying it removes it from state and leaves the receipt history in Xshield.
 
