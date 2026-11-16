@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -61,24 +63,33 @@ type esDirectoryModel struct {
 	SlotLimit      types.Int64       `tfsdk:"slot_limit"`
 }
 
+type esNetworkACLEntryModel struct {
+	NetworkACLID types.String `tfsdk:"network_acl_id"`
+	Egress       types.Bool   `tfsdk:"egress"`
+	RuleNumber   types.Int64  `tfsdk:"rule_number"`
+	CIDRIPv4     types.String `tfsdk:"cidr_ipv4"`
+	CIDRIPv6     types.String `tfsdk:"cidr_ipv6"`
+}
+
 type esAssetModel struct {
 	SecurityGroup types.String `tfsdk:"security_group"`
 	AttachedBy    types.String `tfsdk:"attached_by"`
 }
 
 type awsEnforcementSnapshotDataSourceModel struct {
-	CloudAccountID            types.String                    `tfsdk:"cloud_account_id"`
-	Region                    types.String                    `tfsdk:"region"`
-	EnforcementPlan           types.Bool                      `tfsdk:"enforcement_plan"`
-	Published                 types.Bool                      `tfsdk:"published"`
-	Version                   types.String                    `tfsdk:"version"`
-	SecurityGroups            map[string]esSecurityGroupModel `tfsdk:"security_groups"`
-	IngressRules              map[string]esRuleModel          `tfsdk:"ingress_rules"`
-	EgressRules               map[string]esRuleModel          `tfsdk:"egress_rules"`
-	InterfaceAttachments      map[string]esAttachmentModel    `tfsdk:"interface_attachments"`
-	DirectoryEntries          map[string]esDirectoryModel     `tfsdk:"directory_entries"`
-	Assets                    map[string]esAssetModel         `tfsdk:"assets"`
-	WithdrawingSecurityGroups []types.String                  `tfsdk:"withdrawing_security_groups"`
+	CloudAccountID            types.String                      `tfsdk:"cloud_account_id"`
+	Region                    types.String                      `tfsdk:"region"`
+	EnforcementPlan           types.Bool                        `tfsdk:"enforcement_plan"`
+	Published                 types.Bool                        `tfsdk:"published"`
+	Version                   types.String                      `tfsdk:"version"`
+	SecurityGroups            map[string]esSecurityGroupModel   `tfsdk:"security_groups"`
+	IngressRules              map[string]esRuleModel            `tfsdk:"ingress_rules"`
+	EgressRules               map[string]esRuleModel            `tfsdk:"egress_rules"`
+	InterfaceAttachments      map[string]esAttachmentModel      `tfsdk:"interface_attachments"`
+	DirectoryEntries          map[string]esDirectoryModel       `tfsdk:"directory_entries"`
+	Assets                    map[string]esAssetModel           `tfsdk:"assets"`
+	WithdrawingSecurityGroups []types.String                    `tfsdk:"withdrawing_security_groups"`
+	NetworkACLEntries         map[string]esNetworkACLEntryModel `tfsdk:"network_acl_entries"`
 }
 
 func (d *awsEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -176,6 +187,19 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 			}}, "How each Xshield asset carries its group, keyed by Xshield asset ID. "+
 				"`security_group`: key, in `security_groups`, of the asset's group. Null when its group was refused, or for an instance whose policy holds no rule. "+
 				"`attached_by`: `pipeline` when this plan attaches it to the asset's interfaces, `owner` when the asset's own workspace does."),
+			"network_acl_entries": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
+				"network_acl_id": types.StringType, "egress": types.BoolType, "rule_number": types.Int64Type,
+				"cidr_ipv4": types.StringType, "cidr_ipv6": types.StringType,
+			}}, "Each address the malicious IP block template blocks on a network ACL in front of a workload it is assigned to, "+
+				"keyed `<network ACL ID>/<in|out>/<address>`: one `aws_network_acl_rule` that denies all traffic from the address "+
+				"inbound, or to it outbound. Xshield numbers each entry within the even rule numbers 50 to 98, as the cloud "+
+				"connector does, and keeps an entry's number for its life, so a plan never renumbers one in place. An address "+
+				"left out for want of room or of a free number is named in a `networkAclEntryRefused` notice instead. "+
+				"`network_acl_id`: network ACL the entry goes in. "+
+				"`egress`: `true` for an outbound entry, `false` for an inbound one. "+
+				"`rule_number`: the entry's rule number. "+
+				"`cidr_ipv4`, `cidr_ipv6`: the address blocked; exactly one is set. "+
+				"Empty for a snapshot of schema 3, which holds none."),
 			"withdrawing_security_groups": schema.ListAttribute{
 				Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "Keys of groups policy no longer uses but a resource may still carry. They keep their rules " +
@@ -276,8 +300,18 @@ type wireSnapshot struct {
 			SecurityGroup *string `json:"securityGroup"`
 			AttachedBy    string  `json:"attachedBy"`
 		} `json:"assets"`
-		Withdrawing []string `json:"withdrawing"`
+		Withdrawing       []string                       `json:"withdrawing"`
+		NetworkACLEntries map[string]wireNetworkACLEntry `json:"networkAclEntries"`
 	} `json:"aws"`
+}
+
+// wireNetworkACLEntry denies all traffic from or to one address; exactly one of CIDRIPv4 and CIDRIPv6 is set.
+type wireNetworkACLEntry struct {
+	NetworkACLID string  `json:"networkAclId"`
+	Egress       bool    `json:"egress"`
+	RuleNumber   int64   `json:"ruleNumber"`
+	CIDRIPv4     *string `json:"cidrIpv4"`
+	CIDRIPv6     *string `json:"cidrIpv6"`
 }
 
 // wireCustomerGroupChanges is what Xshield takes out of the customer's own groups, published apart
@@ -289,14 +323,15 @@ type wireCustomerGroupChanges struct {
 	Groups         map[string]wireCustomerGroupChange `json:"customerGroupChanges"`
 }
 
-// supportedSnapshotSchema is the AWS plan format this provider renders. Another cloud's plan carries a version of
-// its own, so adding one never changes this; a newer AWS format may carry resources this provider would leave out.
-const supportedSnapshotSchema = "3"
+// renderedSnapshotSchemas are the AWS plan formats this provider renders: schema 4 adds network ACL entries to schema 3,
+// which Xshield still serves for a plan that holds none. Another cloud's plan carries a version of its own, so adding
+// one never changes these; a newer AWS format may carry resources this provider would leave out.
+var renderedSnapshotSchemas = []string{"3", "4"}
 
 func renderable(snap wireSnapshot) error {
-	if snap.SchemaVersion != supportedSnapshotSchema {
-		return fmt.Errorf("this provider applies snapshot schema %q, and Xshield sent schema %q. Upgrade the xshield provider; "+
-			"applying with this one could leave out resources the snapshot asks for", supportedSnapshotSchema, snap.SchemaVersion)
+	if !slices.Contains(renderedSnapshotSchemas, snap.SchemaVersion) {
+		return fmt.Errorf("this provider applies snapshot schemas %s, and Xshield sent schema %q. Upgrade the xshield provider; "+
+			"applying with this one could leave out resources the snapshot asks for", strings.Join(renderedSnapshotSchemas, " and "), snap.SchemaVersion)
 	}
 	if snap.AWS == nil {
 		return fmt.Errorf("the snapshot holds no AWS plan; this account's cloud is not one this provider can apply yet")
@@ -409,6 +444,7 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) awsEnforcem
 		DirectoryEntries:          map[string]esDirectoryModel{},
 		Assets:                    map[string]esAssetModel{},
 		WithdrawingSecurityGroups: []types.String{},
+		NetworkACLEntries:         map[string]esNetworkACLEntryModel{},
 	}
 	if snap == nil {
 		return m
@@ -436,6 +472,10 @@ func snapshotModel(account, region types.String, snap *wireSnapshot) awsEnforcem
 	}
 	for id, a := range plan.Assets {
 		m.Assets[id] = esAssetModel{SecurityGroup: types.StringPointerValue(a.SecurityGroup), AttachedBy: types.StringValue(a.AttachedBy)}
+	}
+	for key, e := range plan.NetworkACLEntries {
+		m.NetworkACLEntries[key] = esNetworkACLEntryModel{NetworkACLID: types.StringValue(e.NetworkACLID), Egress: types.BoolValue(e.Egress),
+			RuleNumber: types.Int64Value(e.RuleNumber), CIDRIPv4: types.StringPointerValue(e.CIDRIPv4), CIDRIPv6: types.StringPointerValue(e.CIDRIPv6)}
 	}
 	return m
 }

@@ -138,7 +138,7 @@ func TestReceiptStateWithoutExclusiveRulesReadsAsFalse(t *testing.T) {
 		ID: types.StringValue(held.Applied.ReceiptID), Cloud: types.StringValue(cloudAWS), CloudAccountID: types.StringValue("111111111111"),
 		Region: types.StringValue("us-east-1"), Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType),
-		RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"), ExclusiveRules: types.BoolNull(),
+		NetworkACLEntries: types.MapNull(types.StringType), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"), ExclusiveRules: types.BoolNull(),
 	}
 	if diags := stored.Set(ctx, model); diags.HasError() {
 		t.Fatal(diags)

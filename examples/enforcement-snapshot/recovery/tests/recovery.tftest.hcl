@@ -35,8 +35,11 @@ mock_provider "xshield" {
         "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 }
         "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 }
       }
-      directory_entries           = {}
-      assets                      = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      directory_entries = {}
+      assets            = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      network_acl_entries = {
+        "acl-0a1b/in/203.0.113.7/32" = { network_acl_id = "acl-0a1b", egress = false, rule_number = 50, cidr_ipv4 = "203.0.113.7/32", cidr_ipv6 = null }
+      }
       withdrawing_security_groups = []
     }
   }
@@ -46,7 +49,11 @@ mock_provider "xshield" {
       applied_security_groups = { "i-1" = "sg-00000000000000001", "i-2" = "sg-00000000000000002" }
       applied_rules           = {}
       applied_attachments     = { "i-1/eni-1" = "eni-1_sg-00000000000000001", "i-2/eni-2" = "eni-2_sg-00000000000000002" }
-      handover_attachments    = {}
+      applied_network_acl_entries = {
+        "acl-0a1b/in/203.0.113.7/32"  = "acl-0a1b:50:-1:false"
+        "acl-0a1b/in/198.51.100.9/32" = "acl-0a1b:52:-1:false"
+      }
+      handover_attachments = {}
     }
   }
 }
@@ -76,6 +83,10 @@ override_resource {
   values = { id = "sg-00000000000000002_eni-2" }
 }
 override_resource {
+  target = module.xshield_enforcement.aws_network_acl_rule.this["acl-0a1b/in/203.0.113.7/32"]
+  values = { id = "nacl-1950887270" }
+}
+override_resource {
   target = module.xshield_enforcement.xshield_enforcement_receipt.this[0]
   values = { id = "receipt-1" }
 }
@@ -83,6 +94,16 @@ override_resource {
 variables {
   region               = "us-east-1"
   enforcement_role_arn = "arn:aws:iam::123456789012:role/xshield-enforcement"
+}
+
+# A receipt that names an entry the pinned version does not hold imports only those it does, or the plan stops.
+run "each_receipted_network_acl_entry_of_the_version_is_imported" {
+  command = plan
+
+  assert {
+    condition     = module.xshield_enforcement.summary.network_acl_entries == 1
+    error_message = "the version's network ACL entry is declared, so its import has a configuration"
+  }
 }
 
 run "every_receipted_interface_still_exists" {

@@ -23,6 +23,7 @@ output "summary" {
     interface_attachments       = length(local.snap.interface_attachments)
     attached_by_owner           = sort(keys(local.snap.directory_entries))
     withdrawing_security_groups = local.snap.withdrawing_security_groups
+    network_acl_entries         = length(local.snap.network_acl_entries)
   }
 }
 

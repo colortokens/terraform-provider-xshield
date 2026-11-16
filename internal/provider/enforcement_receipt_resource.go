@@ -36,18 +36,19 @@ type enforcementReceiptResource struct {
 }
 
 type enforcementReceiptResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Cloud           types.String `tfsdk:"cloud"`
-	CloudAccountID  types.String `tfsdk:"cloud_account_id"`
-	Region          types.String `tfsdk:"region"`
-	Workspace       types.String `tfsdk:"workspace"`
-	SnapshotVersion types.String `tfsdk:"snapshot_version"`
-	SecurityGroups  types.Map    `tfsdk:"security_groups"`
-	Rules           types.Map    `tfsdk:"rules"`
-	Attachments     types.Map    `tfsdk:"attachments"`
-	ExclusiveRules  types.Bool   `tfsdk:"exclusive_rules"`
-	RunID           types.String `tfsdk:"run_id"`
-	AppliedAt       types.String `tfsdk:"applied_at"`
+	ID                types.String `tfsdk:"id"`
+	Cloud             types.String `tfsdk:"cloud"`
+	CloudAccountID    types.String `tfsdk:"cloud_account_id"`
+	Region            types.String `tfsdk:"region"`
+	Workspace         types.String `tfsdk:"workspace"`
+	SnapshotVersion   types.String `tfsdk:"snapshot_version"`
+	SecurityGroups    types.Map    `tfsdk:"security_groups"`
+	Rules             types.Map    `tfsdk:"rules"`
+	Attachments       types.Map    `tfsdk:"attachments"`
+	NetworkACLEntries types.Map    `tfsdk:"network_acl_entries"`
+	ExclusiveRules    types.Bool   `tfsdk:"exclusive_rules"`
+	RunID             types.String `tfsdk:"run_id"`
+	AppliedAt         types.String `tfsdk:"applied_at"`
 }
 
 func (r *enforcementReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -108,6 +109,10 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 			"rules":           idMap("Security group rule ID created for each key in the snapshot's `ingress_rules` and `egress_rules`.", true),
 			"attachments": idMap("The import ID of the attachment created for each key in the snapshot's `interface_attachments`, "+
 				"`<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.", false),
+			"network_acl_entries": idMap("The import ID of the network ACL entry created for each key in the snapshot's "+
+				"`network_acl_entries`, `<network ACL ID>:<rule number>:-1:<egress>`, which is what rebuilding a lost state imports. "+
+				"Xshield refuses a receipt that leaves one out or gives one another rule number than the snapshot's. "+
+				"Leave it unset, as the `aws` module does, when the snapshot holds none.", false),
 			"exclusive_rules": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
@@ -142,10 +147,13 @@ func (r *enforcementReceiptResource) Configure(ctx context.Context, req resource
 	r.api = cloudSnapshotAPI{client: client}
 }
 
+// wireRenderedResources.NetworkACLEntries is left out when empty, so a receipt for a snapshot holding none is the one an
+// Xshield server that predates network ACL entries takes.
 type wireRenderedResources struct {
-	SecurityGroups map[string]string `json:"securityGroups"`
-	Rules          map[string]string `json:"rules"`
-	Attachments    map[string]string `json:"attachments"`
+	SecurityGroups    map[string]string `json:"securityGroups"`
+	Rules             map[string]string `json:"rules"`
+	Attachments       map[string]string `json:"attachments"`
+	NetworkACLEntries map[string]string `json:"networkAclEntries,omitempty"`
 }
 
 type wireReceipt struct {
@@ -177,9 +185,10 @@ func receiptRequest(ctx context.Context, data *enforcementReceiptResourceModel, 
 		Workspace: data.Workspace.ValueString(),
 		RunID:     runID,
 		Resources: wireRenderedResources{
-			SecurityGroups: ids(data.SecurityGroups),
-			Rules:          ids(data.Rules),
-			Attachments:    ids(data.Attachments),
+			SecurityGroups:    ids(data.SecurityGroups),
+			Rules:             ids(data.Rules),
+			Attachments:       ids(data.Attachments),
+			NetworkACLEntries: ids(data.NetworkACLEntries),
 		},
 		ExclusiveRules: data.ExclusiveRules.ValueBool(),
 	}
@@ -344,12 +353,13 @@ func plansHeldReceipt(ctx context.Context, held wireReceipt, planned enforcement
 		sent.ExclusiveRules == held.ExclusiveRules &&
 		maps.Equal(sent.Resources.SecurityGroups, held.Resources.SecurityGroups) &&
 		maps.Equal(sent.Resources.Rules, held.Resources.Rules) &&
-		maps.Equal(sent.Resources.Attachments, held.Resources.Attachments)
+		maps.Equal(sent.Resources.Attachments, held.Resources.Attachments) &&
+		maps.Equal(sent.Resources.NetworkACLEntries, held.Resources.NetworkACLEntries)
 }
 
 func resentReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
 	return fmt.Sprintf("Xshield's latest receipt for account %s in %s, sent by workspace %q%s, is exactly what this plan sends: "+
-		"the same snapshot version, security group, rule and attachment IDs, and exclusive_rules. The apply that sent it most "+
+		"the same snapshot version, security group, rule, attachment and network ACL entry IDs, and exclusive_rules. The apply that sent it most "+
 		"likely did not get Xshield's answer, so this workspace's state does not hold the receipt. It names the resources this "+
 		"state holds, so nothing was lost and no other workspace sent it. Applying sends it again, and Xshield records the same "+
 		"apply once more.",
@@ -395,6 +405,10 @@ func (r *enforcementReceiptResource) adopt(ctx context.Context, data *enforcemen
 	data.SecurityGroups = toMap(a.Resources.SecurityGroups)
 	data.Rules = toMap(a.Resources.Rules)
 	data.Attachments = toMap(a.Resources.Attachments)
+	data.NetworkACLEntries = types.MapNull(types.StringType)
+	if len(a.Resources.NetworkACLEntries) > 0 {
+		data.NetworkACLEntries = toMap(a.Resources.NetworkACLEntries)
+	}
 	data.ExclusiveRules = types.BoolValue(a.ExclusiveRules)
 	data.RunID = types.StringValue(a.RunID)
 	data.AppliedAt = appliedAtValue(a.AppliedAt)

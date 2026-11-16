@@ -1,0 +1,76 @@
+{
+  "aws": {
+    "assets": {
+      "a-db-1": {
+        "attachedBy": "pipeline",
+        "securityGroup": "i-db-1"
+      }
+    },
+    "cohorts": {},
+    "directory": {},
+    "egressRules": {},
+    "ingressRules": {
+      "i-db-1/in/tcp/5432/10.30.0.1/32": {
+        "cidrIpv4": "10.30.0.1/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template filler]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "0fb1ebc84ed833e3",
+          "ct:template": "tmpl-filler"
+        },
+        "toPort": 5432
+      }
+    },
+    "interfaceAttachments": {
+      "i-db-1/eni-db-1": {
+        "networkInterfaceId": "eni-db-1",
+        "securityGroup": "i-db-1"
+      }
+    },
+    "networkAclEntries": {
+      "acl-0a1b/in/203.0.113.7/32": {
+        "cidrIpv4": "203.0.113.7/32",
+        "cidrIpv6": null,
+        "egress": false,
+        "networkAclId": "acl-0a1b",
+        "ruleNumber": 50
+      },
+      "acl-0a1b/out/2001:db8::7/128": {
+        "cidrIpv4": null,
+        "cidrIpv6": "2001:db8::7/128",
+        "egress": true,
+        "networkAclId": "acl-0a1b",
+        "ruleNumber": 98
+      }
+    },
+    "securityGroups": {
+      "i-db-1": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-476d53d36137",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-i-db-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "476d53d36137fa97"
+        },
+        "vpcId": "vpc-1"
+      }
+    },
+    "withdrawing": []
+  },
+  "cloudAccountId": "123456789012",
+  "cloudProvider": "aws",
+  "region": "us-east-1",
+  "schemaVersion": "4",
+  "version": "404536f7f5a5586121629002e891a68e0d10b36a53012d545e794a740c7fec7c61ba9e1d43c6bc8c7f1e18a2f1c75fa25b2b1b432cb5f430011756b58ea8796b"
+}

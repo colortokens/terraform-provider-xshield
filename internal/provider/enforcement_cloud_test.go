@@ -89,7 +89,7 @@ func TestReceiptStateWithoutACloudReadsAsAWS(t *testing.T) {
 		ID: types.StringValue(held.Applied.ReceiptID), Cloud: types.StringNull(), CloudAccountID: types.StringValue("123456789012"),
 		Region: types.StringValue("us-east-1"), Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType),
-		RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
+		NetworkACLEntries: types.MapNull(types.StringType), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
 	}
 	if diags := stored.Set(ctx, model); diags.HasError() {
 		t.Fatal(diags)

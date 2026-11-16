@@ -15,6 +15,7 @@ It creates, from `xshield_aws_enforcement_snapshot`:
 - one `aws_vpc_security_group_rules_exclusive` per group, naming exactly that group's rules, so the next apply removes a rule added to the group outside Terraform;
 - one `aws_network_interface_sg_attachment` per instance interface, which adds the group and keeps the interface's other groups;
 - one `aws_ssm_parameter` per database, function or service, read by the `aws-group-lookup` module;
+- one `aws_network_acl_rule` per address of the malicious IP block template, which denies all traffic from it inbound or to it outbound on the network ACL in front of the workloads the template is assigned to;
 - the `xshield_enforcement_receipt` that tells Xshield what was applied.
 
 While Xshield has published nothing for the account and region, it creates nothing, not even the receipt, and the plan shows no change. The run then warns, through the `xshield_published` check, that nothing is published and says what to look at if the account should have policy. If the account already holds security groups Xshield rendered for a pipeline, the plan fails instead: Xshield never unpublishes an account, so that means the provider is reading another tenant or endpoint, and applying would remove them. The check reads groups with `ec2:DescribeSecurityGroups`.
@@ -27,7 +28,9 @@ A group's new rules are created before its old ones are removed, as the cloud co
 
 Each group holds only the rules the snapshot declares for it. A rule added to it outside Terraform shows in the next plan as an in-place change of the group's `aws_vpc_security_group_rules_exclusive`, and the apply removes it. Set `enable_exclusive_rules = false` to leave such rules until a person removes them; the receipt tells Xshield which applies, and deleting the resources revokes no rule. The first apply that adds these resources removes any rule in the groups that the snapshot does not declare, and its plan shows only the rules each group keeps. Security groups of your own are never managed this way. Rules are revoked with `ec2:DescribeSecurityGroupRules`, `ec2:RevokeSecurityGroupIngress` and `ec2:RevokeSecurityGroupEgress`.
 
-Resource keys are instance IDs and handles, so a plan names the workload each change is for.
+Xshield numbers each network ACL entry, from the even numbers 50 to 98, and keeps the number for as long as the address is blocked. It adds an entry only where the network ACL has room in the account's quota of rules per network ACL, beside the network ACL's other rules, and names any address it leaves out in a `networkAclEntryRefused` notice of `xshield_enforcement_status`, so AWS never refuses an entry as over the quota. An entry changed outside Terraform is deleted, then created again at its number, since AWS holds one entry for each number and direction. Entries are read with `ec2:DescribeNetworkAcls`, and written with `ec2:CreateNetworkAclEntry` and `ec2:DeleteNetworkAclEntry`. See [Malicious IP block on network ACLs](../../README.md#malicious-ip-block-on-network-acls).
+
+Resource keys are instance IDs and handles, and `<network ACL ID>/<in|out>/<address>` for a network ACL entry, so a plan names the workload or the address each change is for.
 
 ## Reading a change in words
 
@@ -62,7 +65,8 @@ Every sentence names its group, so it reads on its own when the plan hides the o
 - The first sentence for a group says whose it is and who attaches it. A workload is named by its instance ID or its handle, which is the only name the snapshot holds for it. A cohort group names the workloads it is for, the ID of the customer group whose access it keeps, and the change set. A group being withdrawn says so.
 - Then comes one sentence for each set of ports the group allows: `from` its sources for ingress rules, `to` its destinations for egress rules. Ports read as `TCP 22`, `TCP 8000-8100`, `TCP 22, 80 and 443`, `all TCP`, or `all traffic` for every protocol. Ranges that run from port 0 to port 65535 and leave ports out between them read by what they leave out: 0-79 with 81-65535 is `all TCP except 80`.
 - A sentence names the rules' template in brackets, taken from the end of each rule's description. A rule that a workload's own group keeps for a change set names the customer group and the change set instead.
-- The last sentence counts the groups, rules and interface attachments. It starts with the first twelve characters of the version, so anything that changes the version changes at least that sentence.
+- One sentence for each address a network ACL blocks, such as `Network ACL acl-0a1b denies all inbound traffic from 203.0.113.7/32, which the malicious IP block template blocks.`
+- The last sentence counts the groups, rules and interface attachments, and the network ACL entries when there are any. It starts with the first twelve characters of the version, so anything that changes the version changes at least that sentence.
 
 Two limits keep the output short enough to read. A sentence names five sources, destinations or workloads and counts the rest. The output describes `review_max_groups` groups, 50 unless you set it: cohort groups first, then the rest in key order. One sentence counts the groups past that number. A change these limits hide still changes the last sentence, and the plan's resource changes show it in full.
 
@@ -87,7 +91,7 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `published` | False while Xshield has published nothing for the account and region. |
 | `version` | Snapshot version applied. Null while nothing is published. |
 | `exclusive_rules_enabled` | Whether each group this module creates holds only the rules the snapshot declares. The receipt tells Xshield the same. |
-| `summary` | Counts of groups, rules and attachments, the handles owning workspaces attach, and groups being withdrawn. |
+| `summary` | Counts of groups, rules, attachments and network ACL entries, the handles owning workspaces attach, and groups being withdrawn. |
 | `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
 | `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
 | `attachment_keys` | The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The import blocks in `recovery/` and `handover/` import only these. |

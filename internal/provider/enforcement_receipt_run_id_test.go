@@ -18,18 +18,19 @@ func receiptObject(t *testing.T, receiptSchema schema.Schema, overrides map[stri
 	objectType := receiptSchema.Type().TerraformType(context.Background()).(tftypes.Object)
 	ids := tftypes.Map{ElementType: tftypes.String}
 	values := map[string]tftypes.Value{
-		"id":               tftypes.NewValue(tftypes.String, "receipt-1"),
-		"cloud":            tftypes.NewValue(tftypes.String, cloudAWS),
-		"cloud_account_id": tftypes.NewValue(tftypes.String, "123456789012"),
-		"region":           tftypes.NewValue(tftypes.String, "us-east-1"),
-		"workspace":        tftypes.NewValue(tftypes.String, "enforcement"),
-		"snapshot_version": tftypes.NewValue(tftypes.String, "version-1"),
-		"security_groups":  tftypes.NewValue(ids, map[string]tftypes.Value{"web": tftypes.NewValue(tftypes.String, "sg-0web")}),
-		"rules":            tftypes.NewValue(ids, map[string]tftypes.Value{}),
-		"attachments":      tftypes.NewValue(ids, nil),
-		"exclusive_rules":  tftypes.NewValue(tftypes.Bool, false),
-		"run_id":           tftypes.NewValue(tftypes.String, "run-A"),
-		"applied_at":       tftypes.NewValue(tftypes.String, "2026-01-01T00:00:00Z"),
+		"id":                  tftypes.NewValue(tftypes.String, "receipt-1"),
+		"cloud":               tftypes.NewValue(tftypes.String, cloudAWS),
+		"cloud_account_id":    tftypes.NewValue(tftypes.String, "123456789012"),
+		"region":              tftypes.NewValue(tftypes.String, "us-east-1"),
+		"workspace":           tftypes.NewValue(tftypes.String, "enforcement"),
+		"snapshot_version":    tftypes.NewValue(tftypes.String, "version-1"),
+		"security_groups":     tftypes.NewValue(ids, map[string]tftypes.Value{"web": tftypes.NewValue(tftypes.String, "sg-0web")}),
+		"rules":               tftypes.NewValue(ids, map[string]tftypes.Value{}),
+		"attachments":         tftypes.NewValue(ids, nil),
+		"network_acl_entries": tftypes.NewValue(ids, nil),
+		"exclusive_rules":     tftypes.NewValue(tftypes.Bool, false),
+		"run_id":              tftypes.NewValue(tftypes.String, "run-A"),
+		"applied_at":          tftypes.NewValue(tftypes.String, "2026-01-01T00:00:00Z"),
 	}
 	for name, value := range overrides {
 		values[name] = value

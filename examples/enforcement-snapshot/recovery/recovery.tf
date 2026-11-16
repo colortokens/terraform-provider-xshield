@@ -2,10 +2,11 @@
 # set snapshot_version = data.xshield_enforcement_status.recover.applied_version on the module, apply
 # once, then delete this file and the pin.
 #
-# The plan shows every resource as an import, nothing to add and nothing to destroy. It also shows an
-# in-place change on each security group and each directory parameter: an import cannot read a group's
-# revoke_rules_on_delete, and it reads a parameter into value where the module declares insecure_value,
-# so the parameter is written again with the value it holds. No group, rule or attachment changes.
+# The plan shows every resource as an import, network ACL entries among them, nothing to add and nothing
+# to destroy. It also shows an in-place change on each security group and each directory parameter: an
+# import cannot read a group's revoke_rules_on_delete, and it reads a parameter into value where the module
+# declares insecure_value, so the parameter is written again with the value it holds. No group, rule,
+# attachment or network ACL entry changes.
 # A rule added to an Xshield group outside Terraform shows as an in-place change of that group's
 # exclusive rules resource, and the apply removes it.
 # If an instance in the last receipt has since been terminated, the receipt is also sent again, without
@@ -47,6 +48,12 @@ import {
 import {
   for_each = { for k in setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
+  id       = each.value
+}
+
+import {
+  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_network_acl_entries : k => v if can(data.xshield_aws_enforcement_snapshot.recover.network_acl_entries[k]) }
+  to       = module.xshield_enforcement.aws_network_acl_rule.this[each.key]
   id       = each.value
 }
 

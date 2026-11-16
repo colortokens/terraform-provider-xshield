@@ -129,7 +129,8 @@ func TestEverySnapshotModelFitsTheDataSourceSchema(t *testing.T) {
 		"sample":      sampleSnapshotModel(t),
 		"empty":       snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot.json").emptied())),
 		"pinned":      withVersion(sampleSnapshotModel(t), testVersion),
-		"nothing":     snapshotModel(types.StringValue("1"), types.StringValue("r"), &wireSnapshot{SchemaVersion: supportedSnapshotSchema, AWS: loadJSON[wireSnapshot](t, "snapshot.json").emptied().AWS}),
+		"nothing":     snapshotModel(types.StringValue("1"), types.StringValue("r"), &wireSnapshot{SchemaVersion: "3", AWS: loadJSON[wireSnapshot](t, "snapshot.json").emptied().AWS}),
+		"network ACL": snapshotModel(types.StringValue("1"), types.StringValue("r"), ptr(loadJSON[wireSnapshot](t, "snapshot_network_acl.json"))),
 		"unpublished": snapshotModel(types.StringValue("1"), types.StringValue("r"), nil),
 	} {
 		state := tfsdk.State{Schema: resp.Schema}
@@ -143,7 +144,7 @@ func (s wireSnapshot) emptied() wireSnapshot {
 	empty := s
 	plan := *s.AWS
 	plan.SecurityGroups, plan.IngressRules, plan.EgressRules = nil, nil, nil
-	plan.InterfaceAttachments, plan.Directory, plan.Assets, plan.Withdrawing = nil, nil, nil, nil
+	plan.InterfaceAttachments, plan.Directory, plan.Assets, plan.Withdrawing, plan.NetworkACLEntries = nil, nil, nil, nil, nil
 	empty.AWS = &plan
 	return empty
 }
@@ -156,7 +157,7 @@ func withVersion(m awsEnforcementSnapshotDataSourceModel, v string) awsEnforceme
 func TestSnapshotOfAnotherFormatIsRefusedRatherThanAppliedInPart(t *testing.T) {
 	t.Parallel()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
-	snap.SchemaVersion = "4"
+	snap.SchemaVersion = "5"
 	if err := renderable(snap); err == nil || !strings.Contains(err.Error(), "Upgrade the xshield provider") {
 		t.Errorf("a newer snapshot schema was accepted: %v", err)
 	}
@@ -229,7 +230,8 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 		ID: types.StringValue("rcpt-1"), CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: mapOf(map[string]string{"i-db-1": "sg-1"}), Rules: mapOf(map[string]string{"k": "sgr-1"}),
-		Attachments: mapOf(map[string]string{"i-db-1/eni-1": "eni-1_sg-1"}), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
+		Attachments:       mapOf(map[string]string{"i-db-1/eni-1": "eni-1_sg-1"}),
+		NetworkACLEntries: mapOf(map[string]string{"acl-0a1b/in/203.0.113.7/32": "acl-0a1b:50:-1:false"}), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"),
 	}
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {

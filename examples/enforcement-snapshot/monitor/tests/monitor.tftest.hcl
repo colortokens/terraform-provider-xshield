@@ -757,6 +757,60 @@ run "warns_on_an_ended_revert_when_asked" {
   }
 }
 
+run "warns_by_default_on_malicious_addresses_a_network_acl_does_not_block" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "networkAclEntryRefused", reason = "ACL_FULL:in", asset_id = null, asset_name = null, group = "acl-0a1b", since = null, message = "this network ACL has no inbound place left for these addresses of the malicious IP block template, so they are not blocked for the workloads behind it: 203.0.113.7/32" },
+        { code = "networkAclNotObserved", reason = "NOT_READ", asset_id = null, asset_name = null, group = "acl-0c2d", since = null, message = "the cloud connector has not read this network ACL, so Xshield adds no entry to it and these addresses of the malicious IP block template are not blocked for the workloads behind it: 198.51.100.9/32" },
+        { code = "networkAclEntryShadowed", reason = null, asset_id = null, asset_name = null, group = "acl-0a1b", since = null, message = "an allow numbered before the deny of 198.51.100.10/32 lets the traffic it denies through" },
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_network_acl_block_not_enforced]
+
+  assert {
+    condition = output.problems.network_acl_block_not_enforced == [
+      "Addresses of the malicious IP block template are not blocked on these network ACLs in 123456789012/us-east-1:",
+      "  acl-0a1b: this network ACL has no inbound place left for these addresses of the malicious IP block template, so they are not blocked for the workloads behind it: 203.0.113.7/32 (ACL_FULL:in)",
+      "  acl-0c2d: the cloud connector has not read this network ACL, so Xshield adds no entry to it and these addresses of the malicious IP block template are not blocked for the workloads behind it: 198.51.100.9/32 (NOT_READ)",
+      "  acl-0a1b: an allow numbered before the deny of 198.51.100.10/32 lets the traffic it denies through",
+    ]
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_network_acl_block_named_in_fail_on_stops_the_plan" {
+  command = plan
+
+  variables {
+    warn_on = []
+    fail_on = ["network_acl_block_not_enforced"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "networkAclEntryRefused", reason = "NO_FREE_SLOT:out", asset_id = null, asset_name = null, group = "acl-0a1b", since = null, message = "every outbound rule number Xshield blocks addresses at on this network ACL, the even numbers 50 to 98, is taken" },
+      ]
+    }
+  }
+
+  expect_failures = [output.problems]
+}
+
 run "a_block_template_named_in_fail_on_stops_the_plan" {
   command = plan
 

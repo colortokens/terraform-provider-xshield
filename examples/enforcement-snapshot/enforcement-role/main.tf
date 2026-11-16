@@ -1,8 +1,9 @@
 # The role the enforcement workspace assumes, created once per account by
 # whoever owns IAM there. ColorTokens never holds it. It grants security group,
-# interface attachment and directory writes only: no compute, IAM or data access.
-# It changes only groups and rules tagged ManagedBy = ColorTokens, the tag the
-# enforcement module gives everything it creates.
+# interface attachment, network ACL entry and directory writes only: no compute,
+# IAM or data access. It changes only groups and rules tagged ManagedBy =
+# ColorTokens, the tag the enforcement module gives everything it creates. A
+# network ACL entry cannot be tagged, so its writes are limited by network ACL.
 
 terraform {
   required_version = ">= 1.7.0"
@@ -18,6 +19,17 @@ terraform {
 variable "pipeline_principal_arns" {
   description = "Identities your Terraform runner uses to assume the role."
   type        = list(string)
+}
+
+variable "network_acl_arns" {
+  description = "Network ACLs the role may add entries to and remove them from, for the malicious IP block template's addresses. Every network ACL in the account by default; list the ACLs in front of your workloads to narrow it."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.network_acl_arns == null || length(coalesce(var.network_acl_arns, [])) > 0
+    error_message = "network_acl_arns lists no network ACL, which leaves the role unable to block any address: leave it unset for every network ACL in the account, or list the ones in front of your workloads."
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -41,7 +53,7 @@ data "aws_iam_policy_document" "enforcement" {
   # lists the interfaces that still reference it.
   statement {
     sid       = "Read"
-    actions   = ["ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules", "ec2:DescribeNetworkInterfaces"]
+    actions   = ["ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules", "ec2:DescribeNetworkInterfaces", "ec2:DescribeNetworkAcls"]
     resources = ["*"]
   }
 
@@ -124,6 +136,13 @@ data "aws_iam_policy_document" "enforcement" {
     sid       = "InstanceAttachments"
     actions   = ["ec2:ModifyNetworkInterfaceAttribute"]
     resources = ["${local.ec2}:network-interface/*", "${local.ec2}:security-group/*"]
+  }
+
+  # The module only creates and deletes entries, at the rule numbers Xshield gives it; it never replaces one.
+  statement {
+    sid       = "NetworkACLEntries"
+    actions   = ["ec2:CreateNetworkAclEntry", "ec2:DeleteNetworkAclEntry"]
+    resources = coalesce(var.network_acl_arns, ["${local.ec2}:network-acl/*"])
   }
 
   statement {

@@ -6,7 +6,7 @@ description: |-
 
 # Enforce AWS policy through your own pipeline
 
-Xshield renders every security group and rule for an AWS account and region. Your pipeline applies them with the modules shipped in this provider's repository, and tells Xshield what it applied. You write no rule.
+Xshield renders every security group and rule for an AWS account and region, and the network ACL entries that block the malicious IP block template's addresses. Your pipeline applies them with the modules shipped in this provider's repository, and tells Xshield what it applied. You write no rule.
 
 Each step below says who does it, what to run, and how to tell it worked. The [reference](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#readme) explains every choice and every message in more depth.
 
@@ -30,7 +30,7 @@ Set these as secret environment variables on the runner of every workspace that 
 
 ## Step 2: Create the enforcement role, once per account
 
-Whoever owns IAM in the account applies [`enforcement-role/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role), with `pipeline_principal_arns` set to the identities your runner uses. The role can change only security groups and rules tagged `ManagedBy = ColorTokens`, interface attachments, and SSM parameters under `/colortokens/`.
+Whoever owns IAM in the account applies [`enforcement-role/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role), with `pipeline_principal_arns` set to the identities your runner uses. The role can change only security groups and rules tagged `ManagedBy = ColorTokens`, interface attachments, SSM parameters under `/colortokens/`, and entries of the account's network ACLs. To limit the network ACLs it may add entries to, list them in `network_acl_arns`.
 
 **Done when** the apply prints `enforcement_role_arn`. Keep it for step 3.
 
@@ -199,5 +199,6 @@ fail_on = ["drift_high", "never_applied"]
 | You want to stop enforcing | Undeploy the policy in Xshield and keep running the enforcement workspace: it removes the groups. Do not run `terraform destroy` on it. |
 | The account moves back to connector delivery | Replace the module block with [`leave/leave.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/leave), remove the outputs that read the module, apply once, then stop running the workspace. |
 | The enforcement workspace's state is lost | Before any other apply, add [`recovery/recovery.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/recovery), read the plan, and apply. Its import blocks rebuild the state from the last receipt. |
-| An apply stops part-way and the next one fails with `InvalidGroup.Duplicate`, `InvalidPermission.Duplicate` or `ParameterAlreadyExists` | Import each resource the error names, then apply again: see [An interrupted apply](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#an-interrupted-apply). |
+| An apply stops part-way and the next one fails with `InvalidGroup.Duplicate`, `InvalidPermission.Duplicate`, `NetworkAclEntryAlreadyExists` or `ParameterAlreadyExists` | Import each resource the error names, then apply again: see [An interrupted apply](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#an-interrupted-apply). Import a network ACL entry only if it is the deny the plan gives. |
+| The monitor reports `network_acl_block_not_enforced` | Addresses of the malicious IP block template are not blocked on a network ACL: it has no room, the cloud connector has not read it, or an allow of yours is numbered below the deny. The warning says which and what to change: see [Malicious IP block on network ACLs](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#malicious-ip-block-on-network-acls). |
 | A plan stops with any other message | Look it up under [When something goes wrong](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#when-something-goes-wrong). |

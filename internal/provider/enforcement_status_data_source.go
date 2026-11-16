@@ -60,30 +60,31 @@ type wireNotice struct {
 }
 
 type enforcementStatusDataSourceModel struct {
-	Cloud               types.String        `tfsdk:"cloud"`
-	CloudAccountID      types.String        `tfsdk:"cloud_account_id"`
-	Region              types.String        `tfsdk:"region"`
-	Published           types.Bool          `tfsdk:"published"`
-	State               types.String        `tfsdk:"state"`
-	ExpectedVersion     types.String        `tfsdk:"expected_version"`
-	AppliedVersion      types.String        `tfsdk:"applied_version"`
-	AppliedAt           types.String        `tfsdk:"applied_at"`
-	LastCheckedAt       types.String        `tfsdk:"last_checked_at"`
-	PendingSince        types.String        `tfsdk:"pending_since"`
-	PendingRulesAdded   []types.String      `tfsdk:"pending_rules_added"`
-	PendingRulesRemoved []types.String      `tfsdk:"pending_rules_removed"`
-	PendingGroups       []types.String      `tfsdk:"pending_security_groups_added"`
-	PendingAttachments  []types.String      `tfsdk:"pending_attachments_added"`
-	Notices             []noticeModel       `tfsdk:"notices"`
-	DriftEvaluated      types.Bool          `tfsdk:"drift_evaluated"`
-	DriftObservedAt     types.String        `tfsdk:"drift_observed_at"`
-	DriftFindings       []driftFindingModel `tfsdk:"drift_findings"`
-	AppliedGroups       types.Map           `tfsdk:"applied_security_groups"`
-	AppliedRules        types.Map           `tfsdk:"applied_rules"`
-	AppliedAttachments  types.Map           `tfsdk:"applied_attachments"`
-	HandOverGroups      types.Map           `tfsdk:"handover_security_groups"`
-	HandOverRules       types.Map           `tfsdk:"handover_rules"`
-	HandOverAttachments types.Map           `tfsdk:"handover_attachments"`
+	Cloud                    types.String        `tfsdk:"cloud"`
+	CloudAccountID           types.String        `tfsdk:"cloud_account_id"`
+	Region                   types.String        `tfsdk:"region"`
+	Published                types.Bool          `tfsdk:"published"`
+	State                    types.String        `tfsdk:"state"`
+	ExpectedVersion          types.String        `tfsdk:"expected_version"`
+	AppliedVersion           types.String        `tfsdk:"applied_version"`
+	AppliedAt                types.String        `tfsdk:"applied_at"`
+	LastCheckedAt            types.String        `tfsdk:"last_checked_at"`
+	PendingSince             types.String        `tfsdk:"pending_since"`
+	PendingRulesAdded        []types.String      `tfsdk:"pending_rules_added"`
+	PendingRulesRemoved      []types.String      `tfsdk:"pending_rules_removed"`
+	PendingGroups            []types.String      `tfsdk:"pending_security_groups_added"`
+	PendingAttachments       []types.String      `tfsdk:"pending_attachments_added"`
+	Notices                  []noticeModel       `tfsdk:"notices"`
+	DriftEvaluated           types.Bool          `tfsdk:"drift_evaluated"`
+	DriftObservedAt          types.String        `tfsdk:"drift_observed_at"`
+	DriftFindings            []driftFindingModel `tfsdk:"drift_findings"`
+	AppliedGroups            types.Map           `tfsdk:"applied_security_groups"`
+	AppliedRules             types.Map           `tfsdk:"applied_rules"`
+	AppliedAttachments       types.Map           `tfsdk:"applied_attachments"`
+	AppliedNetworkACLEntries types.Map           `tfsdk:"applied_network_acl_entries"`
+	HandOverGroups           types.Map           `tfsdk:"handover_security_groups"`
+	HandOverRules            types.Map           `tfsdk:"handover_rules"`
+	HandOverAttachments      types.Map           `tfsdk:"handover_attachments"`
 }
 
 func (d *enforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -157,15 +158,25 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"message says whether the workspace that owns the group has put them back, or to plan and apply it before anything carries the group again. " +
 					"A `blockRuleNotEnforced` notice names a workload with a block template in Xshield, which AWS does not enforce: a security group " +
 					"can only allow, so the traffic the template blocks passes wherever an allow rule, Xshield's or your own, covers it. There is one " +
-					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded` or `blockRuleNotEnforced`. " +
+					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template that " +
+					"no network ACL entry of Xshield's blocks its addresses for. " +
+					"A `networkAclEntryRefused` notice names addresses of the malicious IP block template Xshield leaves off a network ACL, so they " +
+					"are not blocked for the workloads behind it: the network ACL has no place left in that direction, Xshield's rule numbers on it, " +
+					"the even numbers 50 to 98, are taken, or they wait for entries the next apply removes. Xshield never asks AWS for a place " +
+					"it may not have, so an apply is never refused for it. A `networkAclNotObserved` notice names a network ACL the cloud " +
+					"connector has not read, or no longer shows, so Xshield adds no entry to it. A `networkAclEntryShadowed` notice names an " +
+					"entry of Xshield's that an allow rule of yours, numbered before it, lets the traffic through. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved` or `networkAclEntryShadowed`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
+					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +
+					"for `networkAclNotObserved` `NOT_READ`, `NOT_FOUND` or the connector's error, for `networkAclEntryShadowed` the direction " +
+					"and number of the allow rule, such as `in:40`, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
 					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
 					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
-					"its handle for `asgPolicyDiffers`; null for `prefixListSizeUnknown`, whose message names its groups. " +
+					"its handle for `asgPolicyDiffers`, or the network ACL by its ID for the network ACL notices; null for `prefixListSizeUnknown`, whose message names its groups. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
 					"for `portNotNarrowed`, when the revert was requested; null for every other code. " +
@@ -176,6 +187,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 				"`aws_vpc_security_group_egress_rule.this`, for a key with `/out/`"),
 			"applied_attachments": appliedIDs("attachment import ID, `<network interface ID>_<security group ID>`",
 				"`aws_network_interface_sg_attachment.this`"),
+			"applied_network_acl_entries": appliedIDs("network ACL entry import ID, `<network ACL ID>:<rule number>:-1:<egress>`",
+				"`aws_network_acl_rule.this`"),
 			"handover_security_groups": handOverIDs("security group ID", "`aws_security_group.this`"),
 			"handover_rules": handOverIDs("security group rule ID", "`aws_vpc_security_group_ingress_rule.this`, for a key with `/in/`, or "+
 				"`aws_vpc_security_group_egress_rule.this`, for a key with `/out/`"),
@@ -330,6 +343,7 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 		applied = st.Applied.Resources
 	}
 	data.AppliedGroups, data.AppliedRules, data.AppliedAttachments = stringMap(applied.SecurityGroups), stringMap(applied.Rules), stringMap(applied.Attachments)
+	data.AppliedNetworkACLEntries = stringMap(applied.NetworkACLEntries)
 	handOver := wireRenderedResources{}
 	if st.HandOver != nil {
 		handOver = *st.HandOver

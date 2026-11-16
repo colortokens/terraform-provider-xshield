@@ -249,6 +249,23 @@ resource "aws_ssm_parameter" "directory" {
   tags = merge(var.tags, each.value.tags)
 }
 
+# Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
+# denying all traffic from it inbound or to it outbound. Xshield numbers an entry once and keeps the number, and
+# places a new one only where the network ACL has room, so AWS never refuses one as over its rules per network ACL.
+# An entry changed in AWS is deleted before it is created again: AWS holds one entry per number and direction, so
+# creating the replacement first would be refused.
+resource "aws_network_acl_rule" "this" {
+  for_each = local.snap.network_acl_entries
+
+  network_acl_id  = each.value.network_acl_id
+  egress          = each.value.egress
+  rule_number     = each.value.rule_number
+  rule_action     = "deny"
+  protocol        = "-1"
+  cidr_block      = each.value.cidr_ipv4
+  ipv6_cidr_block = each.value.cidr_ipv6
+}
+
 # Nothing published means nothing to confirm, so no receipt is created or sent.
 resource "xshield_enforcement_receipt" "this" {
   count = local.snap.published ? 1 : 0
@@ -266,6 +283,8 @@ resource "xshield_enforcement_receipt" "this" {
   )
   # Recorded as the attachment's import ID, so a lost state can be rebuilt from the receipt.
   attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
+  # Each entry's import ID; null when there is none, as a receipt sent before network ACL entries holds.
+  network_acl_entries = length(aws_network_acl_rule.this) == 0 ? null : { for key, entry in aws_network_acl_rule.this : key => "${entry.network_acl_id}:${entry.rule_number}:-1:${entry.egress}" }
 
   depends_on = [aws_ssm_parameter.directory, aws_vpc_security_group_rules_exclusive.this]
 }

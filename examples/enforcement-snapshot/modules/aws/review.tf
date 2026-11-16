@@ -146,17 +146,40 @@ locals {
     )
   }
 
+  # One sentence for each network ACL and direction, naming the addresses the malicious IP block template blocks there.
+  review_network_acl_addresses = {
+    for entry in values(local.snap.network_acl_entries) : jsonencode([entry.network_acl_id, entry.egress]) => coalesce(entry.cidr_ipv4, entry.cidr_ipv6)...
+  }
+  review_network_acl_names = {
+    for key, addresses in local.review_network_acl_addresses : key => length(addresses) > local.review_names_per_line ? concat(slice(sort(addresses), 0, local.review_names_per_line), ["${length(addresses) - local.review_names_per_line} more"]) : sort(addresses)
+  }
+  review_network_acl_lines = [
+    for key in sort(keys(local.review_network_acl_names)) : format(
+      "Network ACL %s denies all %s %s, which the malicious IP block template blocks.",
+      jsondecode(key)[0],
+      jsondecode(key)[1] ? "outbound traffic to" : "inbound traffic from",
+      join(" and ", compact([join(", ", slice(local.review_network_acl_names[key], 0, length(local.review_network_acl_names[key]) - 1)), local.review_network_acl_names[key][length(local.review_network_acl_names[key]) - 1]])),
+    )
+  ]
+  review_counts = concat(
+    [
+      "${length(local.review_groups)} ${length(local.review_groups) == 1 ? "group" : "groups"}",
+      "${length(local.snap.ingress_rules) + length(local.snap.egress_rules)} ${length(local.snap.ingress_rules) + length(local.snap.egress_rules) == 1 ? "rule" : "rules"}",
+      "${length(local.snap.interface_attachments)} interface ${length(local.snap.interface_attachments) == 1 ? "attachment" : "attachments"}",
+    ],
+    length(local.snap.network_acl_entries) == 0 ? [] : ["${length(local.snap.network_acl_entries)} network ACL ${length(local.snap.network_acl_entries) == 1 ? "entry" : "entries"}"],
+  )
+
   review = tolist(!local.snap.published ? ["Xshield has published nothing for ${local.account_id}/${local.region}."] : concat(
     flatten([for key in local.review_described : concat([local.review_headers[key]], lookup(local.review_rule_lines, key, []))]),
     length(local.review_groups) == length(local.review_described) ? [] : [
       "${length(local.review_groups) - length(local.review_described)} more ${length(local.review_groups) - length(local.review_described) == 1 ? "group is" : "groups are"} not described here. Raise review_max_groups to describe them.",
     ],
+    local.review_network_acl_lines,
     [format(
-      "Version %s holds %d %s, %d %s and %d interface %s for %s/%s.",
+      "Version %s holds %s for %s/%s.",
       substr(local.snap.version, 0, 12),
-      length(local.review_groups), length(local.review_groups) == 1 ? "group" : "groups",
-      length(local.snap.ingress_rules) + length(local.snap.egress_rules), length(local.snap.ingress_rules) + length(local.snap.egress_rules) == 1 ? "rule" : "rules",
-      length(local.snap.interface_attachments), length(local.snap.interface_attachments) == 1 ? "attachment" : "attachments",
+      join(" and ", [join(", ", slice(local.review_counts, 0, length(local.review_counts) - 1)), local.review_counts[length(local.review_counts) - 1]]),
       local.account_id, local.region,
     )],
   ))
