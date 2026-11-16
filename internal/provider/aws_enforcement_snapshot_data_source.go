@@ -69,6 +69,7 @@ type esAssetModel struct {
 type awsEnforcementSnapshotDataSourceModel struct {
 	CloudAccountID            types.String                    `tfsdk:"cloud_account_id"`
 	Region                    types.String                    `tfsdk:"region"`
+	EnforcementPlan           types.Bool                      `tfsdk:"enforcement_plan"`
 	Published                 types.Bool                      `tfsdk:"published"`
 	Version                   types.String                    `tfsdk:"version"`
 	SecurityGroups            map[string]esSecurityGroupModel `tfsdk:"security_groups"`
@@ -127,6 +128,13 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 					"for a version it published. Set it to pin a version, for break-glass rollback or forensics. When omitted, the version " +
 					"Xshield expects is fetched, so the configuration never changes when policy does. While a pin is in place, Xshield " +
 					"reports the account as pending.",
+			},
+			"enforcement_plan": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "Set to `true` where this read is the enforcement workspace's plan, as the `aws` enforcement module " +
+					"sets it. Xshield then records the read as the pipeline's `last_checked_at`, which the monitor's `pipeline_stopped` " +
+					"watches, and refuses it once the account is handed back to the cloud connector. Leave it unset for a read made " +
+					"to review the snapshot, so that the read cannot hide a stopped pipeline.",
 			},
 			"published": schema.BoolAttribute{
 				Computed: true,
@@ -313,7 +321,7 @@ func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasou
 		return
 	}
 
-	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, true, &resp.Diagnostics)
+	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, data.EnforcementPlan.ValueBool(), &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -322,13 +330,16 @@ func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasou
 			fmt.Sprintf("asked for %s/%s, got %s/%s; nothing is applied", data.CloudAccountID.ValueString(), data.Region.ValueString(), snap.CloudAccountID, snap.Region))
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, snapshotModel(data.CloudAccountID, data.Region, snap))...)
+	model := snapshotModel(data.CloudAccountID, data.Region, snap)
+	model.EnforcementPlan = data.EnforcementPlan
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
-// it has published nothing; a pinned version must exist. Only the enforcement
-// module's read is a heartbeat: reading /expected records it as the pipeline's
-// last check, pinned or not, while other readers take the version from /status.
+// it has published nothing; a pinned version must exist. Only a read that says
+// it is the enforcement plan is a heartbeat: reading /expected records it as the
+// pipeline's last check, pinned or not, while other readers take the version
+// from /status.
 func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.String, heartbeat bool, diags *diag.Diagnostics) (*wireSnapshot, bool) {
 	isPinned := !pinned.IsNull() && !pinned.IsUnknown()
 	version := pinned.ValueString()

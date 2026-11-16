@@ -16,6 +16,7 @@ data "xshield_aws_enforcement_snapshot" "this" {
   cloud_account_id = local.account_id
   region           = local.region
   version          = var.snapshot_version
+  enforcement_plan = true
 
   lifecycle {
     postcondition {

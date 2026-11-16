@@ -107,6 +107,10 @@ run "plans_every_listed_resource" {
   command = plan
 
   assert {
+    condition     = data.xshield_aws_enforcement_snapshot.this.enforcement_plan == true
+    error_message = "the module's read is the enforcement plan, which Xshield records as the pipeline's last check"
+  }
+  assert {
     condition     = toset(keys(aws_security_group.this)) == toset(["i-0a1", "rds/orders-db"])
     error_message = "one security group per snapshot key"
   }

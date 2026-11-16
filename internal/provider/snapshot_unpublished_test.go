@@ -95,10 +95,12 @@ func readDataSource(t *testing.T, ds datasource.DataSource, args map[string]tfty
 	return true, ""
 }
 
+// pointArgs are the enforcement module's: data sources without enforcement_plan ignore it.
 func pointArgs() map[string]tftypes.Value {
 	return map[string]tftypes.Value{
 		"cloud_account_id": tftypes.NewValue(tftypes.String, "123456789012"),
 		"region":           tftypes.NewValue(tftypes.String, "us-east-1"),
+		"enforcement_plan": tftypes.NewValue(tftypes.Bool, true),
 	}
 }
 
