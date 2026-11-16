@@ -18,7 +18,7 @@ mock_provider "xshield" {
       pending_rules_removed         = []
       pending_attachments_added     = []
       drift_evaluated               = true
-      drift_observed_at             = "2020-01-02T00:00:00Z"
+      drift_observed_at             = "2999-01-01T00:00:00Z"
       drift_findings                = []
       notices = [
         { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
@@ -78,7 +78,7 @@ run "warns_that_nothing_is_published_when_asked" {
   expect_failures = [check.xshield_unpublished]
 }
 
-run "warns_on_high_severity_drift_and_not_on_medium" {
+run "warns_on_high_and_medium_severity_drift" {
   command = plan
 
   override_data {
@@ -86,21 +86,25 @@ run "warns_on_high_severity_drift_and_not_on_medium" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", notices = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", notices = []
       drift_findings = [
-        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline" },
-        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone" },
+        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline", detected_at = null },
+        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone", detected_at = null },
       ]
     }
   }
 
-  expect_failures = [check.xshield_drift_high]
+  expect_failures = [check.xshield_drift_high, check.xshield_drift_medium]
 
   assert {
     condition = output.problems == {
       drift_high = [
         "Xshield sees high-severity drift in 123456789012/us-east-1:",
         "  ruleUnmanaged sgr-0a1: tcp 22 from 0.0.0.0/0 was added outside the pipeline (fixed by: manual)",
+      ]
+      drift_medium = [
+        "Xshield sees medium-severity drift in 123456789012/us-east-1:",
+        "  ruleMissing sg-0b2: the rule is gone (fixed by: pipeline)",
       ]
     }
     error_message = "Reported ${jsonencode(output.problems)}."
@@ -119,9 +123,9 @@ run "warns_on_medium_severity_drift_when_asked" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", notices = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", notices = []
       drift_findings = [
-        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone" },
+        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone", detected_at = null },
       ]
     }
   }
@@ -137,7 +141,7 @@ run "warns_on_a_refused_workload" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "assetRefused", reason = "NO_FREE_SLOT", asset_id = "asset-web-1", asset_name = "i-0web1", group = null, since = null, message = "no Xshield group can be written for this workload as it stands" },
       ]
@@ -160,7 +164,7 @@ run "warns_once_per_cause_on_groups_whose_rule_count_is_a_guess_and_gives_the_co
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "prefixListSizeUnknown", reason = "UnauthorizedOperation", asset_id = null, asset_name = null, group = null, since = null, message = "the Xshield connector could not read the region's prefix lists, so Xshield's count of the rules is a guess until it can for each group whose rules name one: ct-policy-0a1b2c3d4e5f, ct-policy-5f4e3d2c1b0a. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list at the size it last read, or as one rule if it never read it: let the connector read them (ec2:DescribeManagedPrefixLists)" },
         { code = "prefixListSizeUnknown", reason = null, asset_id = null, asset_name = null, group = null, since = null, message = "Xshield has not sized prefix lists pl-0a1, pl-0b2, so Xshield's count of the rules is a guess for each group whose rules name one: ct-policy-0a1b2c3d4e5f, ct-policy-5f4e3d2c1b0a. AWS counts a rule naming a prefix list as the list's maximum entries, and Xshield counts a list it has not sized as one rule until the Xshield connector's discovery reads the region's prefix lists" },
@@ -191,7 +195,7 @@ run "a_notice_code_the_monitor_does_not_know_is_not_reported" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "codeThisMonitorDoesNotKnow", reason = "ANY", asset_id = null, asset_name = null, group = "i-0db1", since = null, message = "a notice from a newer Xshield" },
       ]
@@ -212,7 +216,7 @@ run "warns_when_approved_policy_has_waited_too_long_and_counts_everything_waitin
     values = {
       published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since             = "2020-02-01T00:00:00Z", pending_security_groups_added = ["i-0new"], pending_rules_added = [], pending_rules_removed = ["i-0a1/in/tcp/22/10.0.0.0/8"],
-      pending_attachments_added = ["i-0new/eni-0new"], drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+      pending_attachments_added = ["i-0new/eni-0new"], drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = [], notices = []
     }
   }
 
@@ -250,7 +254,7 @@ run "lists_twenty_waiting_changes_and_counts_the_rest" {
       pending_rules_removed         = []
       pending_attachments_added     = []
       drift_evaluated               = true
-      drift_observed_at             = "2020-01-02T00:00:00Z"
+      drift_observed_at             = "2999-01-01T00:00:00Z"
       drift_findings                = []
       notices                       = []
     }
@@ -273,7 +277,7 @@ run "quiet_while_approved_policy_has_waited_less_than_the_limit" {
     values = {
       published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since             = "2999-01-01T00:00:00Z", pending_security_groups_added = [], pending_rules_added = ["i-0a1/in/tcp/443/10.0.0.0/8"], pending_rules_removed = [],
-      pending_attachments_added = [], drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+      pending_attachments_added = [], drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = [], notices = []
     }
   }
 
@@ -311,7 +315,7 @@ run "warns_when_a_full_control_change_has_waited_too_long_for_the_owning_workspa
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "changeSetHeld", reason = "cs-old", asset_id = null, asset_name = null, group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "the change waits for the workspace that owns web to apply" },
         { code = "changeSetHeld", reason = "cs-new", asset_id = null, asset_name = null, group = "vpc-1/admin", since = "2999-01-01T00:00:00Z", message = "the change waits for the workspace that owns admin to apply" },
@@ -342,7 +346,7 @@ run "warns_when_the_enforcement_pipeline_has_stopped" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = [], notices = []
     }
   }
 
@@ -362,7 +366,7 @@ run "quiet_about_the_pipeline_once_the_account_is_handed_back_to_the_connector" 
     values = {
       published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = [], notices = []
     }
   }
 
@@ -388,6 +392,77 @@ run "warns_when_drift_has_not_been_evaluated_since_an_apply_long_ago" {
 
   assert {
     condition     = keys(output.problems) == ["drift_not_evaluated"] && startswith(output.problems.drift_not_evaluated[1], "  applied 2020-01-01T00:00:00Z; last observation none.")
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_when_the_latest_observation_is_older_than_max_unobserved_age" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+    }
+  }
+
+  expect_failures = [check.xshield_drift_not_evaluated]
+
+  assert {
+    condition = output.problems == {
+      drift_not_evaluated = [
+        "Xshield has not evaluated drift in 123456789012/us-east-1 for more than 30m:",
+        "  applied 2020-01-01T00:00:00Z; last observation 2020-01-02T00:00:00Z. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector is running and can reach the account.",
+      ]
+    }
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "quiet_on_an_old_observation_once_handed_over" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "The cloud connector looks for drift once the account is handed over, but reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_on_drift_still_there_after_max_apply_age" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", notices = []
+      drift_findings = [
+        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone", detected_at = "2020-01-03T00:00:00Z" },
+        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0c3", resource_name = null, key = "i-0c3/in/tcp/443/10.0.0.0/8", detail = "the rule is gone", detected_at = "2999-01-01T00:00:00Z" },
+        { kind = "memberWithdrawing", severity = "medium", restoration = "pipeline", resource = "sg-0d4", resource_name = null, key = null, detail = "the group is being withdrawn", detected_at = null },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_drift_medium, check.xshield_drift_unrestored]
+
+  assert {
+    condition = output.problems.drift_unrestored == [
+      "Drift Xshield recorded in 123456789012/us-east-1 more than 24h ago is still there:",
+      "  medium ruleMissing sg-0b2: the rule is gone (detected 2020-01-03T00:00:00Z; fixed by: pipeline)",
+    ]
     error_message = "Reported ${jsonencode(output.problems)}."
   }
 }
@@ -418,7 +493,7 @@ run "warns_on_a_port_whose_group_is_no_longer_narrowed" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "portNotNarrowed", reason = "cs-reverted", asset_id = "asset-web-1", asset_name = "i-0web1", group = "vpc-1/web", since = "2020-03-01T00:00:00Z", message = "inbound port TCP:443 is still deployed, but the change set that narrowed web for it was reverted" },
       ]
@@ -441,7 +516,7 @@ run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = concat(
         [for i in range(1, 11) : {
           code    = "changeSetHeld", reason = "cs-7a1", asset_id = format("asset-%02d", i), asset_name = format("app-%02d", i), group = "vpc-1/sg-web", since = "2020-03-01T00:00:00Z",
@@ -502,7 +577,7 @@ run "withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_are_sile
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
         { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "the instances of this Auto Scaling group do not have the same policy" },
@@ -530,7 +605,7 @@ run "warns_on_withdrawn_groups_split_auto_scaling_groups_and_contained_workloads
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = concat(
         [
           { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "policy no longer uses this security group: the workspace that owns rds/old-db detaches it at its next apply" },
@@ -585,7 +660,7 @@ run "warns_on_asset_policies_in_test_when_asked_with_one_line_for_each_direction
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
         { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
@@ -614,7 +689,7 @@ run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_no
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "carriersNotAcknowledged", reason = null, asset_id = null, asset_name = null, group = "vpc-1/sg-web", since = null, message = "lb-1 carry sg-web and were not shown when the change was approved: Xshield keeps the rules the change moves out of sg-web until they are acknowledged" },
         { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "this block template blocks inbound tcp port 23, which AWS does not block for this workload" },
@@ -662,7 +737,7 @@ run "warns_on_an_ended_revert_when_asked" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "revertEnded", reason = "cs-9", asset_id = null, asset_name = null, group = "vpc-1/sg-db", since = null, message = "the revert of change set cs-9 ended without sg-db shown holding its moved rules again" },
       ]
@@ -695,7 +770,7 @@ run "a_block_template_named_in_fail_on_stops_the_plan" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "this block template blocks inbound tcp port 23, which AWS does not block for this workload" },
       ]
@@ -718,7 +793,7 @@ run "a_contained_workload_named_in_fail_on_stops_the_plan" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
       ]
@@ -742,7 +817,7 @@ run "a_problem_left_out_of_warn_on_is_silent" {
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = false, drift_observed_at = null, notices = []
       drift_findings = [
-        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline" },
+        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline", detected_at = null },
       ]
     }
   }
@@ -765,9 +840,9 @@ run "a_problem_named_in_fail_on_stops_the_plan" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", notices = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", notices = []
       drift_findings = [
-        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline" },
+        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline", detected_at = null },
       ]
     }
   }
@@ -801,7 +876,7 @@ run "fail_on_alone_stops_the_plan_without_a_warning" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "groupRefused", reason = "RULE_BUDGET_EXCEEDED:inbound/ipv4=61", asset_id = null, asset_name = null, group = "i-0web1", since = null, message = "the group does not fit" },
       ]
@@ -843,7 +918,7 @@ run "notices_that_differ_in_group_message_reason_or_time_each_keep_a_line" {
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
         { code = "assetContained", reason = "CONTAINED", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset is contained, in other words" },
@@ -887,7 +962,7 @@ run "held_changes_ports_and_states_that_differ_in_subject_change_set_time_or_kin
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
-      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
         { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-01", asset_name = "app-01", group = null, since = "2020-02-01T00:00:00Z", message = "waits for its interface" },
         { code = "changeSetHeld", reason = "cs-1", asset_id = "asset-02", asset_name = "app-02", group = null, since = "2020-02-01T00:00:00Z", message = "waits for its interface" },

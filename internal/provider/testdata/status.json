@@ -81,6 +81,7 @@
       },
       {
         "detail": "approved rule was removed out of band; traffic it allows is now blocked",
+        "detectedAt": "2026-11-01T08:00:00Z",
         "key": "i-db-1/in/tcp/5432/10.20.1.11/32",
         "kind": "ruleMissing",
         "resource": "sgr-00000000000000016",

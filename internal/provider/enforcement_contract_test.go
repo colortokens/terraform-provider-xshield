@@ -204,6 +204,9 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	if !slices.Equal(kinds, []string{"memberUnattached/workload", "ruleMissing/pipeline"}) || !data.DriftEvaluated.ValueBool() {
 		t.Errorf("drift %v evaluated %v", kinds, data.DriftEvaluated)
 	}
+	if len(data.DriftFindings) == 2 && (!data.DriftFindings[0].DetectedAt.IsNull() || data.DriftFindings[1].DetectedAt.ValueString() != "2026-11-01T08:00:00Z") {
+		t.Errorf("detected at %v and %v, want none for the first finding and the recorded time for the second", data.DriftFindings[0].DetectedAt, data.DriftFindings[1].DetectedAt)
+	}
 
 	var resp datasource.SchemaResponse
 	(&enforcementStatusDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)

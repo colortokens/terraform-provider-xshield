@@ -36,6 +36,7 @@ type driftFindingModel struct {
 	ResourceName types.String `tfsdk:"resource_name"`
 	Key          types.String `tfsdk:"key"`
 	Detail       types.String `tfsdk:"detail"`
+	DetectedAt   types.String `tfsdk:"detected_at"`
 }
 
 type noticeModel struct {
@@ -189,6 +190,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
 					"kind": types.StringType, "severity": types.StringType, "restoration": types.StringType,
 					"resource": types.StringType, "resource_name": types.StringType, "key": types.StringType, "detail": types.StringType,
+					"detected_at": types.StringType,
 				}},
 				MarkdownDescription: "Differences between the cloud as observed and the snapshot as applied. " +
 					"`kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. " +
@@ -199,7 +201,9 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"`resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. " +
 					"`resource_name`: for an attachment finding, the workload as AWS names it, its instance ID or its handle. " +
 					"`key`: snapshot key involved, when there is one. " +
-					"`detail`: human-readable explanation.",
+					"`detail`: human-readable explanation. " +
+					"`detected_at`: when Xshield recorded the finding, which stays recorded until an observation shows it gone; null " +
+					"for a state the next enforcement apply clears or makes, which Xshield does not record as drift.",
 			},
 		},
 	}
@@ -247,6 +251,7 @@ type wireDrift struct {
 		ResourceName string `json:"resourceName"`
 		Key          string `json:"key"`
 		Detail       string `json:"detail"`
+		DetectedAt   string `json:"detectedAt"`
 	} `json:"findings"`
 }
 
@@ -354,6 +359,7 @@ func setDrift(data *enforcementStatusDataSourceModel, drift wireDrift) {
 		data.DriftFindings = append(data.DriftFindings, driftFindingModel{
 			Kind: types.StringValue(f.Kind), Severity: types.StringValue(f.Severity), Restoration: types.StringValue(f.Restoration),
 			Resource: types.StringValue(f.Resource), ResourceName: optionalString(f.ResourceName), Key: optionalString(f.Key), Detail: types.StringValue(f.Detail),
+			DetectedAt: optionalString(f.DetectedAt),
 		})
 	}
 }

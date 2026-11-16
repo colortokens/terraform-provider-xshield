@@ -8,7 +8,8 @@
 # here: read the warnings, the problems output, or use fail_on.
 #
 #   drift_high             the cloud differs from what was applied, and access may be wider than approved
-#   drift_medium           the cloud differs in a way the next enforcement apply restores (not warned by default)
+#   drift_medium           the cloud differs in a way the next enforcement apply restores
+#   drift_unrestored       drift Xshield recorded more than max_apply_age ago is still there
 #   workload_not_enforced  Xshield could not write a group for a workload
 #   prefix_list_size_unknown
 #                          a group's rules name a prefix list Xshield has not sized, or the connector cannot read the
@@ -20,7 +21,8 @@
 #                          that owns a customer security group
 #   pipeline_stopped       no enforcement plan has run for longer than max_run_gap, while the account is not
 #                          handed back to the cloud connector
-#   drift_not_evaluated    Xshield has not looked for drift since the last apply, for longer than max_unobserved_age
+#   drift_not_evaluated    Xshield has not looked for drift for longer than max_unobserved_age: since the last apply, or
+#                          since its latest observation
 #   port_not_narrowed      a port is still deployed in Xshield, but the Full control change that narrowed its
 #                          customer security group was reverted, so the group allows more than the policy
 #   unpublished            Xshield has published nothing here: wrong tenant, or the account is not onboarded
@@ -69,13 +71,14 @@ variable "warn_on" {
   description = "Problems to warn about. See the list at the top of this file."
   type        = set(string)
   default = [
-    "drift_high", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied", "owner_apply_overdue",
-    "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "carriers_not_acknowledged", "block_rule_not_enforced",
+    "drift_high", "drift_medium", "drift_unrestored", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue",
+    "never_applied", "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed",
+    "carriers_not_acknowledged", "block_rule_not_enforced",
   ]
 
   validation {
     condition = length(setsubtract(var.warn_on, [
-      "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
+      "drift_high", "drift_medium", "drift_unrestored", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
       "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test", "carriers_not_acknowledged",
       "revert_ended", "block_rule_not_enforced",
@@ -91,7 +94,7 @@ variable "fail_on" {
 
   validation {
     condition = length(setsubtract(var.fail_on, [
-      "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
+      "drift_high", "drift_medium", "drift_unrestored", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
       "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test", "carriers_not_acknowledged",
       "revert_ended", "block_rule_not_enforced",
@@ -134,13 +137,13 @@ variable "max_run_gap" {
 }
 
 variable "max_unobserved_age" {
-  description = "How long after an apply Xshield may go without evaluating drift."
+  description = "How long Xshield may go without evaluating drift, after an apply and between observations. Xshield asks the cloud connector to observe every 10 minutes."
   type        = string
-  default     = "24h"
+  default     = "30m"
 
   validation {
     condition     = can(timeadd("2020-01-01T00:00:00Z", var.max_unobserved_age))
-    error_message = "The max_unobserved_age value must be a duration such as 24h."
+    error_message = "The max_unobserved_age value must be a duration such as 30m."
   }
 }
 
@@ -158,7 +161,9 @@ locals {
   # coalesce keeps a null time out of timeadd; each use also tests the state or the null itself.
   pending_overdue = timecmp(timeadd(coalesce(local.status.pending_since, local.now), var.max_apply_age), local.now) < 0
   run_overdue     = timecmp(timeadd(coalesce(local.status.last_checked_at, local.now), var.max_run_gap), local.now) < 0
-  unobserved      = timecmp(timeadd(coalesce(local.status.applied_at, local.now), var.max_unobserved_age), local.now) < 0
+  # Drift is evaluated from the latest observation once one followed the apply, and not at all before.
+  evaluated_since = local.status.drift_evaluated ? local.status.drift_observed_at : local.status.applied_at
+  unobserved      = timecmp(timeadd(coalesce(local.evaluated_since, local.now), var.max_unobserved_age), local.now) < 0
 
   pending = concat(
     [for key in local.status.pending_security_groups_added : "  create group ${key}"],
@@ -228,6 +233,11 @@ locals {
     drift_medium = [
       for f in local.status.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "medium"
     ]
+    drift_unrestored = [
+      for f in local.status.drift_findings :
+      "  ${f.severity} ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (detected ${f.detected_at}; fixed by: ${f.restoration})"
+      if f.detected_at != null && timecmp(timeadd(coalesce(f.detected_at, local.now), var.max_apply_age), local.now) < 0
+    ]
     workload_not_enforced = [
       for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id, n.group, "-")}: ${n.message}${n.reason == null ? "" : " (${n.reason})"}" if contains(["assetRefused", "groupRefused"], n.code)
     ]
@@ -243,8 +253,8 @@ locals {
     pipeline_stopped = local.status.published && local.status.state != "handedOver" && local.status.last_checked_at != null && local.run_overdue ? [
       "  last enforcement plan: ${coalesce(local.status.last_checked_at, "never")}. Until that workspace plans again, nothing new Xshield approves is applied and the state below may be stale.",
     ] : []
-    drift_not_evaluated = local.status.applied_version != null && !local.status.drift_evaluated && local.unobserved ? [
-      "  applied ${coalesce(local.status.applied_at, "at an unknown time")}; last observation ${coalesce(local.status.drift_observed_at, "none")}. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector's discovery is running.",
+    drift_not_evaluated = local.status.applied_version != null && local.status.state != "handedOver" && local.unobserved ? [
+      "  applied ${coalesce(local.status.applied_at, "at an unknown time")}; last observation ${coalesce(local.status.drift_observed_at, "none")}${local.status.drift_evaluated || local.status.drift_observed_at == null ? "" : ", taken before that apply"}. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector is running and can reach the account.",
     ] : []
     port_not_narrowed = [
       for c in local.unnarrowed_port_causes : "  ${coalesce(join(", ", c.workloads), c.group, "-")}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, reverted ${coalesce(c.since, "at an unknown time")})"
@@ -268,13 +278,14 @@ locals {
   headlines = {
     drift_high                = "Xshield sees high-severity drift in ${local.where}:"
     drift_medium              = "Xshield sees medium-severity drift in ${local.where}:"
+    drift_unrestored          = "Drift Xshield recorded in ${local.where} more than ${var.max_apply_age} ago is still there:"
     workload_not_enforced     = "Xshield could not enforce every workload in ${local.where}:"
     prefix_list_size_unknown  = "Xshield's count of the rules of these groups in ${local.where} is a guess, so AWS may refuse their rules as over the quota of rules per security group:"
     apply_overdue             = "Approved Xshield policy for ${local.where} has waited more than ${var.max_apply_age} for an enforcement run:"
     never_applied             = "Xshield policy for ${local.where} was published more than ${var.max_apply_age} ago and has never been applied:"
     owner_apply_overdue       = "A Full control change in ${local.where} has waited more than ${var.max_owner_apply_age} for the workspace that owns a customer security group:"
     pipeline_stopped          = "No enforcement plan has run for ${local.where} in more than ${var.max_run_gap}:"
-    drift_not_evaluated       = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
+    drift_not_evaluated       = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age}:"
     port_not_narrowed         = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
     unpublished               = "Xshield has published nothing for ${local.where}:"
     group_withdrawing         = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
@@ -300,6 +311,13 @@ check "xshield_drift_medium" {
   assert {
     condition     = !contains(var.warn_on, "drift_medium") || length(local.problems.drift_medium) == 0
     error_message = join("\n", concat([local.headlines.drift_medium], local.problems.drift_medium))
+  }
+}
+
+check "xshield_drift_unrestored" {
+  assert {
+    condition     = !contains(var.warn_on, "drift_unrestored") || length(local.problems.drift_unrestored) == 0
+    error_message = join("\n", concat([local.headlines.drift_unrestored], local.problems.drift_unrestored))
   }
 }
 
