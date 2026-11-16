@@ -72,10 +72,17 @@ resource "aws_security_group" "this" {
   }
 }
 
+# Every instance below reads the IDs it needs from these maps, which Terraform builds once. Indexing
+# a resource with a key from each.value builds all of its instances for every reference instead, so
+# an account's plan took minutes and gigabytes once it had a few hundred workloads.
+locals {
+  security_group_ids = { for key, group in aws_security_group.this : key => group.id }
+}
+
 resource "aws_vpc_security_group_ingress_rule" "this" {
   for_each = local.snap.ingress_rules
 
-  security_group_id            = aws_security_group.this[each.value.security_group].id
+  security_group_id            = local.security_group_ids[each.value.security_group]
   ip_protocol                  = each.value.ip_protocol
   from_port                    = each.value.from_port
   to_port                      = each.value.to_port
@@ -98,7 +105,7 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
 resource "aws_vpc_security_group_egress_rule" "this" {
   for_each = local.snap.egress_rules
 
-  security_group_id            = aws_security_group.this[each.value.security_group].id
+  security_group_id            = local.security_group_ids[each.value.security_group]
   ip_protocol                  = each.value.ip_protocol
   from_port                    = each.value.from_port
   to_port                      = each.value.to_port
@@ -117,16 +124,18 @@ resource "aws_vpc_security_group_egress_rule" "this" {
 # Each group the module creates holds only the rules the snapshot declares for it, so the next
 # apply removes a rule added to it outside Terraform. Removing this resource revokes nothing.
 locals {
-  ingress_keys_by_group = { for key, rule in local.snap.ingress_rules : rule.security_group => key... }
-  egress_keys_by_group  = { for key, rule in local.snap.egress_rules : rule.security_group => key... }
+  ingress_keys_by_group     = { for key, rule in local.snap.ingress_rules : rule.security_group => key... }
+  egress_keys_by_group      = { for key, rule in local.snap.egress_rules : rule.security_group => key... }
+  ingress_rule_ids_by_group = { for group, keys in local.ingress_keys_by_group : group => [for key in keys : aws_vpc_security_group_ingress_rule.this[key].security_group_rule_id] }
+  egress_rule_ids_by_group  = { for group, keys in local.egress_keys_by_group : group => [for key in keys : aws_vpc_security_group_egress_rule.this[key].security_group_rule_id] }
 }
 
 resource "aws_vpc_security_group_rules_exclusive" "this" {
   for_each = var.enable_exclusive_rules ? local.snap.security_groups : {}
 
-  security_group_id = aws_security_group.this[each.key].id
-  ingress_rule_ids  = [for key in lookup(local.ingress_keys_by_group, each.key, []) : aws_vpc_security_group_ingress_rule.this[key].security_group_rule_id]
-  egress_rule_ids   = [for key in lookup(local.egress_keys_by_group, each.key, []) : aws_vpc_security_group_egress_rule.this[key].security_group_rule_id]
+  security_group_id = local.security_group_ids[each.key]
+  ingress_rule_ids  = lookup(local.ingress_rule_ids_by_group, each.key, [])
+  egress_rule_ids   = lookup(local.egress_rule_ids_by_group, each.key, [])
 }
 
 # An instance's interfaces go with the instance, often before discovery tells
@@ -220,7 +229,7 @@ check "interfaces_have_room" {
 resource "aws_network_interface_sg_attachment" "this" {
   for_each = local.attachments_with_room
 
-  security_group_id    = aws_security_group.this[each.value.security_group].id
+  security_group_id    = local.security_group_ids[each.value.security_group]
   network_interface_id = each.value.network_interface_id
 }
 
@@ -233,7 +242,7 @@ resource "aws_ssm_parameter" "directory" {
   type = "String"
   insecure_value = jsonencode({
     handle             = each.value.handle
-    security_group_ids = [for key in each.value.security_groups : aws_security_group.this[key].id]
+    security_group_ids = [for key in each.value.security_groups : local.security_group_ids[key]]
     slot_limit         = each.value.slot_limit
   })
   tags = merge(var.tags, each.value.tags)
