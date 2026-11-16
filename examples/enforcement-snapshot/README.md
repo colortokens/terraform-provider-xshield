@@ -498,6 +498,11 @@ Plan it on a schedule with `-detailed-exitcode`:
 
 A workspace that exports outputs, as `enforcement/` does, returns 2 on its first plan even while nothing is published, because the outputs are new. Apply once and it returns 0.
 
+In an account and region with many workloads, give each run room:
+
+- **Time.** A plan reads every group and rule the workspace manages back from AWS, at least one request each. AWS limits how many of these requests an account makes in a region, and every tool that reads security groups there shares that limit, Xshield's discovery included. The AWS provider waits and retries when AWS throttles it, so a plan of thousands of rules slows down rather than fails, and can take several minutes. The first apply takes longer, because AWS also limits how fast rules are added. Set the job's timeout to match, and space scheduled runs so that one finishes before the next starts. If a run still stops with `RequestLimitExceeded`, raise `max_retries` in the `aws` provider block.
+- **Memory.** Give the runner about 2 GB for 2,000 workloads, and about 1 GB more for every further 2,000.
+
 ### The monitor workspace
 
 The monitor manages no resources, so `-detailed-exitcode` says nothing about enforcement there, and every monitor check only warns. To stop a pipeline on a problem, choose one of these:

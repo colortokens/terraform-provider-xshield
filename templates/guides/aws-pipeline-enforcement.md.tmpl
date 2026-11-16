@@ -80,6 +80,11 @@ terraform apply tfplan
 
 From here an approved policy change needs no edit to any code. It reaches AWS on the next run.
 
+In an account and region with many workloads, give each run room:
+
+- **Time.** A plan reads every group and rule the workspace manages back from AWS, at least one request each. AWS limits how many of these requests an account makes in a region, and every tool that reads security groups there shares that limit, Xshield's discovery included. The AWS provider waits and retries when AWS throttles it, so a plan of thousands of rules slows down rather than fails, and can take several minutes. The first apply takes longer, because AWS also limits how fast rules are added. Set the job's timeout to match, and space scheduled runs so that one finishes before the next starts. If a run still stops with `RequestLimitExceeded`, raise `max_retries` in the `aws` provider block.
+- **Memory.** Give the runner about 2 GB for 2,000 workloads, and about 1 GB more for every further 2,000.
+
 ## Step 5: Attach groups to databases, functions and services
 
 Skip this step if Xshield enforces only on EC2 instances. Terraform has no separate attachment for an RDS instance, an Aurora cluster, a Lambda function, a Managed Flink application or an App Runner service, so the workspace that owns one adds Xshield's group to the resource's own list. That workspace needs no Xshield credentials.
