@@ -27,6 +27,9 @@ provider "aws" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
+  # ../modules/aws exists only inside the provider's repository. In your copy, use the address at the tag
+  # of the provider release you run, or terraform init cannot find the module:
+  #   source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
   source = "../modules/aws"
 
   tags = { "cost-center" = "platform-security" }
