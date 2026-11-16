@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -292,10 +294,44 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 	if resp.Diagnostics.HasError() {
 		return nil
 	}
-	if key != "" {
-		return shared.NewDirectConfigProvider(tenancy, user, fingerprint, key)
+	if strings.Contains(keyPath, "-----BEGIN") {
+		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "Xshield private key given as its path",
+			"private_key_path (or XSHIELD_PRIVATE_KEY_PATH) holds a PEM key, not the path to one. Set private_key (or XSHIELD_PRIVATE_KEY) "+
+				"to the key instead, and check that nothing has logged the value.")
+		return nil
 	}
-	return shared.NewRawConfigProvider(tenancy, user, fingerprint, keyPath)
+	var config shared.ConfigurationProvider
+	if key != "" {
+		config = shared.NewDirectConfigProvider(tenancy, user, fingerprint, key)
+	} else {
+		config = shared.NewRawConfigProvider(tenancy, user, fingerprint, keyPath)
+	}
+	// The SDK's loading error repeats the path, so neither it nor the value reaches the diagnostic.
+	if _, err := config.KeyLoader().LoadKey(); err != nil {
+		if key != "" {
+			resp.Diagnostics.AddAttributeError(path.Root("private_key"), "Xshield private key does not load",
+				"private_key (or XSHIELD_PRIVATE_KEY) is not a PEM RSA private key. Give the API key's private key as downloaded from Xshield.")
+		} else {
+			resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "Xshield private key does not load",
+				"private_key_path (or XSHIELD_PRIVATE_KEY_PATH) "+unreadableKeyFileReason(keyPath)+
+					". Point it at the API key's PEM private key file, as downloaded from Xshield.")
+		}
+		return nil
+	}
+	return config
+}
+
+func unreadableKeyFileReason(keyPath string) string {
+	switch _, err := os.Stat(keyPath); {
+	case errors.Is(err, fs.ErrNotExist):
+		return "names no file"
+	case errors.Is(err, fs.ErrPermission):
+		return "names a file Terraform may not read"
+	case err != nil:
+		return "names a file Terraform cannot read"
+	default:
+		return "names a file that holds no PEM RSA private key"
+	}
 }
 
 func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resource {

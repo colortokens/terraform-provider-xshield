@@ -91,7 +91,8 @@ Set the API key as secret environment variables on the runner. `XSHIELD_PRIVATE_
 |--|--|
 | `XSHIELD_SERVER_URL` | `https://<tenant>.colortokens.com` |
 | `XSHIELD_TENANCY_ID`, `XSHIELD_USER_ID`, `XSHIELD_FINGERPRINT` | Shown with the API key under **Settings > API Keys** |
-| `XSHIELD_PRIVATE_KEY` or `XSHIELD_PRIVATE_KEY_PATH` | The PEM private key, or a path to it |
+| `XSHIELD_PRIVATE_KEY` | The PEM private key itself |
+| or `XSHIELD_PRIVATE_KEY_PATH` | The path to a file holding it, never the key: the provider refuses a key given here |
 
 The role the workspace assumes needs only these actions; `enforcement-role/` creates it, limiting every group and rule change to resources tagged `ManagedBy = ColorTokens`:
 

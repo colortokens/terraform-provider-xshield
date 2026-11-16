@@ -5,9 +5,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -90,6 +93,88 @@ func TestTwoPrivateKeysAreRefused(t *testing.T) {
 	buildConfigProvider(m, &resp)
 	if !resp.Diagnostics.HasError() || !strings.Contains(resp.Diagnostics.Errors()[0].Detail(), "Set only one") {
 		t.Errorf("a key path in the block and a key in the environment were both accepted: %v", resp.Diagnostics)
+	}
+}
+
+func credentialsInEnvironmentWithoutKey(t *testing.T) {
+	clearXshieldEnv(t)
+	t.Setenv("XSHIELD_TENANCY_ID", "tenancy")
+	t.Setenv("XSHIELD_USER_ID", "user")
+	t.Setenv("XSHIELD_FINGERPRINT", "fp")
+}
+
+func configureErrorsAt(t *testing.T, resp provider.ConfigureResponse, attribute string) string {
+	t.Helper()
+	text := ""
+	for _, d := range resp.Diagnostics.Errors() {
+		withPath, ok := d.(diag.DiagnosticWithPath)
+		if !ok || withPath.Path().String() != attribute {
+			t.Errorf("error %q is not on %s", d.Summary(), attribute)
+		}
+		text += d.Summary() + ": " + d.Detail() + "\n"
+	}
+	if text == "" {
+		t.Fatalf("no error on %s", attribute)
+	}
+	return text
+}
+
+func TestAKeyPutWhereItsPathGoesIsRefusedWithoutPrintingIt(t *testing.T) {
+	credentialsInEnvironmentWithoutKey(t)
+	key := testKeyPEM(t)
+	t.Setenv("XSHIELD_PRIVATE_KEY_PATH", key)
+
+	var resp provider.ConfigureResponse
+	if config := buildConfigProvider(unsetModel(), &resp); config != nil {
+		t.Fatal("configured a client whose key path holds a key")
+	}
+	text := configureErrorsAt(t, resp, "private_key_path")
+	if !strings.Contains(text, "XSHIELD_PRIVATE_KEY ") && !strings.Contains(text, "XSHIELD_PRIVATE_KEY)") {
+		t.Errorf("the error does not say where the key goes:\n%s", text)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(key), "\n") {
+		if strings.Contains(text, line) {
+			t.Fatalf("the error prints the key's line %q", line)
+		}
+	}
+}
+
+func TestAKeyThatDoesNotLoadIsRefusedWhenTheProviderIsConfigured(t *testing.T) {
+	cases := map[string]struct {
+		attribute string
+		set       func(t *testing.T) string
+	}{
+		"a key that is not PEM": {"private_key", func(t *testing.T) string {
+			t.Setenv("XSHIELD_PRIVATE_KEY", "MIIEowIBAAKCAQEAsecret")
+			return "MIIEowIBAAKCAQEAsecret"
+		}},
+		"a path to no file": {"private_key_path", func(t *testing.T) string {
+			missing := filepath.Join(t.TempDir(), "missing.pem")
+			t.Setenv("XSHIELD_PRIVATE_KEY_PATH", missing)
+			return missing
+		}},
+		"a file that holds no key": {"private_key_path", func(t *testing.T) string {
+			file := filepath.Join(t.TempDir(), "key.pem")
+			if err := os.WriteFile(file, []byte("MIIEowIBAAKCAQEAsecret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("XSHIELD_PRIVATE_KEY_PATH", file)
+			return file
+		}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			credentialsInEnvironmentWithoutKey(t)
+			value := c.set(t)
+
+			var resp provider.ConfigureResponse
+			if config := buildConfigProvider(unsetModel(), &resp); config != nil {
+				t.Fatal("configured a client whose key does not load, so its first request would fail instead")
+			}
+			if text := configureErrorsAt(t, resp, c.attribute); strings.Contains(text, value) || strings.Contains(text, "endpoint") {
+				t.Errorf("the error prints the value or points at the endpoint:\n%s", text)
+			}
+		})
 	}
 }
 
