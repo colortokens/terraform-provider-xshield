@@ -489,6 +489,7 @@ run "withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_are_sile
         { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
         { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "the instances of this Auto Scaling group do not have the same policy" },
         { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
+        { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
       ]
     }
   }
@@ -550,6 +551,39 @@ run "warns_on_withdrawn_groups_split_auto_scaling_groups_and_contained_workloads
 
   assert {
     condition     = output.problems.asg_policy_differs[1] == "  asg/web: the instances of this Auto Scaling group do not have the same policy, so each has a group of its own until they do"
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_on_asset_policies_in_test_when_asked_with_one_line_for_each_direction" {
+  command = plan
+
+  variables {
+    warn_on = ["asset_policy_in_test"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
+        { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
+        { code = "assetPolicyInTest", reason = "outbound", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset's outbound policy is in test, which adds no rule on AWS" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_asset_policy_in_test]
+
+  assert {
+    condition = output.problems.asset_policy_in_test == [
+      "Workloads in 123456789012/us-east-1 have an asset policy in test, which writes no rule on AWS:",
+      "  app-01, app-02: the asset's inbound policy is in test, which adds no rule on AWS (inbound)",
+      "  app-01: the asset's outbound policy is in test, which adds no rule on AWS (outbound)",
+    ]
     error_message = "Reported ${jsonencode(output.problems)}."
   }
 }

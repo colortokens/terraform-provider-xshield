@@ -144,8 +144,11 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"rules per security group is a guess until the connector reads them, so AWS may refuse those rules as over the " +
 					"quota. Its message names the lists, and the groups by their names in AWS, such as `ct-policy-0a1b2c3d4e5f`, ten of " +
 					"each and how many more. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed` or `prefixListSizeUnknown`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld` and `portNotNarrowed` the change set's ID, " +
+					"An `assetPolicyInTest` notice names a workload whose asset policy is in test in one direction. On AWS that writes " +
+					"no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's " +
+					"own security groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown` or `assetPolicyInTest`. " +
+					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld` and `portNotNarrowed` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
 					"and null for prefix lists Xshield has not sized. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +

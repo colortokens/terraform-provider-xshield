@@ -446,6 +446,7 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `group_withdrawing` | Policy no longer uses a group, and Xshield keeps it, with its rules, until it sees the group detached. One line for each group, with what it waits for. Not warned by default. |
 | `asg_policy_differs` | The instances of an Auto Scaling group have different policies, so each has a group of its own. One line for each Auto Scaling group. Not warned by default. |
 | `workload_contained` | Xshield contained a workload, so its group stays off its interfaces until the containment is reverted. One line lists the workloads. Not warned by default. |
+| `asset_policy_in_test` | A workload's asset policy is in test. On AWS that writes no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's own groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. One line for each direction, which lists the workloads. Not warned by default. |
 
 Notices about one group that differ only in their workload share a line, so one change held for ten workloads prints one line:
 

@@ -30,6 +30,8 @@
 #                          of its own (not warned by default)
 #   workload_contained     Xshield contained a workload, so its group is off its interfaces until the containment
 #                          is reverted (not warned by default)
+#   asset_policy_in_test   a workload's asset policy is in test, which writes no rule on AWS, so its own groups keep
+#                          deciding the ports and destinations its policy does not allow (not warned by default)
 
 terraform {
   required_version = ">= 1.7.0"
@@ -65,7 +67,7 @@ variable "warn_on" {
     condition = length(setsubtract(var.warn_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
-      "group_withdrawing", "asg_policy_differs", "workload_contained",
+      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test",
     ])) == 0
     error_message = "The warn_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -80,7 +82,7 @@ variable "fail_on" {
     condition = length(setsubtract(var.fail_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
-      "group_withdrawing", "asg_policy_differs", "workload_contained",
+      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test",
     ])) == 0
     error_message = "The fail_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -192,7 +194,7 @@ locals {
       workload = coalesce(n.asset_name, n.asset_id, "-")
       cause    = jsonencode([n.code, n.group, n.message, n.reason, n.since])
     })
-    if contains(["withdrawing", "asgPolicyDiffers", "assetContained"], n.code)
+    if contains(["withdrawing", "asgPolicyDiffers", "assetContained", "assetPolicyInTest"], n.code)
   ]
   deliberate_states_by_cause = { for n in local.deliberate_state_notices : n.cause => n... }
   deliberate_state_causes = [
@@ -238,9 +240,10 @@ locals {
     unpublished = local.status.published ? [] : [
       "  check that the provider points at the right Xshield tenant, and that the account and region are onboarded for pipeline delivery.",
     ]
-    group_withdrawing  = [for c in local.deliberate_state_lines : c.line if c.code == "withdrawing"]
-    asg_policy_differs = [for c in local.deliberate_state_lines : c.line if c.code == "asgPolicyDiffers"]
-    workload_contained = [for c in local.deliberate_state_lines : c.line if c.code == "assetContained"]
+    group_withdrawing    = [for c in local.deliberate_state_lines : c.line if c.code == "withdrawing"]
+    asg_policy_differs   = [for c in local.deliberate_state_lines : c.line if c.code == "asgPolicyDiffers"]
+    workload_contained   = [for c in local.deliberate_state_lines : c.line if c.code == "assetContained"]
+    asset_policy_in_test = [for c in local.deliberate_state_lines : c.line if c.code == "assetPolicyInTest"]
   })
 
   headlines = {
@@ -258,6 +261,7 @@ locals {
     group_withdrawing        = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
     asg_policy_differs       = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
     workload_contained       = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
+    asset_policy_in_test     = "Workloads in ${local.where} have an asset policy in test, which writes no rule on AWS:"
   }
 
   failing = sort([for name in var.fail_on : name if length(local.problems[name]) > 0])
@@ -359,6 +363,13 @@ check "xshield_workload_contained" {
   assert {
     condition     = !contains(var.warn_on, "workload_contained") || length(local.problems.workload_contained) == 0
     error_message = join("\n", concat([local.headlines.workload_contained], local.problems.workload_contained))
+  }
+}
+
+check "xshield_asset_policy_in_test" {
+  assert {
+    condition     = !contains(var.warn_on, "asset_policy_in_test") || length(local.problems.asset_policy_in_test) == 0
+    error_message = join("\n", concat([local.headlines.asset_policy_in_test], local.problems.asset_policy_in_test))
   }
 }
 
