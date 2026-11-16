@@ -441,7 +441,7 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `apply_overdue` | Newer approved policy has waited longer than `max_apply_age` (24h) for an enforcement run. The message counts and lists what is waiting. |
 | `never_applied` | Published policy has never been applied, for longer than `max_apply_age`. |
 | `owner_apply_overdue` | A Full control change has waited longer than `max_owner_apply_age` (24h) for the workspace that owns a customer security group. One line for each change set and group, which lists the workloads it holds. |
-| `pipeline_stopped` | No enforcement plan has run for longer than `max_run_gap` (72h). Raise it if that pipeline runs only on a change. |
+| `pipeline_stopped` | No enforcement plan has run for longer than `max_run_gap` (72h). Raise it if that pipeline runs only on a change. Not reported once the account is handed back to the cloud connector, since its enforcement workspace then stops for good. |
 | `drift_not_evaluated` | Xshield has not looked for drift since the last apply, for longer than `max_unobserved_age` (24h). No finding then means nobody looked. |
 | `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. One line for each port, group and change set, which lists the workloads. |
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. Not warned by default. |

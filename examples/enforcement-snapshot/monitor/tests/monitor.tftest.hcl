@@ -354,6 +354,24 @@ run "warns_when_the_enforcement_pipeline_has_stopped" {
   }
 }
 
+run "quiet_about_the_pipeline_once_the_account_is_handed_back_to_the_connector" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = [], notices = []
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
 run "warns_when_drift_has_not_been_evaluated_since_an_apply_long_ago" {
   command = plan
 

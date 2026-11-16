@@ -18,7 +18,8 @@
 #   never_applied          published policy has never been applied, for longer than max_apply_age
 #   owner_apply_overdue    a Full control change has waited longer than max_owner_apply_age for the workspace
 #                          that owns a customer security group
-#   pipeline_stopped       no enforcement plan has run for longer than max_run_gap
+#   pipeline_stopped       no enforcement plan has run for longer than max_run_gap, while the account is not
+#                          handed back to the cloud connector
 #   drift_not_evaluated    Xshield has not looked for drift since the last apply, for longer than max_unobserved_age
 #   port_not_narrowed      a port is still deployed in Xshield, but the Full control change that narrowed its
 #                          customer security group was reverted, so the group allows more than the policy
@@ -228,7 +229,7 @@ locals {
       for c in local.overdue_held_causes :
       "  ${c.label}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, waiting since ${coalesce(c.since, "an unknown time")}${length(c.workloads) == 0 ? "" : "; workloads: ${join(", ", c.workloads)}"})"
     ]
-    pipeline_stopped = local.status.published && local.status.last_checked_at != null && local.run_overdue ? [
+    pipeline_stopped = local.status.published && local.status.state != "handedOver" && local.status.last_checked_at != null && local.run_overdue ? [
       "  last enforcement plan: ${coalesce(local.status.last_checked_at, "never")}. Until that workspace plans again, nothing new Xshield approves is applied and the state below may be stale.",
     ] : []
     drift_not_evaluated = local.status.applied_version != null && !local.status.drift_evaluated && local.unobserved ? [
