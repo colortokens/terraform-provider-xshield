@@ -606,6 +606,105 @@ run "warns_on_asset_policies_in_test_when_asked_with_one_line_for_each_direction
   }
 }
 
+run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_not_enforce" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "carriersNotAcknowledged", reason = null, asset_id = null, asset_name = null, group = "vpc-1/sg-web", since = null, message = "lb-1 carry sg-web and were not shown when the change was approved: Xshield keeps the rules the change moves out of sg-web until they are acknowledged" },
+        { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "this block template blocks inbound tcp port 23, which AWS does not block for this workload" },
+        { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "this block template blocks inbound tcp port 23, which AWS does not block for this workload" },
+        { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-03", asset_name = "app-03", group = null, since = null, message = "this block template blocks inbound tcp port 23, outbound udp ports 137-139, which AWS does not block for this workload" },
+        { code = "revertEnded", reason = "cs-9", asset_id = null, asset_name = null, group = "vpc-1/sg-db", since = null, message = "the revert of change set cs-9 ended without sg-db shown holding its moved rules again" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_carriers_not_acknowledged, check.xshield_block_rule_not_enforced]
+
+  assert {
+    condition = output.problems.carriers_not_acknowledged == [
+      "Full control changes in 123456789012/us-east-1 move rules out of security groups that something carries which no approval showed:",
+      "  vpc-1/sg-web: lb-1 carry sg-web and were not shown when the change was approved: Xshield keeps the rules the change moves out of sg-web until they are acknowledged",
+    ]
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition = output.problems.block_rule_not_enforced == [
+      "Workloads in 123456789012/us-east-1 have block templates, which AWS does not enforce:",
+      "  app-01, app-02: this block template blocks inbound tcp port 23, which AWS does not block for this workload (Block telnet)",
+      "  app-03: this block template blocks inbound tcp port 23, outbound udp ports 137-139, which AWS does not block for this workload (Block telnet)",
+    ]
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+
+  assert {
+    condition     = !contains(keys(output.problems), "revert_ended")
+    error_message = "An ended revert is not warned by default, but reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_on_an_ended_revert_when_asked" {
+  command = plan
+
+  variables {
+    warn_on = ["revert_ended"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "revertEnded", reason = "cs-9", asset_id = null, asset_name = null, group = "vpc-1/sg-db", since = null, message = "the revert of change set cs-9 ended without sg-db shown holding its moved rules again" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_revert_ended]
+
+  assert {
+    condition = output.problems == {
+      revert_ended = [
+        "Full control reverts in 123456789012/us-east-1 ended without the customer security group shown holding its moved rules again:",
+        "  vpc-1/sg-db: the revert of change set cs-9 ended without sg-db shown holding its moved rules again",
+      ]
+    }
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_block_template_named_in_fail_on_stops_the_plan" {
+  command = plan
+
+  variables {
+    warn_on = []
+    fail_on = ["block_rule_not_enforced"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "blockRuleNotEnforced", reason = "Block telnet", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "this block template blocks inbound tcp port 23, which AWS does not block for this workload" },
+      ]
+    }
+  }
+
+  expect_failures = [output.problems]
+}
+
 run "a_contained_workload_named_in_fail_on_stops_the_plan" {
   command = plan
 

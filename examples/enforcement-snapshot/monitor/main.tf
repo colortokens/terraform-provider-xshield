@@ -33,6 +33,15 @@
 #                          is reverted (not warned by default)
 #   asset_policy_in_test   a workload's asset policy is in test, which writes no rule on AWS, so its own groups keep
 #                          deciding the ports and destinations its policy does not allow (not warned by default)
+#   carriers_not_acknowledged
+#                          a Full control change moves rules out of a customer security group that something carries
+#                          which no approval of the change showed, such as a load balancer: Xshield keeps those rules until
+#                          the carriers are acknowledged, or they lost the rules if the group's own workspace already applied
+#   revert_ended           a Full control revert ended without discovery showing the customer security group holding its
+#                          moved rules again, because nothing carried the group (not warned by default)
+#   block_rule_not_enforced
+#                          a workload has a block template in Xshield, which AWS does not enforce: a security group can
+#                          only allow, so the traffic it blocks passes wherever an allow rule covers it
 
 terraform {
   required_version = ">= 1.7.0"
@@ -61,14 +70,15 @@ variable "warn_on" {
   type        = set(string)
   default = [
     "drift_high", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied", "owner_apply_overdue",
-    "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed",
+    "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "carriers_not_acknowledged", "block_rule_not_enforced",
   ]
 
   validation {
     condition = length(setsubtract(var.warn_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
-      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test",
+      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test", "carriers_not_acknowledged",
+      "revert_ended", "block_rule_not_enforced",
     ])) == 0
     error_message = "The warn_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -83,7 +93,8 @@ variable "fail_on" {
     condition = length(setsubtract(var.fail_on, [
       "drift_high", "drift_medium", "workload_not_enforced", "prefix_list_size_unknown", "apply_overdue", "never_applied",
       "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
-      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test",
+      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test", "carriers_not_acknowledged",
+      "revert_ended", "block_rule_not_enforced",
     ])) == 0
     error_message = "The fail_on list names a problem this monitor does not know. Use the names listed at the top of main.tf."
   }
@@ -195,7 +206,7 @@ locals {
       workload = coalesce(n.asset_name, n.asset_id, "-")
       cause    = jsonencode([n.code, n.group, n.message, n.reason, n.since])
     })
-    if contains(["withdrawing", "asgPolicyDiffers", "assetContained", "assetPolicyInTest"], n.code)
+    if contains(["withdrawing", "asgPolicyDiffers", "assetContained", "assetPolicyInTest", "blockRuleNotEnforced"], n.code)
   ]
   deliberate_states_by_cause = { for n in local.deliberate_state_notices : n.cause => n... }
   deliberate_state_causes = [
@@ -245,24 +256,34 @@ locals {
     asg_policy_differs   = [for c in local.deliberate_state_lines : c.line if c.code == "asgPolicyDiffers"]
     workload_contained   = [for c in local.deliberate_state_lines : c.line if c.code == "assetContained"]
     asset_policy_in_test = [for c in local.deliberate_state_lines : c.line if c.code == "assetPolicyInTest"]
+    carriers_not_acknowledged = [
+      for n in local.status.notices : "  ${coalesce(n.group, "-")}: ${n.message}" if n.code == "carriersNotAcknowledged"
+    ]
+    revert_ended = [
+      for n in local.status.notices : "  ${coalesce(n.group, "-")}: ${n.message}" if n.code == "revertEnded"
+    ]
+    block_rule_not_enforced = [for c in local.deliberate_state_lines : c.line if c.code == "blockRuleNotEnforced"]
   })
 
   headlines = {
-    drift_high               = "Xshield sees high-severity drift in ${local.where}:"
-    drift_medium             = "Xshield sees medium-severity drift in ${local.where}:"
-    workload_not_enforced    = "Xshield could not enforce every workload in ${local.where}:"
-    prefix_list_size_unknown = "Xshield's count of the rules of these groups in ${local.where} is a guess, so AWS may refuse their rules as over the quota of rules per security group:"
-    apply_overdue            = "Approved Xshield policy for ${local.where} has waited more than ${var.max_apply_age} for an enforcement run:"
-    never_applied            = "Xshield policy for ${local.where} was published more than ${var.max_apply_age} ago and has never been applied:"
-    owner_apply_overdue      = "A Full control change in ${local.where} has waited more than ${var.max_owner_apply_age} for the workspace that owns a customer security group:"
-    pipeline_stopped         = "No enforcement plan has run for ${local.where} in more than ${var.max_run_gap}:"
-    drift_not_evaluated      = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
-    port_not_narrowed        = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
-    unpublished              = "Xshield has published nothing for ${local.where}:"
-    group_withdrawing        = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
-    asg_policy_differs       = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
-    workload_contained       = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
-    asset_policy_in_test     = "Workloads in ${local.where} have an asset policy in test, which writes no rule on AWS:"
+    drift_high                = "Xshield sees high-severity drift in ${local.where}:"
+    drift_medium              = "Xshield sees medium-severity drift in ${local.where}:"
+    workload_not_enforced     = "Xshield could not enforce every workload in ${local.where}:"
+    prefix_list_size_unknown  = "Xshield's count of the rules of these groups in ${local.where} is a guess, so AWS may refuse their rules as over the quota of rules per security group:"
+    apply_overdue             = "Approved Xshield policy for ${local.where} has waited more than ${var.max_apply_age} for an enforcement run:"
+    never_applied             = "Xshield policy for ${local.where} was published more than ${var.max_apply_age} ago and has never been applied:"
+    owner_apply_overdue       = "A Full control change in ${local.where} has waited more than ${var.max_owner_apply_age} for the workspace that owns a customer security group:"
+    pipeline_stopped          = "No enforcement plan has run for ${local.where} in more than ${var.max_run_gap}:"
+    drift_not_evaluated       = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age} since the last apply:"
+    port_not_narrowed         = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
+    unpublished               = "Xshield has published nothing for ${local.where}:"
+    group_withdrawing         = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
+    asg_policy_differs        = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
+    workload_contained        = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
+    asset_policy_in_test      = "Workloads in ${local.where} have an asset policy in test, which writes no rule on AWS:"
+    carriers_not_acknowledged = "Full control changes in ${local.where} move rules out of security groups that something carries which no approval showed:"
+    revert_ended              = "Full control reverts in ${local.where} ended without the customer security group shown holding its moved rules again:"
+    block_rule_not_enforced   = "Workloads in ${local.where} have block templates, which AWS does not enforce:"
   }
 
   failing = sort([for name in var.fail_on : name if length(local.problems[name]) > 0])
@@ -371,6 +392,27 @@ check "xshield_asset_policy_in_test" {
   assert {
     condition     = !contains(var.warn_on, "asset_policy_in_test") || length(local.problems.asset_policy_in_test) == 0
     error_message = join("\n", concat([local.headlines.asset_policy_in_test], local.problems.asset_policy_in_test))
+  }
+}
+
+check "xshield_carriers_not_acknowledged" {
+  assert {
+    condition     = !contains(var.warn_on, "carriers_not_acknowledged") || length(local.problems.carriers_not_acknowledged) == 0
+    error_message = join("\n", concat([local.headlines.carriers_not_acknowledged], local.problems.carriers_not_acknowledged))
+  }
+}
+
+check "xshield_revert_ended" {
+  assert {
+    condition     = !contains(var.warn_on, "revert_ended") || length(local.problems.revert_ended) == 0
+    error_message = join("\n", concat([local.headlines.revert_ended], local.problems.revert_ended))
+  }
+}
+
+check "xshield_block_rule_not_enforced" {
+  assert {
+    condition     = !contains(var.warn_on, "block_rule_not_enforced") || length(local.problems.block_rule_not_enforced) == 0
+    error_message = join("\n", concat([local.headlines.block_rule_not_enforced], local.problems.block_rule_not_enforced))
   }
 }
 

@@ -444,12 +444,15 @@ Run `monitor/` as a workspace of its own, on a schedule. It reads the status of 
 | `pipeline_stopped` | No enforcement plan has run for longer than `max_run_gap` (72h). Raise it if that pipeline runs only on a change. Not reported once the account is handed back to the cloud connector, since its enforcement workspace then stops for good. |
 | `drift_not_evaluated` | Xshield has not looked for drift since the last apply, for longer than `max_unobserved_age` (24h). No finding then means nobody looked. |
 | `port_not_narrowed` | A port is still deployed in Xshield after the Full control change that narrowed its customer security group was reverted. One line for each port, group and change set, which lists the workloads. |
+| `carriers_not_acknowledged` | A Full control change moves rules out of a customer security group that something carries which no approval of the change showed, such as a load balancer. Xshield keeps those rules until the carriers are acknowledged by deploying the change again; if the group's own workspace already applied, they have lost the rules. One line for each group, which names the carriers. |
+| `block_rule_not_enforced` | A workload has a block template in Xshield, which AWS does not enforce: a security group can only allow, so the traffic the template blocks passes wherever an allow rule covers it. Remove those ports from the templates and security groups that allow them for the workload. One line for each template and set of ports, which lists the workloads. |
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. Not warned by default. |
 | `unpublished` | Xshield has published nothing here: the wrong tenant, or an account that is not onboarded. Not warned by default. |
 | `group_withdrawing` | Policy no longer uses a group, and Xshield keeps it, with its rules, until it sees the group detached. One line for each group, with what it waits for. Not warned by default. |
 | `asg_policy_differs` | The instances of an Auto Scaling group have different policies, so each has a group of its own. One line for each Auto Scaling group. Not warned by default. |
 | `workload_contained` | Xshield contained a workload, so its group stays off its interfaces until the containment is reverted. One line lists the workloads. Not warned by default. |
 | `asset_policy_in_test` | A workload's asset policy is in test. On AWS that writes no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's own groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. One line for each direction, which lists the workloads. Not warned by default. |
+| `revert_ended` | A Full control revert ended without discovery showing the customer security group holding its moved rules again, because nothing carried the group. The line says whether the group's own workspace has put the rules back, or to plan and apply it before anything carries the group again. Not warned by default. |
 
 Notices about one group that differ only in their workload share a line, so one change held for ten workloads prints one line:
 

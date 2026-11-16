@@ -147,13 +147,23 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"An `assetPolicyInTest` notice names a workload whose asset policy is in test in one direction. On AWS that writes " +
 					"no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's " +
 					"own security groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown` or `assetPolicyInTest`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld` and `portNotNarrowed` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, " +
+					"A `carriersNotAcknowledged` notice is about one of your own security groups that a Full control change moves rules out of, while " +
+					"something carries it that no approval of the change showed, such as a load balancer or an interface no workload owns. No group of " +
+					"Xshield's can be attached to such a carrier, so Xshield keeps the moved rules until the carriers are acknowledged by deploying the " +
+					"change again; if the workspace that owns the group has already applied, they have lost those rules. " +
+					"A `revertEnded` notice is about a Full control revert that ended without discovery showing your security group holding its moved " +
+					"rules again, because nothing has carried the group for an hour or more. Xshield's groups that kept those rules are withdrawn: its " +
+					"message says whether the workspace that owns the group has put them back, or to plan and apply it before anything carries the group again. " +
+					"A `blockRuleNotEnforced` notice names a workload with a block template in Xshield, which AWS does not enforce: a security group " +
+					"can only allow, so the traffic the template blocks passes wherever an allow rule, Xshield's or your own, covers it. There is one " +
+					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded` or `blockRuleNotEnforced`. " +
+					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
-					"and null for prefix lists Xshield has not sized. " +
+					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
-					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld` and `portNotNarrowed`, or the Auto Scaling group by " +
+					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
 					"its handle for `asgPolicyDiffers`; null for `prefixListSizeUnknown`, whose message names its groups. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
