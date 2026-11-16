@@ -28,9 +28,9 @@ Every pull request must keep `make build`, `make test`, `make vet` and the
 formatting check green. These are enforced by the `Test` GitHub Actions
 workflow.
 
-`docs/` is generated from the schema descriptions and `examples/` by
-`make docs`. Change the schema or example, then regenerate; do not edit a page
-by hand.
+`docs/` is generated from the schema descriptions, `examples/` and
+`templates/guides/` by `make docs`. Change the schema, example or guide template,
+then regenerate; do not edit a page by hand.
 
 ## Tests
 

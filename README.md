@@ -94,8 +94,9 @@ Understanding the tenant, so policy can be written without the portal:
 ## Enforcing AWS policy through your own pipeline
 
 When an AWS account's policy delivery is Terraform pipeline, your pipeline creates the security
-groups Xshield renders instead of the cloud connector. Start with
-[examples/enforcement-snapshot](examples/enforcement-snapshot/README.md), whose modules use these:
+groups Xshield renders instead of the cloud connector. Start with the step-by-step
+[guide](docs/guides/aws-pipeline-enforcement.md). [examples/enforcement-snapshot](examples/enforcement-snapshot/README.md)
+explains each step in depth, and its modules use these:
 
 | Resource or data source | Does |
 | --- | --- |

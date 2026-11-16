@@ -2,6 +2,8 @@
 
 Apply Xshield segmentation policy through your own Terraform pipeline. Xshield renders every rule; these modules create exactly what it lists, and report back what was applied.
 
+To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enforcement.md). This page is the reference behind it: why each step is needed, what each message means, and how to recover from each failure.
+
 ## Who writes what
 
 Xshield decides everything that is enforced: which groups exist, every rule in them, what carries each group, and under Full control which rule of a group of your own is left out. None of that is written in your code. Your code carries it to AWS, through the modules below.
@@ -74,7 +76,7 @@ module "xshield_enforcement" {
 }
 ```
 
-The modules ship in the provider's repository, under `examples/enforcement-snapshot/modules/`. Set `ref` to the tag of the provider release you run, so the module and the provider match.
+The modules ship in the provider's repository, under `examples/enforcement-snapshot/modules/`. Set `ref` to the tag of the provider release you run, so the module and the provider match. `enforcement/` calls the module as `../modules/aws`, which exists only inside this repository: in your copy, change that `source` to the address above, or `terraform init` cannot find the module.
 
 The module needs no inputs. It enforces the account and region the AWS provider is configured for, and refuses to apply a snapshot meant for any other. Each plan names the workload every change is for:
 
