@@ -31,13 +31,13 @@ import {
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if contains(keys(data.xshield_aws_enforcement_snapshot.recover.ingress_rules), k) }
+  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.ingress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if contains(keys(data.xshield_aws_enforcement_snapshot.recover.egress_rules), k) }
+  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.egress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_egress_rule.this[each.key]
   id       = each.value
 }
@@ -45,7 +45,7 @@ import {
 # An interface that went with its instance since the last receipt has no attachment to import: the
 # module declares none for it.
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_attachments : k => v if contains(module.xshield_enforcement.attachment_keys, k) }
+  for_each = { for k in setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
   id       = each.value
 }
