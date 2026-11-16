@@ -309,7 +309,7 @@ func ruleMatches(rule sgrRuleModel, m wireRuleMatch) bool {
 	if canonicalProtocol(rule.IPProtocol.ValueString()) != canonicalProtocol(m.IPProtocol) {
 		return false
 	}
-	if m.FromPort != nil && !(samePort(rule.FromPort, m.FromPort) && samePort(rule.ToPort, m.ToPort)) {
+	if m.FromPort != nil && (!samePort(rule.FromPort, m.FromPort) || !samePort(rule.ToPort, m.ToPort)) {
 		return false
 	}
 	switch {
