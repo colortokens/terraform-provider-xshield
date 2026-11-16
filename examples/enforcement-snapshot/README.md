@@ -399,7 +399,7 @@ If Xshield no longer publishes the change set at all when the `applied` receipt 
 
 A receipt's label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. Elsewhere, set `receipt_label` in the module call, for example to the pipeline's name, so that the notice says which workspace to apply. If Xshield cannot take the `applying` receipt, the apply stops before any rule of the group changes: fix the cause and apply again. If Xshield cannot take the `applied` receipt, the apply fails after the group's rules are created or updated, and before any is taken out. Fix the cause and apply again: the apply sends the receipt, then takes those rules out. Until Xshield has it, a revert of a change it reports keeps the access.
 
-Removing the module call, or destroying the workspace, destroys both receipts, and Xshield forgets their ID. Xshield keeps waiting for a receipt ID that no workspace declares any more, when a revert is of a change that ID reported narrowing a group. That happens when:
+Removing the module call, or destroying the workspace, destroys both receipts, and Xshield forgets their ID. Removing the call alone also destroys the group's rules: take a group out of the module as [the module's README](modules/aws-security-group-rules/README.md#taking-a-group-out-of-the-module) shows. Xshield keeps waiting for a receipt ID that no workspace declares any more, when a revert is of a change that ID reported narrowing a group. That happens when:
 
 - the receipts are taken out of the workspace's state with `terraform state rm`, or by a `removed` block that does not destroy them;
 - the workspace's state is rolled back to a version that holds another receipt ID, or none;

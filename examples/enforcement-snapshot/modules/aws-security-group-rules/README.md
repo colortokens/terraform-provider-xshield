@@ -72,7 +72,45 @@ A plan shows it three times in a group's life. The first plan with this version 
 
 That last plan is why it exists. Once a workspace stops calling the module and stops reading `xshield_aws_security_group_changes`, its plan reads nothing from Xshield, so nothing in the plan says a change applies to the group. The deleted record still does, and a policy check can read it to stop a plan that would put back a rule a change took out.
 
-To take a group out of the module while a change applies to it, revert the change in Xshield first, apply the workspace so the group's rules return as declared, and then remove the module call.
+## Taking a group out of the module
+
+Removing the module call on its own destroys every rule of the group, as only the module declares them, and everything that carries the group loses that traffic. Take a group out in this order instead:
+
+1. Revert any change that applies to the group in Xshield, and apply the workspace. The group's rules return as declared, and the module holds no receipts.
+2. Replace the module call with one of these, and check that the plan destroys no rule.
+
+   To keep declaring the rules in this workspace, declare each as a resource of its own, with the same arguments, and move it out of the module. The plan shows each rule as moved, and deletes only the record kept in state:
+
+   ```hcl
+   resource "aws_vpc_security_group_ingress_rule" "web" {
+     for_each = local.web_ingress
+
+     security_group_id = aws_security_group.web.id
+     ip_protocol       = each.value.ip_protocol
+     from_port         = each.value.from_port
+     to_port           = each.value.to_port
+     cidr_ipv4         = each.value.cidr_ipv4
+   }
+
+   moved {
+     from = module.web_rules.aws_vpc_security_group_ingress_rule.this
+     to   = aws_vpc_security_group_ingress_rule.web
+   }
+   ```
+
+   Do the same for the egress rules. To leave the rules in AWS and stop managing them here, remove the module instead. The plan shows the rules and the record as no longer managed, and destroys nothing:
+
+   ```hcl
+   removed {
+     from = module.web_rules
+
+     lifecycle {
+       destroy = false
+     }
+   }
+   ```
+
+3. Apply, then delete the `moved` or `removed` blocks.
 
 ## The receipts it sends
 
