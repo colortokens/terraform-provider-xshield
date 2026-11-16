@@ -78,8 +78,9 @@ To take a group out of the module while a change applies to it, revert the chang
 
 While an approved change applies to the group, the module declares two `xshield_aws_security_group_changes_receipt` resources under one ID. Each tells Xshield which change sets the group's rules come from and their states, as the plan read them from `xshield_aws_security_group_rules`:
 
-- `applying`, with `stage = "applying"`, is sent before any rule changes: the group's ingress and egress rules `depends_on` it. Xshield refuses it when the plan was made before a revert, and the apply then stops with no rule changed.
-- `applied`, with `stage = "applied"` and `receipt_id` set to the `applying` receipt's ID, `depends_on` the rules, so it is sent once they are applied.
+- `applying`, with `stage = "applying"`, is sent before any rule is created or updated: the group's ingress and egress rules `depends_on` it. Xshield refuses it when the plan was made before a revert, and the apply then stops with no rule changed.
+- `applied`, with `stage = "applied"` and `receipt_id` set to the `applying` receipt's ID, `depends_on` the rules, so it is sent once they are created or updated.
+- The rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed only after `applied`. Without it, Terraform destroys such a rule before it sends `applying`, and a refused `applying` receipt would no longer stop it. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of this module version on: see [How a revert waits for this workspace](../../README.md#how-a-revert-waits-for-this-workspace).
 
 A revert of a change waits for these receipts: see [How a revert waits for this workspace](../../README.md#how-a-revert-waits-for-this-workspace).
 

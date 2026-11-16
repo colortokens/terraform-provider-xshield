@@ -43,10 +43,14 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   description                  = each.value.description
   tags                         = each.value.tags
 
-  # Xshield refuses the applying receipt of a plan made before a revert, so no rule changes in such an apply.
+  # Every rule change waits for the applying receipt, which Xshield refuses for a plan made before a revert, and with
+  # create_before_destroy a rule taken out goes only after the applied receipt. Terraform reads that order for a rule
+  # no longer declared from the state the last apply wrote, so it holds from the second apply of this version on.
   depends_on = [xshield_aws_security_group_changes_receipt.applying]
 
   lifecycle {
+    create_before_destroy = true
+
     precondition {
       condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
       error_message = local.unacknowledged_carriers_message
@@ -68,10 +72,14 @@ resource "aws_vpc_security_group_egress_rule" "this" {
   description                  = each.value.description
   tags                         = each.value.tags
 
-  # Xshield refuses the applying receipt of a plan made before a revert, so no rule changes in such an apply.
+  # Every rule change waits for the applying receipt, which Xshield refuses for a plan made before a revert, and with
+  # create_before_destroy a rule taken out goes only after the applied receipt. Terraform reads that order for a rule
+  # no longer declared from the state the last apply wrote, so it holds from the second apply of this version on.
   depends_on = [xshield_aws_security_group_changes_receipt.applying]
 
   lifecycle {
+    create_before_destroy = true
+
     precondition {
       condition     = !var.fail_on_unacknowledged_carriers || length(local.unacknowledged_carriers) == 0
       error_message = local.unacknowledged_carriers_message

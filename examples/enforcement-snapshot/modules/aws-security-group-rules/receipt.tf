@@ -1,7 +1,7 @@
 # Tells Xshield which change sets the group's rules come from and in what state, twice in each apply and under one ID.
-# The applying receipt goes first and the rules wait for it, so Xshield refuses a plan made before a revert while no rule
-# has changed. The applied receipt goes once the rules are applied, and a revert keeps the access it moved into ct-cohort-
-# groups until an applied receipt reports the revert.
+# The applying receipt goes first: rules are created or updated after it, and a rule taken out is destroyed only after
+# the applied receipt, so Xshield refuses a plan made before a revert while no rule has changed. A revert keeps the access
+# it moved into ct-cohort- groups until an applied receipt reports the revert.
 
 resource "xshield_aws_security_group_changes_receipt" "applying" {
   count = local.changed ? 1 : 0

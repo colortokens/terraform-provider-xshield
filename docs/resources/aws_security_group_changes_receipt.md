@@ -3,16 +3,16 @@
 page_title: "xshield_aws_security_group_changes_receipt Resource - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  Tells Xshield which changes to your own security groups a workspace applies. The aws-security-group-rules module declares two for each group an approved Full control change applies to, under one ID: one with stage = "applying" that the group's rules depend on, so it is sent before any rule changes, and one with stage = "applied" that depends on the rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
-  When a change is reverted, Xshield keeps the access it moved into ct-cohort- groups until every receipt ID that reported the change narrowing a group sends an applied receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that applying receipt, and the apply stops before any rule changes.
+  Tells Xshield which changes to your own security groups a workspace applies. The aws-security-group-rules module declares two for each group an approved Full control change applies to, under one ID: one with stage = "applying" that the group's rules depend on, so it is sent before any rule is created or updated, and one with stage = "applied" that depends on the rules, so it is sent once they are. The module's rules set create_before_destroy, so a rule the apply takes out of the group is destroyed after the applied receipt; without it, Terraform destroys such a rule before it sends the applying receipt. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of rules that set it. Rules wired to these receipts by hand need create_before_destroy too. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
+  When a change is reverted, Xshield keeps the access it moved into ct-cohort- groups until every receipt ID that reported the change narrowing a group sends an applied receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that applying receipt, and the apply stops before any rule that waits for it changes.
   Changing what it reports sends it again under the same id. Destroying the receipt that generated the ID tells Xshield to forget it, so no revert waits on it; destroying one sent under receipt_id sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 ---
 
 # xshield_aws_security_group_changes_receipt (Resource)
 
-Tells Xshield which changes to your own security groups a workspace applies. The `aws-security-group-rules` module declares two for each group an approved Full control change applies to, under one ID: one with `stage = "applying"` that the group's rules depend on, so it is sent before any rule changes, and one with `stage = "applied"` that depends on the rules, so it is sent once they are applied. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
+Tells Xshield which changes to your own security groups a workspace applies. The `aws-security-group-rules` module declares two for each group an approved Full control change applies to, under one ID: one with `stage = "applying"` that the group's rules depend on, so it is sent before any rule is created or updated, and one with `stage = "applied"` that depends on the rules, so it is sent once they are. The module's rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed after the `applied` receipt; without it, Terraform destroys such a rule before it sends the `applying` receipt. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of rules that set it. Rules wired to these receipts by hand need `create_before_destroy` too. The API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the built-in ADMIN and USER roles both have.
 
-When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that `applying` receipt, and the apply stops before any rule changes.
+When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield refuses that `applying` receipt, and the apply stops before any rule that waits for it changes.
 
 Changing what it reports sends it again under the same `id`. Destroying the receipt that generated the ID tells Xshield to forget it, so no revert waits on it; destroying one sent under `receipt_id` sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in any configuration, and destroy it.
 
@@ -23,6 +23,8 @@ Changing what it reports sends it again under the same `id`. Destroying the rece
 # report what the same read of xshield_aws_security_group_rules gave. The rules
 # depend on the applying receipt, so Xshield can refuse a plan made before a
 # revert before any rule changes, and the applied receipt depends on the rules.
+# Without create_before_destroy on the rules, Terraform destroys a rule taken out
+# of the configuration before it sends the applying receipt.
 resource "xshield_aws_security_group_changes_receipt" "applying" {
   stage            = "applying"
   cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
@@ -43,6 +45,10 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
   cidr_ipv4         = each.value.cidr_ipv4
 
   depends_on = [xshield_aws_security_group_changes_receipt.applying]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "xshield_aws_security_group_changes_receipt" "applied" {

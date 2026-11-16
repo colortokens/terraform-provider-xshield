@@ -69,15 +69,19 @@ func (r *awsSecurityGroupChangesReceiptResource) Schema(ctx context.Context, req
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Tells Xshield which changes to your own security groups a workspace applies. The " +
 			"`aws-security-group-rules` module declares two for each group an approved Full control change applies to, " +
-			"under one ID: one with `stage = \"applying\"` that the group's rules depend on, so it is sent before any rule " +
-			"changes, and one with `stage = \"applied\"` that depends on the rules, so it is sent once they are applied. The " +
+			"under one ID: one with `stage = \"applying\"` that the group's rules depend on, so it is sent before any rule is " +
+			"created or updated, and one with `stage = \"applied\"` that depends on the rules, so it is sent once they are. The " +
+			"module's rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed after the " +
+			"`applied` receipt; without it, Terraform destroys such a rule before it sends the `applying` receipt. Terraform " +
+			"reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second " +
+			"apply of rules that set it. Rules wired to these receipts by hand need `create_before_destroy` too. The " +
 			"API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the " +
 			"built-in ADMIN and USER roles both have.\n\n" +
 			"When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID " +
 			"that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, " +
 			"and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the " +
 			"change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield " +
-			"refuses that `applying` receipt, and the apply stops before any rule changes.\n\n" +
+			"refuses that `applying` receipt, and the apply stops before any rule that waits for it changes.\n\n" +
 			"Changing what it reports sends it again under the same `id`. Destroying the receipt that generated the ID tells " +
 			"Xshield to forget it, so no revert waits on it; destroying one sent under `receipt_id` sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the " +
 			"workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in " +
@@ -237,7 +241,8 @@ const (
 	codeChangeSetsChanged = "changeSetsChanged"
 )
 
-// groupChangesReceiptAdvice says what the apply did: an applying receipt is sent before the rules, which wait for it.
+// groupChangesReceiptAdvice says what the apply did, whichever way the rules are wired: rules that wait for the receipt
+// have not changed, and those it waits for are applied.
 func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
 	applying := body.Stage == receiptStageApplying
 	switch {
@@ -247,15 +252,16 @@ func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
 		return changeSetsChangedAdvice(body)
 	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished) && applying:
 		return "Xshield has no published snapshot for this account and region, so the changes this plan read no longer exist. " +
-			"No rule was changed. Run a new plan and apply it."
+			"No rule waiting on this receipt was changed. Run a new plan and apply it."
 	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished):
-		return "The group's rules are applied, but Xshield has no published snapshot for this account and region, so the " +
-			"changes this plan read no longer exist: run a new plan and apply it."
+		return "The rules this receipt waits for are applied, and no rule waiting on it was changed, but Xshield has no published " +
+			"snapshot for this account and region, so the changes this plan read no longer exist: run a new plan and apply it."
 	case applying:
-		return "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."
+		return "No rule waiting on this receipt was changed. Apply again once the cause is fixed."
 	}
-	return "The group's rules are applied. Apply again to send this receipt once the cause is fixed. Until Xshield has it, a " +
-		"revert of a change it reports keeps the access Xshield moved into ct-cohort- groups."
+	return "The rules this receipt waits for are applied, and no rule waiting on it was changed. Apply again to send this " +
+		"receipt once the cause is fixed. Until Xshield has it, a revert of a change it reports keeps the access Xshield moved " +
+		"into ct-cohort- groups."
 }
 
 // notNarrowingAdvice names what the receipt listed narrowing; Xshield's refusal names which of those it no longer publishes.
@@ -270,19 +276,16 @@ func notNarrowingAdvice(body wireGroupChangesReceipt, applying bool) string {
 			}
 		}
 	}
-	lead, its, where := "a change set this plan read as narrowing, as its refusal names: it was", "its", "the group"
+	lead, where := "a change set this plan read as narrowing, as its refusal names: it was", "the group"
 	switch {
 	case len(listed) == 1:
 		lead, where = listed[0]+": it was", group
 	case len(listed) > 1:
 		lead = "one or more of the change sets this plan read as narrowing, as its refusal names (" + strings.Join(listed, ", ") + "): they were"
-		its, where = "their", "those groups"
+		where = "those groups"
 	}
-	advice := "Xshield no longer publishes " + lead + " reverted or withdrawn after this plan was made"
-	if applying {
-		return advice + ". No rule was changed. Run a new plan and apply it."
-	}
-	return advice + ", and this apply has taken " + its + " moved rules out of " + where + ": run a new plan and apply it now to put them back."
+	return "Xshield no longer publishes " + lead + " reverted or withdrawn after this plan was made. No rule waiting on this receipt was " +
+		"changed. Run a new plan and apply it now: it puts back any moved rule this apply took out of " + where + "."
 }
 
 // changeSetsChangedAdvice names what the receipt listed other than narrowing; Xshield's refusal names which of those it
@@ -304,7 +307,8 @@ func changeSetsChangedAdvice(body wireGroupChangesReceipt) string {
 		lead = "one or more of the change sets this plan read, as its refusal names (" + strings.Join(listed, ", ") +
 			"): their reverts ended or they were"
 	}
-	return "Xshield no longer publishes " + lead + " withdrawn after this plan was made. No rule was changed. Run a new plan and apply it."
+	return "Xshield no longer publishes " + lead + " withdrawn after this plan was made. No rule waiting on this receipt was changed. " +
+		"Run a new plan and apply it."
 }
 
 // send reports whether Xshield may hold the receipt now, which it does unless it answered with a refusal.

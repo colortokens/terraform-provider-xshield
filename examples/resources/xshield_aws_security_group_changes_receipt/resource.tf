@@ -2,6 +2,8 @@
 # report what the same read of xshield_aws_security_group_rules gave. The rules
 # depend on the applying receipt, so Xshield can refuse a plan made before a
 # revert before any rule changes, and the applied receipt depends on the rules.
+# Without create_before_destroy on the rules, Terraform destroys a rule taken out
+# of the configuration before it sends the applying receipt.
 resource "xshield_aws_security_group_changes_receipt" "applying" {
   stage            = "applying"
   cloud_account_id = data.xshield_aws_security_group_rules.web.cloud_account_id
@@ -22,6 +24,10 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
   cidr_ipv4         = each.value.cidr_ipv4
 
   depends_on = [xshield_aws_security_group_changes_receipt.applying]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "xshield_aws_security_group_changes_receipt" "applied" {

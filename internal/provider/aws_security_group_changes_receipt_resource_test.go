@@ -463,8 +463,9 @@ func TestACreatedReceiptStaysInStateOnlyWhenXshieldMayHoldIt(t *testing.T) {
 			if !resp.Diagnostics.HasError() {
 				t.Fatal("a receipt Xshield did not accept was created without an error")
 			}
-			if detail := resp.Diagnostics.Errors()[0].Detail(); !strings.Contains(detail, "The group's rules are applied. Apply again") {
-				t.Errorf("the error does not say the rules are applied and to apply again:\n%s", detail)
+			if detail := resp.Diagnostics.Errors()[0].Detail(); !strings.Contains(detail, "The rules this receipt waits for are applied, and no rule "+
+				"waiting on it was changed. Apply again") {
+				t.Errorf("the error does not say which rules are applied and to apply again:\n%s", detail)
 			}
 			if inState := !resp.State.Raw.IsNull(); inState != test.inState {
 				t.Errorf("kept in state: %v, want %v", inState, test.inState)
@@ -496,8 +497,8 @@ func TestAReceiptForChangesNoLongerPublishedSaysToPlanAgainWithoutRetrying(t *te
 	if !resp.Diagnostics.HasError() || !resp.State.Raw.IsNull() {
 		t.Fatalf("error %v and state %v, want an error and no receipt in state", resp.Diagnostics, resp.State.Raw)
 	}
-	want := "The group's rules are applied, but Xshield has no published snapshot for this account and region, so the changes " +
-		"this plan read no longer exist: run a new plan and apply it."
+	want := "The rules this receipt waits for are applied, and no rule waiting on it was changed, but Xshield has no published snapshot " +
+		"for this account and region, so the changes this plan read no longer exist: run a new plan and apply it."
 	if detail := resp.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, want) {
 		t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, want)
 	}
@@ -516,18 +517,12 @@ func TestAReceiptForChangesNoLongerPublishedSaysToPlanAgainWithoutRetrying(t *te
 
 const notNarrowingRefusal = `{"status":409,"code":"notNarrowing","message":"change set cs-1 is not published as narrowing sg-0web"}`
 
-// A receipt that lists a change set narrowing a group Xshield no longer publishes so was made before a revert. Sent
-// before the rules, it stops the apply while no rule has changed; sent after them, the rules are already out.
+// A receipt that lists a change set narrowing a group Xshield no longer publishes so was made before a revert. At either
+// stage, the rules that wait for the receipt have not changed, and a rule wired otherwise may already be out: the advice
+// says only that, and that a new plan puts any such rule back.
 func TestAReceiptListingAChangeSetNoLongerNarrowingSaysWhatTheApplyDid(t *testing.T) {
 	t.Parallel()
-	const applyingAdvice = "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or withdrawn after this " +
-		"plan was made. No rule was changed. Run a new plan and apply it."
-	const appliedAdvice = "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or withdrawn after this " +
-		"plan was made, and this apply has taken its moved rules out of sg-0web: run a new plan and apply it now to put them back."
-	for stage, want := range map[string]struct{ advice, never string }{
-		"applying": {applyingAdvice, "this apply has taken"},
-		"applied":  {appliedAdvice, "No rule was changed"},
-	} {
+	for _, stage := range []string{"applying", "applied"} {
 		t.Run(stage, func(t *testing.T) {
 			t.Parallel()
 			r, objectType, absent := receiptResourceSchema(t)
@@ -542,8 +537,8 @@ func TestAReceiptListingAChangeSetNoLongerNarrowingSaysWhatTheApplyDid(t *testin
 				t.Fatalf("error %v and state %v, want an error and no receipt in state", created.Diagnostics, created.State.Raw)
 			}
 			detail := created.Diagnostics.Errors()[0].Detail()
-			if !strings.HasSuffix(detail, want.advice) || strings.Contains(detail, want.never) {
-				t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, want.advice)
+			if !strings.HasSuffix(detail, staleNarrowingRefusal) {
+				t.Errorf("detail:\n%s\nwant it to end:\n%s", detail, staleNarrowingRefusal)
 			}
 
 			sent := planned
@@ -556,8 +551,8 @@ func TestAReceiptListingAChangeSetNoLongerNarrowingSaysWhatTheApplyDid(t *testin
 			if !updated.Diagnostics.HasError() || !updated.State.Raw.Equal(prior.Raw) {
 				t.Errorf("error %v and state %v after a refused update, want an error and the receipt last sent", updated.Diagnostics, updated.State.Raw)
 			}
-			if detail := updated.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, want.advice) {
-				t.Errorf("update detail:\n%s\nwant it to end:\n%s", detail, want.advice)
+			if detail := updated.Diagnostics.Errors()[0].Detail(); !strings.HasSuffix(detail, staleNarrowingRefusal) {
+				t.Errorf("update detail:\n%s\nwant it to end:\n%s", detail, staleNarrowingRefusal)
 			}
 		})
 	}
@@ -575,7 +570,8 @@ func TestARefusalOfSeveralNarrowingChangeSetsNamesEach(t *testing.T) {
 	r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &resp)
 	want := "Xshield no longer publishes one or more of the change sets this plan read as narrowing, as its refusal names " +
 		"(change set cs-2 as narrowing sg-0db, change set cs-1 as narrowing sg-0web): they were reverted or withdrawn after this " +
-		"plan was made. No rule was changed. Run a new plan and apply it."
+		"plan was made. No rule waiting on this receipt was changed. Run a new plan and apply it now: it puts back any moved rule " +
+		"this apply took out of those groups."
 	if !resp.Diagnostics.HasError() || !strings.HasSuffix(resp.Diagnostics.Errors()[0].Detail(), want) {
 		t.Errorf("diagnostics %v, want the detail to end:\n%s", resp.Diagnostics, want)
 	}
@@ -592,11 +588,11 @@ func TestAnApplyingReceiptListingAChangeSetNoLongerPublishedAsReadSaysToPlanAgai
 	}{
 		"one listed": {map[string]map[string]string{"sg-0web": {"cs-1": "narrowing", "cs-2": "restoring"}},
 			"Xshield no longer publishes change set cs-2 as restoring sg-0web: its revert ended or it was withdrawn after this " +
-				"plan was made. No rule was changed. Run a new plan and apply it."},
+				"plan was made. No rule waiting on this receipt was changed. Run a new plan and apply it."},
 		"several listed": {map[string]map[string]string{"sg-0web": {"cs-2": "restoring"}, "sg-0db": {"cs-3": "attaching", "cs-4": "narrowing"}},
 			"Xshield no longer publishes one or more of the change sets this plan read, as its refusal names (change set cs-3 as " +
 				"attaching sg-0db, change set cs-2 as restoring sg-0web): their reverts ended or they were withdrawn after this " +
-				"plan was made. No rule was changed. Run a new plan and apply it."},
+				"plan was made. No rule waiting on this receipt was changed. Run a new plan and apply it."},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -617,7 +613,7 @@ func TestAnApplyingReceiptListingAChangeSetNoLongerPublishedAsReadSaysToPlanAgai
 	}
 }
 
-// Any other refusal of a receipt sent before the rules says that no rule changed, since the rules wait for it.
+// Any other refusal of a receipt sent before the rules says that no rule waiting for it changed.
 func TestARefusedApplyingReceiptSaysNoRuleChanged(t *testing.T) {
 	t.Parallel()
 	for name, answer := range map[string]struct {
@@ -626,11 +622,11 @@ func TestARefusedApplyingReceiptSaysNoRuleChanged(t *testing.T) {
 		want   string
 	}{
 		"a conflict of another kind": {http.StatusConflict, `{"code":"handedOver","message":"handed over"}`,
-			"No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
-		"refused":           {http.StatusBadRequest, `{"message":"malformed"}`, "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
-		"failed in Xshield": {http.StatusInternalServerError, `{"message":"internal error"}`, "No rule was changed: the group's rules wait for this receipt. Apply again once the cause is fixed."},
+			"No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
+		"refused":           {http.StatusBadRequest, `{"message":"malformed"}`, "No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
+		"failed in Xshield": {http.StatusInternalServerError, `{"message":"internal error"}`, "No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
 		"nothing published": {http.StatusNotFound, xshieldNotPublished, "Xshield has no published snapshot for this account and region, so " +
-			"the changes this plan read no longer exist. No rule was changed. Run a new plan and apply it."},
+			"the changes this plan read no longer exist. No rule waiting on this receipt was changed. Run a new plan and apply it."},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -1033,8 +1029,7 @@ func TestAccAPlanMadeBeforeARevertIsRefusedBeforeItsRulesChange(t *testing.T) {
 					plancheck.ExpectResourceAction("terraform_data.rules", plancheck.ResourceActionUpdate),
 					changesServedBeforeApply{g: g, changes: servedChanges(3, `{"id":"cs-1","state":"restoring","moves":[`+httpsAllMove+`]}`), at: &refusedAt},
 				}},
-				ExpectError: wrappedText("-> 409", "Xshield no longer publishes change set cs-1 as narrowing sg-0web: it was reverted or "+
-					"withdrawn after this plan was made. No rule was changed. Run a new plan and apply it."),
+				ExpectError: wrappedText("-> 409", staleNarrowingRefusal),
 			},
 			{
 				RefreshState:       true,
