@@ -56,6 +56,8 @@ module "xshield_enforcement" {
 
 The module takes no policy input. It applies the snapshot for the account and region the AWS provider points at, and refuses one meant for any other.
 
+If the cloud connector enforces this account and region today, add [`handover/handover.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/handover) to the workspace before the first plan. The plan then imports the groups, rules and attachments the connector created, which stay in place and enforced, and creates only what is missing. Without it, the apply tries to create each group again and AWS refuses it with `InvalidGroup.Duplicate`. Delete the file after the first apply.
+
 ```shell
 terraform init
 terraform plan -out=tfplan
