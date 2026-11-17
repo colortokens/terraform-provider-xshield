@@ -129,7 +129,98 @@ A security group can only allow traffic. So where the account's protection level
 - **Rule numbers.** AWS applies the lowest-numbered entry that matches, so Xshield numbers each entry in front of every allow on the network ACL that covers its address: one of the even numbers from 50 to 98 where that is in front, otherwise the lowest number free in front. It keeps an entry's number while the entry is in front of those allows. When an allow is put in front of it, the next apply writes the deny at a number in front of the allow, then deletes the old entry, so the address stays blocked throughout. Only when no number in front of the allow is free does the allow let the address's traffic through, and Xshield reports it.
 - **Room.** Xshield adds an entry only where the network ACL has room. It counts every rule of the network ACL in that direction against the account's quota of rules per network ACL, AWS's default rules included, and leaves two places free for your own. An address that does not fit is not written, and the plan and apply go ahead without it: Xshield names the network ACL and the addresses in a `networkAclEntryRefused` notice, and the monitor reports `network_acl_block_not_enforced`.
 - **Changes in AWS.** An entry changed or deleted outside Terraform is drift of high severity. The next apply creates a deleted entry again. AWS holds one entry for each rule number and direction, so a changed entry is not written again at its number: once the cloud connector observes the change, Xshield gives the deny another number in front of the allows that cover its address, and the next apply writes it there before it deletes the changed entry. A plan made before that observation leaves the changed entry as it is.
-- **Upgrading.** A role `enforcement-role/` created from a module version that did not block on network ACLs cannot read or change them. Apply `enforcement-role/` from this version first. Until then, an enforcement apply that writes a network ACL entry fails at that entry, before writing it, and sends no receipt. Copy `monitor/` again too: it is a copy rather than a module, and one copied from an earlier version has no `network_acl_block_not_enforced` check, so it says nothing when an address is not blocked on a network ACL.
+- **Reach.** AWS applies a network ACL to every resource in the subnets associated with it, so an entry blocks its address for all of them: workloads the template is not assigned to, and resources Xshield does not enforce on, such as a NAT gateway or a load balancer. Once the cloud connector has observed the network ACL, Xshield names those subnets and workloads in a `networkAclReach` notice, and the plan's `xshield_review` output repeats it while it is about the version planned. Nothing is refused for it. To block the addresses for fewer resources, put the template's workloads in subnets with a network ACL of their own.
+- **Checked at plan.** A version with network ACL entries reads the region's network ACLs while planning. A role without `ec2:DescribeNetworkAcls`, such as one `enforcement-role/` created before network ACL blocking, stops the plan there with `UnauthorizedOperation`, before anything is applied. So does a network ACL deleted since Xshield planned entries on it, as AWS would refuse them: the plan names it, and goes ahead once the cloud connector observes it gone, since Xshield then plans no entry for it.
+- **Upgrading.** Follow [Turning on the malicious IP block](#turning-on-the-malicious-ip-block) before Xshield blocks on any network ACL of the account.
+
+#### Turning on the malicious IP block
+
+For an account that already runs this pipeline. Each step works with what the step before it left, so the pipeline keeps running throughout, and nothing is written to a network ACL before the role can read and write it.
+
+1. **Upgrade the module and the provider together**, to the release that blocks on network ACLs:
+
+   ```hcl
+   terraform {
+     required_providers {
+       aws     = { source = "hashicorp/aws", version = ">= 6.29.0" }
+       xshield = { source = "colortokens/xshield", version = ">= X.Y.Z" }
+     }
+   }
+
+   module "xshield_enforcement" {
+     source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
+   }
+   ```
+
+   While Xshield blocks on no network ACL, the plan shows no network ACL change and the module reads no network ACL, so the role you have still works. Once it blocks on one, an older provider stops the plan with `This provider version cannot apply this snapshot`, and an older module leaves the entries out of its receipt, which Xshield refuses.
+
+2. **Give the role the network ACL actions.** Apply `enforcement-role/` from the same release. Its plan changes the role's policy: it adds `ec2:DescribeNetworkAcls` to the reads, and `ec2:CreateNetworkAclEntry` and `ec2:DeleteNetworkAclEntry` on every network ACL in the account. To allow fewer, list the network ACLs associated with the subnets of the workloads the template may be assigned to:
+
+   ```hcl
+   # terraform.tfvars of enforcement-role/
+   pipeline_principal_arns = ["arn:aws:iam::123456789012:role/ci-runner"]
+   network_acl_arns = [
+     "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-0a1b",
+   ]
+   ```
+
+   The plan cannot see this list, so an entry on a network ACL left out of it fails the apply with `UnauthorizedOperation`. Update the list when such a workload moves to another subnet, or leave it unset. A role of your own needs the Malicious IP block actions and `ec2:DescribeNetworkAcls` from the table above.
+
+3. **Copy `monitor/` again.** It is a copy, not a module, and one copied from an earlier release has no `network_acl_block_not_enforced` check, so it says nothing when an address is not blocked. This release warns on it by default. If you set `warn_on` or `fail_on` yourself, add it there:
+
+   ```hcl
+   warn_on = ["drift_high", "drift_medium", "apply_overdue", "network_acl_block_not_enforced"]
+   ```
+
+4. **Check the network ACLs in front of your workloads.** For the subnet of each workload the template may be assigned to:
+
+   ```sh
+   aws ec2 describe-network-acls --filters Name=association.subnet-id,Values=subnet-0a1b \
+     --query 'NetworkAcls[].Entries[].[NetworkAclId,Egress,RuleNumber,RuleAction,CidrBlock]' --output text
+   ```
+
+   In each direction, Xshield needs a place for each address beside your entries, AWS's default rules and two places it leaves for yours, within the account's quota of rules per network ACL (20 unless raised). It also needs a free rule number in front of every allow that covers the address: one of the even numbers from 50 to 98 when your allows are numbered after them, as the default network ACL's allow at 100 is, otherwise a number below your lowest such allow. Where there is no room or no number, the address is not blocked on that network ACL and the monitor reports it. AWS applies the lowest number that matches, so leave the numbers in front of your allows free rather than numbering an allow of yours 1.
+
+5. **Turn it on.** Ask ColorTokens to turn on Malicious Deny on AWS. Xshield then blocks the addresses of the **Malicious Deny** template, the malicious IP block template of this guide, for each workload it is assigned to, from the next time that workload's policy is deployed or regenerated. While the **Block Malicious IP Trigger** of the **Malicious IP Communication** alert rule is on, Xshield assigns the template to a workload that talks to a malicious address, and adds the address to it.
+
+6. **Read the first plan.** It adds one entry for each address, direction and network ACL, and updates the receipt:
+
+   ```
+     # module.xshield_enforcement.aws_network_acl_rule.this["acl-0a1b/in/203.0.113.7/32"] will be created
+     + resource "aws_network_acl_rule" "this" {
+         + cidr_block     = "203.0.113.7/32"
+         + egress         = false
+         + id             = (known after apply)
+         + network_acl_id = "acl-0a1b"
+         + protocol       = "-1"
+         + rule_action    = "deny"
+         + rule_number    = 50
+       }
+
+     # module.xshield_enforcement.aws_network_acl_rule.this["acl-0a1b/out/203.0.113.7/32"] will be created
+     # module.xshield_enforcement.xshield_enforcement_receipt.this[0] will be updated in-place
+   ```
+
+   Under `Changes to Outputs`, `xshield_review` says the same in words, and how far each network ACL reaches beyond the template's workloads once the cloud connector has observed it:
+
+   ```
+   + "Network ACL acl-0a1b denies all inbound traffic from 203.0.113.7/32, which the malicious IP block template blocks.",
+   + "Network ACL acl-0a1b denies all outbound traffic to 203.0.113.7/32, which the malicious IP block template blocks.",
+   + "Network ACL acl-0a1b: AWS applies this network ACL to every resource in the subnets associated with it, so it blocks these addresses of the malicious IP block template for more than the workloads the template is assigned to: workloads the template is not assigned to, web-1. Any other resource in those subnets, such as a NAT gateway or a load balancer, can neither reach them nor be reached from them: 203.0.113.7/32.",
+   ```
+
+   An address that is missing from the plan is named in a notice of `xshield_enforcement_status`: `networkAclEntryRefused` for no room or no rule number, `networkAclNotObserved` for a network ACL the cloud connector has not read, `networkAclEntryShadowed` for an allow of yours that lets its traffic through. The plan stops before anything is applied when the role cannot read network ACLs, or a network ACL it names no longer exists: see [When something goes wrong](#when-something-goes-wrong).
+
+7. **Apply, then check.** After the apply, AWS shows each deny in front of your allows:
+
+   ```sh
+   aws ec2 describe-network-acls --network-acl-ids acl-0a1b \
+     --query 'NetworkAcls[0].Entries[?RuleAction==`deny`].[Egress,RuleNumber,CidrBlock]' --output text
+   ```
+
+   Once the cloud connector has observed the account, `xshield_enforcement_status` reads `state = "converged"` with no drift, and the monitor reports no `network_acl_block_not_enforced`. Xshield asks the cloud connector to observe the account every 10 minutes.
+
+To stop blocking an address, remove it from the **Malicious Deny** template, or unassign the template from the workloads, in Xshield: the next enforcement run deletes its entries. Do not delete an entry in AWS or take it out of the state: an entry deleted outside Terraform is drift, which the next apply restores.
 
 ### 2. Databases, functions and services: the workspace that owns them attaches the group
 
@@ -600,7 +691,9 @@ Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and
 | A network ACL entry Xshield applied is deleted or changed outside Terraform | Traffic from or to its address passes until the entry is restored. The next enforcement apply creates a deleted entry again. A changed entry is left as it is until the cloud connector observes the change; the apply after that writes the deny at another number, in front of every allow that covers the address, then deletes the changed entry. | A `networkAclEntryMissing` or `networkAclEntryModified` drift finding of high severity, which the pipeline restores. The monitor reports `drift_high`, and `drift_unrestored` once the finding is older than `max_apply_age`. | Run the enforcement workspace. |
 | An allow entry on a network ACL is numbered below Xshield's deny of an address it covers | Traffic of that address passes, as AWS applies the lowest-numbered entry that matches, until the next enforcement apply after the cloud connector observes the allow. That apply writes the deny at a number in front of the allow, then deletes the old entry. No enforcement run changes your entry. When no number in front of the allow is free, the traffic keeps passing. | When the allow was added after the apply, a drift finding of high severity, which the pipeline restores. When no number in front of the allow is free, a `networkAclEntryShadowed` notice, and the finding must be resolved by hand. The monitor reports `drift_high` for the finding, and `network_acl_block_not_enforced` for the notice. | Run the enforcement workspace. For a `networkAclEntryShadowed` notice, free a rule number in front of the allow, number the allow higher, or narrow it so that it no longer covers the address. |
 | A network ACL in front of a workload has no room for another entry, or no rule number is free in front of the allows that cover an address, nor among the even numbers from 50 to 98 | The address is not blocked there. Entries already applied stay, and the apply does not fail. | A `networkAclEntryRefused` notice with `ACL_FULL` or `NO_FREE_SLOT` and the direction, which names the addresses. The monitor reports `network_acl_block_not_enforced`. | Remove rules of your own from the network ACL, or raise the account's quota of rules per network ACL. For `NO_FREE_SLOT`, free a rule number in front of your allows that cover the address, or one of the even numbers from 50 to 98. Once the cloud connector observes the change, Xshield publishes a version that blocks the address. |
-| The role the enforcement workspace assumes was created from a module version that did not block on network ACLs | The apply fails at the first network ACL entry with `UnauthorizedOperation` for `ec2:DescribeNetworkAcls`, before writing it. | No receipt is sent, so `state` stays `pending`. | Apply `enforcement-role/` from this module version, then run the enforcement workspace again. |
+| The role the enforcement workspace assumes was created from a module version that did not block on network ACLs | Once Xshield blocks on a network ACL of the account, the enforcement plan stops at its read of the network ACLs with `UnauthorizedOperation` for `ec2:DescribeNetworkAcls`, before anything is applied. | No receipt is sent, so `state` stays `pending`. | Apply `enforcement-role/` from this module version, then run the enforcement workspace again. |
+| A network ACL Xshield planned entries on is deleted | The enforcement plan stops before anything is applied, naming the network ACL, until the cloud connector observes it gone. Xshield then plans no entry for it, and the next plan goes ahead. | Once observed, a `networkAclNotObserved` notice with `NOT_FOUND`. The monitor reports `network_acl_block_not_enforced`. | Run the enforcement workspace again after the cloud connector's next observation. |
+| A network ACL Xshield blocks on is also associated with subnets of other resources | Its entries block the template's addresses for every resource in those subnets too, such as workloads the template is not assigned to, a NAT gateway or a load balancer. | A `networkAclReach` notice, which the plan's `xshield_review` output repeats. The monitor reports nothing: nothing is refused. | Nothing, if those resources may lose those addresses. Otherwise put the template's workloads in subnets with a network ACL of their own. |
 | The cloud connector has not read a network ACL in front of a workload | Nothing new is written to that network ACL. Entries already applied stay. | A `networkAclNotObserved` notice. The monitor reports `network_acl_block_not_enforced`. | Check that the cloud connector is running, is of a version that reads network ACLs, and can describe them. |
 | AWS refuses a rule during an enforcement apply | The apply fails. The group keeps its old rules, because new rules are created before old ones are removed. | No receipt is sent, so the version is not recorded as applied. | Fix what AWS refused, then run the workspace again. |
 | An apply stops before Terraform saves what it created: the runner is killed or loses its connection, or the run is force-canceled | AWS keeps what the apply created up to then, such as a group, a rule or a directory parameter, and the state does not hold it. The next apply tries to create it again, and AWS refuses with `InvalidGroup.Duplicate`, `InvalidPermission.Duplicate` or `ParameterAlreadyExists`. | No receipt is sent, so the version is not recorded as applied: `state` stays `pending`, or `unapplied` when nothing was applied before. | Import each resource the error names, as [An interrupted apply](#an-interrupted-apply) shows, then apply again. `recovery/` does not help here: it imports what the last receipt lists, and the interrupted apply sent none. |
@@ -671,6 +764,9 @@ Deleting such a resource in AWS also clears the error, but only while nothing re
 | `InvalidGroup.Duplicate` on the first enforcement apply for an account the cloud connector enforced | The groups exist already: the connector created them, and the workspace did not take them over | Add `handover/handover.tf` to the workspace, plan and apply, then delete the file |
 | `InvalidGroup.Duplicate` when applying a change that replaces one of your groups whose rules go through an `aws-security-group-rules` module | AWS cannot change a group's name, description or VPC in place, so Terraform replaces the group. The module's rules set `create_before_destroy`, which Terraform applies to the group they depend on too, so it creates the new group before destroying the old one, and AWS refuses a second group of the same name in a VPC. Importing does not help: the old group is already in state | Undo the change if the group can stay as it is. To replace the group, give it `name_prefix` instead of `name` in the same change |
 | `NetworkAclEntryAlreadyExists` when applying, for `aws_network_acl_rule.this` | The network ACL already holds an entry at the rule number and direction the plan gives the deny. Either an earlier apply stopped after AWS created the deny and before Terraform saved it in state, or someone added an entry at that number after Xshield last observed the network ACL | Look at the entry in AWS. If it denies the plan's address on all protocols, import it, as [An interrupted apply](#an-interrupted-apply) shows, then apply again. Otherwise leave it: once the cloud connector observes the network ACL again, Xshield gives the deny another number, and the next plan and apply write it there |
+| `UnauthorizedOperation` for `ec2:DescribeNetworkAcls` when planning, at `data.aws_network_acls.present` | Xshield blocks on a network ACL of the account, and the role cannot read network ACLs: it was created before network ACL blocking. Nothing was applied | Apply `enforcement-role/` from this module version, or add the action to your own role, then plan again |
+| `Network ACL <ID> no longer exists in A/R` | The network ACL was deleted after Xshield planned entries on it. Nothing was applied | Plan again after the cloud connector's next observation; Xshield asks for one every 10 minutes. If the error stays, check that the cloud connector is running |
+| `UnauthorizedOperation` when applying, for `aws_network_acl_rule.this` | The role's `network_acl_arns` leaves out the network ACL the entry goes in | Add the network ACL to `network_acl_arns` and apply `enforcement-role/`, or leave the input unset, then apply again |
 | `ParameterAlreadyExists` when applying, for `aws_ssm_parameter.directory` | An earlier apply stopped after SSM Parameter Store created the directory parameter and before Terraform saved it in state | Import it by the parameter name the error gives, as [An interrupted apply](#an-interrupted-apply) shows, then apply again. Do not delete it instead: the lookup modules of other workspaces read it |
 | `tags cannot set ManagedBy or a key starting with ct:` | A tag would hide the group from the cloud connector | Choose another tag key |
 | The `monitor` check names a workload with `NO_FREE_SLOT` | Its interfaces already carry as many groups as AWS allows | Free a slot, or raise the account's security groups per interface quota |

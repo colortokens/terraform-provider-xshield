@@ -14,6 +14,9 @@ mock_provider "aws" {
   mock_data "aws_network_interfaces" {
     defaults = { ids = ["eni-0a1"] }
   }
+  mock_data "aws_network_acls" {
+    defaults = { ids = ["acl-0a1b"] }
+  }
 }
 
 mock_provider "xshield" {
@@ -98,6 +101,85 @@ run "denies_each_listed_address_on_its_network_acl" {
     )
     error_message = "the review says what each network ACL blocks and counts its entries"
   }
+  assert {
+    condition     = length(data.aws_network_acls.present) == 1 && length(data.xshield_enforcement_status.this) == 1
+    error_message = "a version with network ACL entries reads the network ACLs, so an old role stops at plan, and the status, for the review"
+  }
+  assert {
+    condition     = length([for line in output.review : line if startswith(line, "Network ACL acl-0a1b: ")]) == 0
+    error_message = "no reach line without Xshield's notice"
+  }
+}
+
+run "stops_at_plan_for_a_network_acl_aws_no_longer_shows" {
+  command = plan
+
+  override_data {
+    target = data.aws_network_acls.present[0]
+    values = { ids = ["acl-0c2d"] }
+  }
+
+  expect_failures = [aws_network_acl_rule.this]
+}
+
+run "reviews_how_far_a_network_acl_reaches" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this[0]
+    values = {
+      expected_version     = "v42"
+      applied_attachments  = {}
+      handover_attachments = {}
+      notices = [
+        {
+          code    = "networkAclReach", group = "acl-0a1b", reason = null, asset_id = null, asset_name = null, since = null
+          message = "AWS applies this network ACL to every resource in the subnets associated with it, so it blocks these addresses of the malicious IP block template for more than the workloads the template is assigned to: workloads the template is not assigned to, web-1. Any other resource in those subnets, such as a NAT gateway or a load balancer, can neither reach them nor be reached from them: 203.0.113.7/32, 2001:db8::7/128"
+        },
+        {
+          code    = "networkAclNotObserved", group = "acl-0c2d", reason = "NOT_READ", asset_id = null, asset_name = null, since = null
+          message = "The cloud connector has not read this network ACL."
+        },
+      ]
+    }
+  }
+
+  assert {
+    condition     = contains(output.review, "Network ACL acl-0a1b: AWS applies this network ACL to every resource in the subnets associated with it, so it blocks these addresses of the malicious IP block template for more than the workloads the template is assigned to: workloads the template is not assigned to, web-1. Any other resource in those subnets, such as a NAT gateway or a load balancer, can neither reach them nor be reached from them: 203.0.113.7/32, 2001:db8::7/128.")
+    error_message = "the review repeats Xshield's notice of how far the network ACL reaches"
+  }
+  assert {
+    condition     = length([for line in output.review : line if startswith(line, "Network ACL acl-0c2d")]) == 0
+    error_message = "the review repeats no other notice"
+  }
+  assert {
+    condition     = output.review[length(output.review) - 1] == "Version v42 holds 1 group, 0 rules, 0 interface attachments and 2 network ACL entries for 123456789012/us-east-1."
+    error_message = "the count stays the review's last line"
+  }
+}
+
+run "leaves_out_a_reach_notice_about_another_version" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this[0]
+    values = {
+      expected_version     = "v41"
+      applied_attachments  = {}
+      handover_attachments = {}
+      notices = [
+        {
+          code    = "networkAclReach", group = "acl-0a1b", reason = null, asset_id = null, asset_name = null, since = null
+          message = "AWS applies this network ACL to every resource in the subnets associated with it: 203.0.113.7/32"
+        },
+      ]
+    }
+  }
+
+  assert {
+    condition     = length([for line in output.review : line if startswith(line, "Network ACL acl-0a1b: ")]) == 0
+    error_message = "a notice about a version other than the one planned is not repeated"
+  }
 }
 
 run "sends_no_network_acl_entry_without_one" {
@@ -137,5 +219,9 @@ run "sends_no_network_acl_entry_without_one" {
   assert {
     condition     = output.review[length(output.review) - 1] == "Version v43 holds 1 group, 0 rules and 0 interface attachments for 123456789012/us-east-1."
     error_message = "the review's count reads as before for a version without network ACL entries"
+  }
+  assert {
+    condition     = length(data.aws_network_acls.present) == 0 && length(data.xshield_enforcement_status.this) == 0
+    error_message = "a version without network ACL entries or attachments reads neither the network ACLs nor the status"
   }
 }

@@ -166,13 +166,16 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"it may not have, so an apply is never refused for it. A `networkAclNotObserved` notice names a network ACL the cloud " +
 					"connector has not read, or no longer shows, so Xshield adds no entry to it. A `networkAclEntryShadowed` notice names an " +
 					"entry of Xshield's that an allow rule of yours, numbered before it with no rule number free in front of it, lets the traffic through. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved` or `networkAclEntryShadowed`. " +
+					"A `networkAclReach` notice names a network ACL with entries of Xshield's whose subnets hold more than the workloads the malicious " +
+					"IP block template is assigned to, such as other workloads, a NAT gateway or a load balancer: AWS applies a network ACL to every " +
+					"resource in its subnets, so the entries block the template's addresses for those too. Nothing is refused for it. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed` or `networkAclReach`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
 					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +
 					"for `networkAclNotObserved` `NOT_READ`, `NOT_FOUND` or the connector's error, for `networkAclEntryShadowed` the direction " +
 					"and number of the allow rule, such as `in:40`, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
-					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`. " +
+					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged` and `networkAclReach`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
 					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +

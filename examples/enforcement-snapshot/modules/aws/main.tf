@@ -162,9 +162,10 @@ locals {
 # receipt holds nor a hand-over offers goes only on an interface with room for every
 # new group: the others are left out with a warning, the receipt leaves them out, and
 # Xshield refuses the workload once discovery shows the interface full. Only those
-# interfaces, and the groups new to them, are read.
+# interfaces, and the groups new to them, are read. A version with network ACL entries
+# reads the status too, for the review's account of how far each network ACL reaches.
 data "xshield_enforcement_status" "this" {
-  count = length(local.attachments) > 0 ? 1 : 0
+  count = length(local.attachments) > 0 || length(local.snap.network_acl_entries) > 0 ? 1 : 0
 
   cloud_account_id = local.account_id
   region           = local.region
@@ -256,6 +257,17 @@ resource "aws_ssm_parameter" "directory" {
 # written at its new number before the old entry is deleted, so the address stays blocked throughout. AWS holds one
 # entry per number and direction, so an entry changed in AWS is not written again at the same number, which AWS would
 # refuse: Xshield gives it a new number once the cloud connector observes the change.
+#
+# The network ACLs are read at plan, so a role without ec2:DescribeNetworkAcls, such as one created before network ACL
+# entries, stops the run before anything is written, and so does a network ACL deleted since Xshield planned its entries.
+data "aws_network_acls" "present" {
+  count = length(local.snap.network_acl_entries) > 0 ? 1 : 0
+}
+
+locals {
+  present_network_acls = toset(try(data.aws_network_acls.present[0].ids, []))
+}
+
 resource "aws_network_acl_rule" "this" {
   for_each = local.snap.network_acl_entries
 
@@ -270,6 +282,11 @@ resource "aws_network_acl_rule" "this" {
   lifecycle {
     create_before_destroy = true
     ignore_changes        = [rule_action, protocol, cidr_block, ipv6_cidr_block, from_port, to_port, icmp_type, icmp_code]
+
+    precondition {
+      condition     = contains(local.present_network_acls, each.value.network_acl_id)
+      error_message = "Network ACL ${each.value.network_acl_id} no longer exists in ${local.account_id}/${local.region}, so AWS would refuse its entry ${each.key}, and nothing was applied. Xshield stops planning entries for it once the cloud connector observes it gone; plan again after that."
+    }
   }
 }
 

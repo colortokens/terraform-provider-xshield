@@ -18,6 +18,9 @@ mock_provider "aws" {
   mock_data "aws_network_interface" {
     defaults = { security_groups = ["sg-0customer"], attachment = [] }
   }
+  mock_data "aws_network_acls" {
+    defaults = { ids = ["acl-0a1b"] }
+  }
 }
 
 mock_provider "xshield" {

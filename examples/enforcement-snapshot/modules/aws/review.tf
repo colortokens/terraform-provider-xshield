@@ -161,6 +161,12 @@ locals {
       join(" and ", compact([join(", ", slice(local.review_network_acl_names[key], 0, length(local.review_network_acl_names[key]) - 1)), local.review_network_acl_names[key][length(local.review_network_acl_names[key]) - 1]])),
     )
   ]
+  # AWS applies a network ACL to every resource in its subnets. Xshield's notice of one that blocks for more than the
+  # template's workloads is repeated while it is about this version.
+  review_network_acl_reach = [
+    for notice in try(tolist(data.xshield_enforcement_status.this[0].notices), []) : "Network ACL ${notice.group}: ${notice.message}."
+    if notice.code == "networkAclReach" && try(data.xshield_enforcement_status.this[0].expected_version == local.snap.version, false)
+  ]
   review_counts = concat(
     [
       "${length(local.review_groups)} ${length(local.review_groups) == 1 ? "group" : "groups"}",
@@ -176,6 +182,7 @@ locals {
       "${length(local.review_groups) - length(local.review_described)} more ${length(local.review_groups) - length(local.review_described) == 1 ? "group is" : "groups are"} not described here. Raise review_max_groups to describe them.",
     ],
     local.review_network_acl_lines,
+    local.review_network_acl_reach,
     [format(
       "Version %s holds %s for %s/%s.",
       substr(local.snap.version, 0, 12),
