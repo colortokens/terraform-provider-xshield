@@ -170,20 +170,27 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"A `networkAclReach` notice names a network ACL with entries of Xshield's whose subnets hold more than the workloads the malicious " +
 					"IP block template is assigned to, such as other workloads, a NAT gateway or a load balancer: AWS applies a network ACL to every " +
 					"resource in its subnets, so the entries block the template's addresses for those too. Nothing is refused for it. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed` or `networkAclReach`. " +
+					"An `awaitingAttach` notice names a workload whose own workspace attaches Xshield's group, such as a database, a function " +
+					"or an Auto Scaling group, and which the cloud connector has not shown carrying the group since the last apply. Its policy " +
+					"is not enforced until it does. The message says which workspace to apply and which group it attaches, and the notice " +
+					"clears at the first observation after that apply that shows the workload carrying the group. " +
+					"An `observationStale` notice is about the account and region: the cloud connector has not observed them for three " +
+					"observation intervals since the last apply or observation, so a change made in AWS since is not shown as drift. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, `networkAclReach`, `awaitingAttach` or `observationStale`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
 					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +
 					"for `networkAclNotObserved` `NOT_READ`, `NOT_FOUND` or the connector's error, for `networkAclEntryShadowed` the direction " +
 					"and number of the allow rule, such as `in:40`, " +
 					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
-					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged` and `networkAclReach`. " +
+					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`, `networkAclReach`, `awaitingAttach` and `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
 					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
-					"its handle for `asgPolicyDiffers`, or the network ACL by its ID for the network ACL notices; null for `prefixListSizeUnknown`, whose message names its groups. " +
+					"its handle for `asgPolicyDiffers`, or the network ACL by its ID for the network ACL notices; null for `prefixListSizeUnknown`, whose message names its groups, and for `observationStale`. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
-					"for `portNotNarrowed`, when the revert was requested; null for every other code. " +
+					"for `portNotNarrowed`, when the revert was requested; for `observationStale`, the last apply or observation it counts from; " +
+					"null for every other code. " +
 					"`message`: what happened and what it means for the workload.",
 			},
 			"applied_security_groups": appliedIDs("security group ID", "`aws_security_group.this`"),

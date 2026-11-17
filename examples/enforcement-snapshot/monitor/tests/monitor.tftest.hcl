@@ -156,6 +156,58 @@ run "warns_on_a_refused_workload" {
   }
 }
 
+run "warns_by_default_on_workloads_awaiting_their_own_workspaces_attach" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "awaitingAttach", reason = null, asset_id = "asset-db-1", asset_name = "rds/orders-db", group = "rds/orders-db", since = null, message = "apply the workspace that defines rds/orders-db: the enforcement workspace created security group sg-0123456789abcdef0 for it" },
+        { code = "awaitingAttach", reason = null, asset_id = "asset-fn-1", asset_name = null, group = "lambda/resize", since = null, message = "apply the workspace that defines this workload so it attaches security group sg-00000000000000001" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_awaiting_attach]
+
+  assert {
+    condition = output.problems == {
+      awaiting_attach = [
+        "Workloads in 123456789012/us-east-1 wait for their own workspace to attach Xshield's group, so their policy is not enforced:",
+        "  rds/orders-db: apply the workspace that defines rds/orders-db: the enforcement workspace created security group sg-0123456789abcdef0 for it",
+        "  asset-fn-1: apply the workspace that defines this workload so it attaches security group sg-00000000000000001",
+      ]
+    }
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_workload_awaiting_its_attach_named_in_fail_on_stops_the_plan" {
+  command = plan
+
+  variables {
+    fail_on = ["awaiting_attach"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "awaitingAttach", reason = null, asset_id = "asset-db-1", asset_name = "rds/orders-db", group = "rds/orders-db", since = null, message = "apply the workspace that defines rds/orders-db" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_awaiting_attach, output.problems]
+}
+
 run "warns_once_per_cause_on_groups_whose_rule_count_is_a_guess_and_gives_the_connector_reason" {
   command = plan
 

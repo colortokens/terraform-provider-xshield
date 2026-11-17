@@ -182,7 +182,43 @@ Then, for each Full control change:
 
 Keep every rule in the map, before and after Xshield leaves it out. If you delete one yourself first, the workloads that still rely on it lose that traffic early.
 
-## Step 8: Watch it
+## Step 8: Run the owners' workspaces after the enforcement workspace
+
+Skip this step unless you did step 5 or step 7. The workspaces from those steps change only when they run, and they read what the enforcement workspace's apply wrote. So run them after every enforcement apply, in this order:
+
+1. A workspace with the lookup module (step 5) attaches the group that apply created. Its lookup returns the group only once that apply has written the resource's directory entry.
+2. Under Full control, a workspace with the rules module (step 7) takes a rule out of your group only after the enforcement workspace has written the rules each workload keeps into Xshield's groups, and each workload carries those groups. Run it after the workspaces that attach them: until discovery shows a workload carrying its group, the change waits and that plan shows nothing to take out.
+
+Run them on a schedule as well, as in step 4. Some changes become ready only at a later discovery, not at an apply: a new resource gets its directory entry once Xshield has discovered it, and a Full control change waits until discovery shows each workload whose own workspace attaches Xshield's group carrying it. A run with nothing to change plans no change and applies nothing.
+
+**HCP Terraform and Terraform Enterprise.** Give each owner's workspace a run trigger whose source is the enforcement workspace. A run is then queued in it after each successful apply of the enforcement workspace:
+
+```terraform
+data "tfe_workspace" "xshield_enforcement" {
+  name         = "xshield-enforcement-us-east-1"
+  organization = "example-org"
+}
+
+data "tfe_workspace" "orders_db" {
+  name         = "orders-db"
+  organization = "example-org"
+}
+
+resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
+  workspace_id  = data.tfe_workspace.orders_db.id
+  sourceable_id = data.tfe_workspace.xshield_enforcement.id
+}
+```
+
+A triggered run waits for someone to confirm its apply, unless the owner's workspace sets `auto_apply_run_trigger = true`.
+
+**Your own CI.** Make each owner's job depend on the enforcement job, so it starts only once that job's apply has succeeded: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/chain) is a GitHub Actions example.
+
+A revert under Full control goes the other way: step 7's table says to apply the owner's workspace first. The chain is still safe when the enforcement workspace runs first: every workload keeps its access until the owner's workspace has put the rule back, and the next enforcement run then takes out what the revert removes.
+
+**Done when** `xshield_enforcement_status` shows no `awaitingAttach` or `changeSetHeld` notice and the monitor in step 9 warns of nothing. A workload reads Synchronized at the cloud connector's first observation after its owner's apply. Xshield asks the connector to observe the account every 10 minutes.
+
+## Step 9: Watch it
 
 Copy [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/monitor) into a workspace of its own, set `cloud_account_id` and `region`, and plan it on a schedule. It manages no resources. Each problem, such as drift or an overdue apply, is a warning that says what to do. To stop a pipeline on a problem, name it in `fail_on`:
 

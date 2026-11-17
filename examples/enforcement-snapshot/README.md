@@ -23,6 +23,7 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
+| `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order. |
 | `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
 
 **Files for one apply.** Each goes into the enforcement workspace when the event it names happens, and is deleted afterwards.
@@ -56,8 +57,9 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 | A workspace that declares an instance's or an interface's security groups | Adds `ignore_changes`: step 3. | Once for each such instance or interface |
 | Under Full control, the workspace that owns a security group Xshield narrows | Configures the `xshield` provider and moves the group's rules into the rules module: step 4. | Once for each group |
 | A new monitor workspace | Copies `monitor/` and runs it on a schedule: step 5. | Once for each account and region |
+| The pipeline that runs the workspaces | Runs the workspaces from steps 2 and 4 after the enforcement workspace: step 6. | Once |
 
-After that, a policy change approved in Xshield needs no edit to any of this code. It reaches AWS on the next run of the enforcement workspace. It also needs the next run of an owning workspace when it changes which groups a resource of that workspace carries, or leaves out a rule of a group that workspace owns.
+After that, a policy change approved in Xshield needs no edit to any of this code. It reaches AWS on the next run of the enforcement workspace. It also needs the next run of an owning workspace when it changes which groups a resource of that workspace carries, or leaves out a rule of a group that workspace owns: step 6 runs those after the enforcement workspace.
 
 ## Quickstart
 
@@ -548,6 +550,7 @@ Xshield also raises a `Cloud Policy Drifted` alert in the portal for each drift 
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. |
 | `drift_unrestored` | Drift Xshield recorded more than `max_apply_age` (24h) ago is still there: no enforcement run has restored it, or it must be removed by hand. One line for each finding, with when it was detected. |
 | `workload_not_enforced` | Xshield could not write a group for a workload. The message names it and the reason. |
+| `awaiting_attach` | A workload whose own workspace attaches Xshield's group, such as a database, a function or an Auto Scaling group, has not been shown carrying it since the last apply, so its policy is not enforced. One line for each workload, which says which workspace to apply: see step 6. |
 | `prefix_list_size_unknown` | A group's rules name a prefix list Xshield has not sized, or the cloud connector cannot read the region's prefix lists, so Xshield's count of the group's rules is a guess and AWS may refuse them as over the quota of rules per security group. One line for each cause, unsized lists or a failed read, which names the groups and, for a failed read, ends with the connector's reason. |
 | `apply_overdue` | Newer approved policy has waited longer than `max_apply_age` (24h) for an enforcement run. The message counts and lists the groups to create, the rules to add and remove, and the attachments to add. It does not count network ACL entries: when nothing it counts is waiting, it says so, and the enforcement plan shows the entries. |
 | `never_applied` | Published policy has never been applied, for longer than `max_apply_age`. |
@@ -581,6 +584,39 @@ fail_on = ["drift_high", "never_applied"]
 The `problems` output carries the same report by name, for a job that posts it somewhere. The workspace manages no resources, so `-detailed-exitcode` says nothing about it. To learn from an exit code whether approved policy is applied, plan the *enforcement* workspace on a schedule with `-detailed-exitcode`: 2 means it has something to apply, which is approved policy not yet applied or a resource it manages changed in the cloud.
 
 Where policy sets decide what blocks a run, use the example policy in [`policies/`](policies/README.md) in place of `fail_on`. [Exit codes and what stops a pipeline](#exit-codes-and-what-stops-a-pipeline) compares the choices.
+
+### 6. Run the owners' workspaces after the enforcement workspace
+
+A workspace from step 2 or step 4 changes only when it runs, and it reads what the enforcement workspace's apply wrote. Run them after every enforcement apply, in this order:
+
+1. The enforcement workspace.
+2. Each workspace with the lookup module (step 2). The group must exist, and its directory entry be written, before the lookup returns it.
+3. Under Full control, each workspace with the rules module (step 4). A change takes a rule out of your group only once the enforcement workspace has written the rules each workload keeps into Xshield's groups and each workload carries them; until discovery shows a workload whose own workspace attaches its group carrying it, the change waits and this plan shows nothing to take out.
+
+Run them on a schedule too, not only after an enforcement apply: a new resource gets its directory entry once Xshield has discovered it, and a held change is released at a discovery. A run with nothing to change plans no change and applies nothing. A workload reads Synchronized, and its `awaitingAttach` notice clears, at the cloud connector's first observation after its owner's apply.
+
+In HCP Terraform or Terraform Enterprise, give each owner's workspace a run trigger whose source is the enforcement workspace, so a run is queued in it after each successful apply there. The triggered run waits for someone to confirm its apply unless the workspace sets `auto_apply_run_trigger = true`:
+
+```hcl
+data "tfe_workspace" "xshield_enforcement" {
+  name         = "xshield-enforcement-us-east-1"
+  organization = "example-org"
+}
+
+data "tfe_workspace" "orders_db" {
+  name         = "orders-db"
+  organization = "example-org"
+}
+
+resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
+  workspace_id  = data.tfe_workspace.orders_db.id
+  sourceable_id = data.tfe_workspace.xshield_enforcement.id
+}
+```
+
+In your own CI, make each owner's job depend on the enforcement job: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/xshield-enforcement.yml`](chain/xshield-enforcement.yml) runs all three steps as GitHub Actions jobs on one schedule.
+
+A revert under Full control goes the other way: [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace) asks for the owner's workspace first. The chain is still safe when the enforcement workspace runs first: every workload keeps its access until the owner's workspace has put the rule back, and the next enforcement run then takes out what the revert removes.
 
 ## Exit codes and what stops a pipeline
 

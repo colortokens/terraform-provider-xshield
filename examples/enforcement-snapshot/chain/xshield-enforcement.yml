@@ -1,0 +1,122 @@
+# Runs the enforcement workspace, then the workspaces that attach Xshield's groups through the lookup module, then,
+# under Full control, the workspaces that own a security group Xshield narrows. Each job starts only once the jobs it
+# needs have succeeded, so an owner's workspace always reads what the enforcement apply wrote. They all run on every
+# schedule, with or without an enforcement change, because some changes become ready at a discovery rather than an
+# apply. A workspace with nothing to change plans no change and applies nothing.
+#
+# Copy this file to .github/workflows/ in the repository that holds the workspaces. Change the directories, the
+# region, the schedule and the role each job assumes to yours. The XSHIELD_* values are set as repository secrets and
+# variables, as step 1 of the guide describes. The lookup workspaces need no Xshield credentials.
+name: xshield-enforcement
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: xshield-enforcement-us-east-1
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  enforcement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      XSHIELD_SERVER_URL: ${{ vars.XSHIELD_SERVER_URL }}
+      XSHIELD_TENANCY_ID: ${{ secrets.XSHIELD_TENANCY_ID }}
+      XSHIELD_USER_ID: ${{ secrets.XSHIELD_USER_ID }}
+      XSHIELD_FINGERPRINT: ${{ secrets.XSHIELD_FINGERPRINT }}
+      XSHIELD_PRIVATE_KEY: ${{ secrets.XSHIELD_PRIVATE_KEY }}
+    defaults:
+      run:
+        working-directory: xshield-enforcement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PIPELINE_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform init -input=false
+      - id: plan
+        run: |
+          set +e
+          terraform plan -input=false -detailed-exitcode -out=tfplan
+          code=$?
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -ne 1 ]
+      - if: steps.plan.outputs.exitcode == '2'
+        run: terraform apply -input=false tfplan
+
+  attach:
+    needs: enforcement
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [orders-db, resize-function]
+    defaults:
+      run:
+        working-directory: ${{ matrix.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PIPELINE_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform init -input=false
+      - id: plan
+        run: |
+          set +e
+          terraform plan -input=false -detailed-exitcode -out=tfplan
+          code=$?
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -ne 1 ]
+      - if: steps.plan.outputs.exitcode == '2'
+        run: terraform apply -input=false tfplan
+
+  full-control:
+    needs: [enforcement, attach]
+    runs-on: ubuntu-latest
+    env:
+      XSHIELD_SERVER_URL: ${{ vars.XSHIELD_SERVER_URL }}
+      XSHIELD_TENANCY_ID: ${{ secrets.XSHIELD_TENANCY_ID }}
+      XSHIELD_USER_ID: ${{ secrets.XSHIELD_USER_ID }}
+      XSHIELD_FINGERPRINT: ${{ secrets.XSHIELD_FINGERPRINT }}
+      XSHIELD_PRIVATE_KEY: ${{ secrets.XSHIELD_PRIVATE_KEY }}
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [web-network]
+    defaults:
+      run:
+        working-directory: ${{ matrix.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.PIPELINE_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform init -input=false
+      - id: plan
+        run: |
+          set +e
+          terraform plan -input=false -detailed-exitcode -out=tfplan
+          code=$?
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -ne 1 ]
+      - if: steps.plan.outputs.exitcode == '2'
+        run: terraform apply -input=false tfplan
