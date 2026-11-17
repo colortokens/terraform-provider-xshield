@@ -14,6 +14,9 @@
 # left out, a check names them, and the receipt is sent again without them. Xshield accepts it once the
 # cloud connector has observed the network ACL gone; until then the apply ends with that refusal once the
 # state is rebuilt, so run it again after the cloud connector's next observation.
+# An object of the last receipt deleted outside Terraform since has nothing to import: the plan stops with "Cannot
+# import non-existent remote object" and names its address. Add the key in its brackets to skipped_imports, under its
+# kind, and the apply creates it again.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
@@ -28,45 +31,59 @@ data "xshield_aws_enforcement_snapshot" "recover" {
   version          = data.xshield_enforcement_status.recover.applied_version
 }
 
+# Keys of the last receipt's objects not to import, by kind: one deleted outside Terraform since, which the apply creates
+# again, or a network ACL entry whose receipted number AWS now holds another entry at. That one stops the plan, which
+# names the entry's key: add it under network_acl_entries. The apply then rebuilds the rest of the state and fails on
+# that entry with NetworkAclEntryAlreadyExists, as the pinned version keeps its number. Delete this file and the pin,
+# and run the workspace again once the cloud connector has observed the network ACL: Xshield gives the deny another
+# number, and the run writes it there.
+variable "skipped_imports" {
+  type = object({
+    security_groups     = optional(set(string), [])
+    rules               = optional(set(string), [])
+    attachments         = optional(set(string), [])
+    network_acl_entries = optional(set(string), [])
+  })
+  default  = {}
+  nullable = false
+}
+
+locals {
+  recovered_security_groups = { for k, v in data.xshield_enforcement_status.recover.applied_security_groups : k => v if !contains(var.skipped_imports.security_groups, k) }
+  recovered_rules           = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if !contains(var.skipped_imports.rules, k) }
+  # An interface that went with its instance since the last receipt has no attachment to import: the module declares
+  # none for it.
+  recovered_attachments = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys), var.skipped_imports.attachments) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
+  # An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
+  recovered_network_acl_entries = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_imports.network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
+}
+
 import {
-  for_each = data.xshield_enforcement_status.recover.applied_security_groups
+  for_each = local.recovered_security_groups
   to       = module.xshield_enforcement.aws_security_group.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.ingress_rules[k]) }
+  for_each = { for k, v in local.recovered_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.ingress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.egress_rules[k]) }
+  for_each = { for k, v in local.recovered_rules : k => v if can(data.xshield_aws_enforcement_snapshot.recover.egress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_egress_rule.this[each.key]
   id       = each.value
 }
 
-# An interface that went with its instance since the last receipt has no attachment to import: the
-# module declares none for it.
 import {
-  for_each = { for k in setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
+  for_each = local.recovered_attachments
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
   id       = each.value
 }
 
-# Keys of network ACL entries not to import. When AWS now holds another entry at an entry's receipted number,
-# the plan stops and names the entry's key: add it here. The apply then rebuilds the rest of the state and fails
-# on that entry with NetworkAclEntryAlreadyExists, as the pinned version keeps its number. Delete this file and
-# the pin, and run the workspace again once the cloud connector has observed the network ACL: Xshield gives the
-# deny another number, and the run writes it there.
-variable "skipped_network_acl_entries" {
-  type    = set(string)
-  default = []
-}
-
-# An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
 import {
-  for_each = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
+  for_each = local.recovered_network_acl_entries
   to       = module.xshield_enforcement.aws_network_acl_rule.this[each.key]
   id       = each.value
 }
@@ -78,7 +95,7 @@ import {
 }
 
 import {
-  for_each = module.xshield_enforcement.exclusive_rules_enabled ? data.xshield_enforcement_status.recover.applied_security_groups : {}
+  for_each = module.xshield_enforcement.exclusive_rules_enabled ? local.recovered_security_groups : {}
   to       = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this[each.key]
   id       = each.value
 }

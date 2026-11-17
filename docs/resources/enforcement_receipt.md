@@ -63,7 +63,7 @@ resource "xshield_enforcement_receipt" "this" {
 - `attachments` (Map of String) The import ID of the attachment created for each key in the snapshot's `interface_attachments`, `<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.
 - `cloud` (String) Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.
 - `exclusive_rules` (Boolean) Whether each security group in `security_groups` holds only the rules in `rules`, so the next apply removes a rule added to it outside Terraform. The `aws` enforcement module sets it from `enable_exclusive_rules`. Xshield then reports such a rule as one the pipeline removes; when false, as one a person must remove. Changing it sends the receipt again; it does not replace it.
-- `network_acl_entries` (Map of String) The import ID of the network ACL entry created for each key in the snapshot's `network_acl_entries`, `<network ACL ID>:<rule number>:-1:<egress>`, which is what rebuilding a lost state imports. Xshield refuses a receipt that leaves one out or gives one another rule number than the snapshot's. Leave it unset, as the `aws` module does, when the snapshot holds none.
+- `network_acl_entries` (Map of String) The import ID of the network ACL entry created for each key in the snapshot's `network_acl_entries`, `<network ACL ID>:<rule number>:-1:<egress>`, which is what rebuilding a lost state imports. Xshield refuses a receipt that gives one another rule number than the snapshot's, or that leaves one out, unless the cloud connector has observed its network ACL gone. Leave it unset, as the `aws` module does, when the snapshot holds none.
 
 ### Read-Only
 

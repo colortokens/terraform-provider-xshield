@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -111,7 +112,8 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 				"`<network interface ID>_<security group ID>`, which is what rebuilding a lost state imports.", false),
 			"network_acl_entries": idMap("The import ID of the network ACL entry created for each key in the snapshot's "+
 				"`network_acl_entries`, `<network ACL ID>:<rule number>:-1:<egress>`, which is what rebuilding a lost state imports. "+
-				"Xshield refuses a receipt that leaves one out or gives one another rule number than the snapshot's. "+
+				"Xshield refuses a receipt that gives one another rule number than the snapshot's, or that leaves one out, unless "+
+				"the cloud connector has observed its network ACL gone. "+
 				"Leave it unset, as the `aws` module does, when the snapshot holds none.", false),
 			"exclusive_rules": schema.BoolAttribute{
 				Optional: true,
@@ -204,6 +206,13 @@ func receiptAdvice(err error) string {
 	}
 	switch apiErr.Status {
 	case http.StatusUnprocessableEntity:
+		if slices.Contains(apiErr.DetailNames, "networkAclEntriesMissing") {
+			return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. Under " +
+				"a pinned snapshot_version, as recovery/ sets, the aws enforcement module leaves out the entries of a network " +
+				"ACL deleted since, and Xshield accepts the receipt once the cloud connector has observed that network ACL " +
+				"gone: plan and apply again after its next observation. Otherwise create every key the snapshot lists, and " +
+				"nothing else, or use the aws enforcement module, which does."
+		}
 		return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. Create " +
 			"every key the snapshot lists, and nothing else, or use the aws enforcement module, which does."
 	case http.StatusNotFound:

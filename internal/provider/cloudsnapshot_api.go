@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
@@ -89,6 +91,7 @@ type snapshotAPIError struct {
 	Status           int
 	Code             string
 	Detail           string
+	DetailNames      []string
 	Advice           string
 }
 
@@ -141,7 +144,8 @@ func (a cloudSnapshotAPI) do(ctx context.Context, method, endpoint string, body 
 		return fmt.Errorf("%s %s: %w", method, endpoint, err)
 	}
 	if res.StatusCode != wantStatus {
-		apiErr := &snapshotAPIError{Method: method, Endpoint: endpoint, Status: res.StatusCode, Code: apiErrorCode(res.Body), Detail: describeAPIError(res.Body)}
+		apiErr := &snapshotAPIError{Method: method, Endpoint: endpoint, Status: res.StatusCode, Code: apiErrorCode(res.Body),
+			Detail: describeAPIError(res.Body), DetailNames: apiErrorDetailNames(res.Body)}
 		if res.StatusCode == http.StatusUnauthorized {
 			apiErr.Advice = unauthorizedAdvice(len(body))
 		}
@@ -161,6 +165,16 @@ func apiErrorCode(body []byte) string {
 		return ""
 	}
 	return apiErr.Code
+}
+
+func apiErrorDetailNames(body []byte) []string {
+	var apiErr struct {
+		Details map[string]json.RawMessage `json:"details"`
+	}
+	if json.Unmarshal(body, &apiErr) != nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(apiErr.Details))
 }
 
 func describeAPIError(body []byte) string {

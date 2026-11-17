@@ -251,6 +251,24 @@ func TestRefusedReceiptSaysWhatToChange(t *testing.T) {
 	}
 }
 
+// Under a pinned version the module leaves out the entries of a network ACL deleted since, and Xshield refuses the
+// receipt until the cloud connector has observed that network ACL gone, so the refusal says to apply again then.
+func TestAReceiptRefusedForLeftOutNetworkACLEntriesSaysToApplyAgainAfterTheObservation(t *testing.T) {
+	t.Parallel()
+	refusal := func(details string) string {
+		api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/receipts": {status: http.StatusUnprocessableEntity,
+			body: `{"status":422,"message":"receipt does not account for exactly the snapshot's resources","details":` + details + `}`}})
+		err := api.post(context.Background(), api.endpoint("aws", "123456789012", "us-east-1", "receipts"), map[string]any{}, http.StatusCreated, nil)
+		return receiptAdvice(err)
+	}
+	if advice := refusal(`{"networkAclEntriesMissing":["acl-0a1b/in/203.0.113.7/32"]}`); !strings.Contains(advice, "observed that network ACL gone") {
+		t.Errorf("advice for left-out network ACL entries is %q, want it to say the receipt is accepted once the network ACL is observed gone", advice)
+	}
+	if advice := refusal(`{"rulesMissing":["i-1/in/0"]}`); strings.Contains(advice, "network ACL") || !strings.Contains(advice, "missing or unknown") {
+		t.Errorf("advice for a missing rule is %q, want the general advice alone", advice)
+	}
+}
+
 func ptr[T any](v T) *T { return &v }
 
 // Until its first receipt, an account moved from connector delivery gets the connector's IDs to import.
