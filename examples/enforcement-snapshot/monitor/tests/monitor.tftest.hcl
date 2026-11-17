@@ -712,7 +712,7 @@ run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_no
 
   assert {
     condition = output.problems.block_rule_not_enforced == [
-      "Workloads in 123456789012/us-east-1 have block templates, which AWS does not enforce:",
+      "Workloads in 123456789012/us-east-1 have block templates, which AWS does not enforce. For the malicious IP block template, see \"Turning on the malicious IP block\" in the enforcement-snapshot README:",
       "  app-01, app-02: this block template blocks inbound tcp port 23, which AWS does not block for this workload (Block telnet)",
       "  app-03: this block template blocks inbound tcp port 23, outbound udp ports 137-139, which AWS does not block for this workload (Block telnet)",
     ]
@@ -722,6 +722,29 @@ run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_no
   assert {
     condition     = !contains(keys(output.problems), "revert_ended")
     error_message = "An ended revert is not warned by default, but reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_malicious_ip_block_template_aws_does_not_enforce_points_at_turning_it_on" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "blockRuleNotEnforced", reason = "Malicious Deny", asset_id = "asset-01", asset_name = "web-1", group = null, since = null, message = "the malicious IP block template is assigned to this workload, and AWS does not block its addresses" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_block_rule_not_enforced]
+
+  assert {
+    condition     = strcontains(output.problems.block_rule_not_enforced[0], "\"Turning on the malicious IP block\" in the enforcement-snapshot README")
+    error_message = "A malicious IP block template AWS does not enforce must point at turning the block on, but reported ${jsonencode(output.problems)}."
   }
 }
 

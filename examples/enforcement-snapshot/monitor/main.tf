@@ -302,7 +302,7 @@ locals {
     asset_policy_in_test           = "Workloads in ${local.where} have an asset policy in test, which writes no rule on AWS:"
     carriers_not_acknowledged      = "Full control changes in ${local.where} move rules out of security groups that something carries which no approval showed:"
     revert_ended                   = "Full control reverts in ${local.where} ended without the customer security group shown holding its moved rules again:"
-    block_rule_not_enforced        = "Workloads in ${local.where} have block templates, which AWS does not enforce:"
+    block_rule_not_enforced        = "Workloads in ${local.where} have block templates, which AWS does not enforce. For the malicious IP block template, see \"Turning on the malicious IP block\" in the enforcement-snapshot README:"
     network_acl_block_not_enforced = "Addresses of the malicious IP block template are not blocked on these network ACLs in ${local.where}:"
   }
 
