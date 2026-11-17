@@ -41,6 +41,8 @@ resource "xshield_enforcement_receipt" "this" {
   )
   # The attachment's import ID, which recovery needs: the resource's own id puts the group first.
   attachments = { for key, attachment in aws_network_interface_sg_attachment.this : key => "${attachment.network_interface_id}_${attachment.security_group_id}" }
+  # The entry's import ID, for the same reason; null when the snapshot holds no network ACL entries.
+  network_acl_entries = length(aws_network_acl_rule.this) == 0 ? null : { for key, entry in aws_network_acl_rule.this : key => "${entry.network_acl_id}:${entry.rule_number}:-1:${entry.egress}" }
 }
 ```
 
