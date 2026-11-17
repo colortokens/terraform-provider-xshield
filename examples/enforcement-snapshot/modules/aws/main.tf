@@ -266,10 +266,22 @@ data "aws_network_acls" "present" {
 
 locals {
   present_network_acls = toset(try(data.aws_network_acls.present[0].ids, []))
+  # Xshield never republishes a pinned version, so its entries on a network ACL deleted since are left out rather than
+  # stop every plan while the pin is in place.
+  network_acl_entries = var.snapshot_version == null ? local.snap.network_acl_entries : {
+    for key, entry in local.snap.network_acl_entries : key => entry if contains(local.present_network_acls, entry.network_acl_id)
+  }
+}
+
+check "pinned_network_acl_entries_present" {
+  assert {
+    condition     = length(local.network_acl_entries) == length(local.snap.network_acl_entries)
+    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out, so the apply ends with the receipt refused, after everything else is applied. Remove the pin once the cloud connector has observed those network ACLs gone: the next run applies a version without them and sends its receipt."
+  }
 }
 
 resource "aws_network_acl_rule" "this" {
-  for_each = local.snap.network_acl_entries
+  for_each = local.network_acl_entries
 
   network_acl_id  = each.value.network_acl_id
   egress          = each.value.egress

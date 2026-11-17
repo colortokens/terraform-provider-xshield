@@ -184,6 +184,11 @@ provider "aws" {
   }
 }
 
+variable "snapshot_version" {
+  type    = string
+  default = null
+}
+
 locals {
   account_id = "123456789012"
   region     = "us-east-1"

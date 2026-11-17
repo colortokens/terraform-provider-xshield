@@ -37,6 +37,11 @@ output "security_group_ids" {
   value       = { for id, asset in local.snap.assets : id => asset.security_group == null ? null : aws_security_group.this[asset.security_group].id }
 }
 
+output "network_acl_entry_keys" {
+  description = "The network ACL entries this run declares, by snapshot key: the snapshot's, less, while a version is pinned, any on a network ACL that no longer exists. The recovery import blocks import only these."
+  value       = keys(local.network_acl_entries)
+}
+
 output "attachment_keys" {
   description = "The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The recovery and hand-over import blocks import only these."
   value       = keys(local.attachments_with_room)

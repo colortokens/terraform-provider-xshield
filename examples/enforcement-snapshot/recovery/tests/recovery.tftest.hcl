@@ -132,3 +132,37 @@ run "one_receipted_instance_was_terminated_since_the_last_receipt" {
     error_message = "only the attachment whose interface still exists is declared and imported"
   }
 }
+
+# The module declares no entry the version it plans no longer holds, so the import of one would have no configuration.
+run "a_receipted_network_acl_entry_the_module_does_not_declare_is_not_imported" {
+  command = plan
+
+  override_data {
+    target = module.xshield_enforcement.data.xshield_aws_enforcement_snapshot.this
+    values = {
+      cloud_account_id = "123456789012"
+      region           = "us-east-1"
+      published        = true
+      version          = "v2"
+      security_groups = {
+        "i-1" = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+        "i-2" = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+      }
+      ingress_rules = {}
+      egress_rules  = {}
+      interface_attachments = {
+        "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 }
+        "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 }
+      }
+      directory_entries           = {}
+      assets                      = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      network_acl_entries         = {}
+      withdrawing_security_groups = []
+    }
+  }
+
+  assert {
+    condition     = module.xshield_enforcement.summary.network_acl_entries == 0
+    error_message = "the module declares no network ACL entry, so none is imported"
+  }
+}

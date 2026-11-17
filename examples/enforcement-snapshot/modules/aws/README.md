@@ -78,7 +78,7 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 |--|--|--|
 | `cloud_account_id` | The AWS provider's account | AWS account to enforce. A snapshot for any other account is refused. |
 | `region` | The AWS provider's region | AWS region to enforce. |
-| `snapshot_version` | `null` | Pins a version for break-glass rollback. Xshield reports the account as pending while it is set. |
+| `snapshot_version` | `null` | Pins a version for break-glass rollback. Xshield reports the account as pending while it is set. Entries of the version on a network ACL deleted since are left out, and Xshield refuses the receipt without them. |
 | `workspace` | `xshield-enforcement-<account>-<region>` | Name Xshield shows for the workspace that applied a version. |
 | `tags` | `{}` | Added to every resource. `ManagedBy` and `ct:*` are reserved. |
 | `enable_exclusive_rules` | `true` | Each group this module creates holds only the rules the snapshot declares, so the next apply removes a rule added outside Terraform. Set `false` to leave such a rule until a person removes it. |
@@ -95,6 +95,7 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
 | `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
 | `attachment_keys` | The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The import blocks in `recovery/` and `handover/` import only these. |
+| `network_acl_entry_keys` | The network ACL entries this run declares, by snapshot key: the snapshot's, less, while `snapshot_version` pins a version, any on a network ACL that no longer exists. The import blocks in `recovery/` import only these. |
 | `directory_entries` | The SSM parameter each owning workspace reads, keyed by handle. |
 
 Requires Terraform 1.7 and the AWS provider 6.29.0 or later, the first release with `aws_vpc_security_group_rules_exclusive`. `terraform test` runs the tests in `tests/` offline, with both providers mocked.

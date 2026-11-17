@@ -122,6 +122,28 @@ run "stops_at_plan_for_a_network_acl_aws_no_longer_shows" {
   expect_failures = [aws_network_acl_rule.this]
 }
 
+# A pinned version is not republished once the cloud connector observes a network ACL gone, so stopping, as above,
+# would stop every plan while the pin is in place, such as the one recovery/ makes.
+run "a_pinned_version_leaves_out_the_entries_of_a_network_acl_aws_no_longer_shows" {
+  command = plan
+
+  variables {
+    snapshot_version = "v42"
+  }
+
+  override_data {
+    target = data.aws_network_acls.present[0]
+    values = { ids = ["acl-0c2d"] }
+  }
+
+  expect_failures = [check.pinned_network_acl_entries_present]
+
+  assert {
+    condition     = length(aws_network_acl_rule.this) == 0 && xshield_enforcement_receipt.this[0].network_acl_entries == null && length(output.network_acl_entry_keys) == 0
+    error_message = "a pinned version declares and receipts no entry on a network ACL AWS no longer shows"
+  }
+}
+
 run "reviews_how_far_a_network_acl_reaches" {
   command = plan
 

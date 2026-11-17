@@ -10,7 +10,10 @@
 # A rule added to an Xshield group outside Terraform shows as an in-place change of that group's
 # exclusive rules resource, and the apply removes it.
 # If an instance in the last receipt has since been terminated, the receipt is also sent again, without
-# that instance's attachment.
+# that instance's attachment. If a network ACL in the last receipt has since been deleted, its entries are
+# left out and a check names them; Xshield refuses a receipt without them, so the apply ends with that
+# refusal once the state is rebuilt. Delete this file and the pin, and run the workspace again once the
+# cloud connector has observed the network ACL gone.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
@@ -51,8 +54,9 @@ import {
   id       = each.value
 }
 
+# An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.recover.applied_network_acl_entries : k => v if can(data.xshield_aws_enforcement_snapshot.recover.network_acl_entries[k]) }
+  for_each = { for k in setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
   to       = module.xshield_enforcement.aws_network_acl_rule.this[each.key]
   id       = each.value
 }
