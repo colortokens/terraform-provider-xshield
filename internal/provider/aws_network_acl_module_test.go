@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,7 @@ type networkACLEndpoint struct {
 	url     string
 	mu      sync.Mutex
 	entries map[string]networkACLEntry
+	writes  []string
 }
 
 type networkACLEntry struct {
@@ -72,12 +74,14 @@ func (e *networkACLEndpoint) answer(action string, form url.Values) (string, str
 		}
 		number, _ := strconv.Atoi(form.Get("RuleNumber"))
 		e.entries[key] = networkACLEntry{ruleNumber: number, egress: form.Get("Egress") == "true", action: form.Get("RuleAction"), cidr: form.Get("CidrBlock")}
+		e.writes = append(e.writes, "create "+key)
 		return "<return>true</return>", ""
 	case "DeleteNetworkAclEntry":
 		if _, held := e.entries[key]; !held {
 			return "", "InvalidNetworkAclEntry.NotFound"
 		}
 		delete(e.entries, key)
+		e.writes = append(e.writes, "delete "+key)
 		return "<return>true</return>", ""
 	case "DescribeNetworkAcls":
 		items := ""
@@ -91,8 +95,9 @@ func (e *networkACLEndpoint) answer(action string, form url.Values) (string, str
 	return "", "UnauthorizedOperation"
 }
 
-// changeInAWS replaces the entry at a rule number and direction outside Terraform, or deletes it when action is empty.
-func (e *networkACLEndpoint) changeInAWS(ruleNumber int, egress bool, action string) {
+// changeInAWS writes an entry at a rule number and direction outside Terraform, in place of any entry there, or deletes
+// the entry there when action is empty.
+func (e *networkACLEndpoint) changeInAWS(ruleNumber int, egress bool, action, cidr string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	key := networkACLEntryKey(strconv.Itoa(ruleNumber), strconv.FormatBool(egress))
@@ -100,9 +105,13 @@ func (e *networkACLEndpoint) changeInAWS(ruleNumber int, egress bool, action str
 		delete(e.entries, key)
 		return
 	}
-	entry := e.entries[key]
-	entry.action = action
-	e.entries[key] = entry
+	e.entries[key] = networkACLEntry{ruleNumber: ruleNumber, egress: egress, action: action, cidr: cidr}
+}
+
+func (e *networkACLEndpoint) writesSoFar() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string{}, e.writes...)
 }
 
 func (e *networkACLEndpoint) held() map[string]networkACLEntry {
@@ -115,23 +124,26 @@ func (e *networkACLEndpoint) held() map[string]networkACLEntry {
 	return held
 }
 
-// networkACLModuleConfig writes the aws module's network ACL entry resource as it stands, lifecycle included, with a
-// snapshot that blocks 203.0.113.7/32 inbound at rule number 50, or, without the resource, only the provider: the
-// harness cannot read a state holding a resource with for_each, so the last step takes the entry out.
-func networkACLModuleConfig(t *testing.T, aws *networkACLEndpoint, withEntry bool) func(config.TestStepConfigRequest) string {
+// networkACLModuleConfig writes the aws module's network ACL code as it stands, from its read of the network ACLs to
+// the entry resource, lifecycle included, with a snapshot that blocks 203.0.113.7/32 inbound at ruleNumber, or, with
+// ruleNumber 0, a snapshot that blocks nothing: the harness cannot read a state holding a resource with for_each, so
+// the last step of each test takes the entry out.
+func networkACLModuleConfig(t *testing.T, aws *networkACLEndpoint, ruleNumber int) func(config.TestStepConfigRequest) string {
 	t.Helper()
 	module, err := os.ReadFile("../../examples/enforcement-snapshot/modules/aws/main.tf")
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := strings.Index(string(module), `resource "aws_network_acl_rule" "this" {`)
-	length := strings.Index(string(module)[max(start, 0):], "\n}\n")
-	if start < 0 || length < 0 {
-		t.Fatal(`the aws module declares no resource "aws_network_acl_rule" "this"`)
+	start := strings.Index(string(module), `data "aws_network_acls" "present" {`)
+	resourceStart := strings.Index(string(module), `resource "aws_network_acl_rule" "this" {`)
+	length := strings.Index(string(module)[max(resourceStart, 0):], "\n}\n")
+	if start < 0 || resourceStart < start || length < 0 {
+		t.Fatal(`the aws module declares no data "aws_network_acls" "present" followed by resource "aws_network_acl_rule" "this"`)
 	}
-	resource := string(module)[start : start+length+2]
-	if !withEntry {
-		resource = ""
+	networkACLCode := string(module)[start : resourceStart+length+2]
+	entries := ""
+	if ruleNumber > 0 {
+		entries = fmt.Sprintf(`%q = { network_acl_id = "acl-0a1b", egress = false, rule_number = %d, cidr_ipv4 = "203.0.113.7/32", cidr_ipv6 = null }`, inboundDenyKey, ruleNumber)
 	}
 	content := fmt.Sprintf(`
 terraform {
@@ -156,15 +168,17 @@ provider "aws" {
 }
 
 locals {
+  account_id = "123456789012"
+  region     = "us-east-1"
   snap = {
     network_acl_entries = {
-      %q = { network_acl_id = "acl-0a1b", egress = false, rule_number = 50, cidr_ipv4 = "203.0.113.7/32", cidr_ipv6 = null }
+      %s
     }
   }
 }
 
 %s
-`, aws.url, inboundDenyKey, resource)
+`, aws.url, entries, networkACLCode)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -172,53 +186,67 @@ locals {
 	return config.StaticDirectory(dir)
 }
 
-// An entry changed or deleted in AWS is put back at the rule number Xshield gave it by the next apply. AWS holds one
-// entry per rule number and direction, so the changed entry has to go before the replacement is created.
-func TestAccTheAWSModulePutsBackANetworkACLEntryChangedInAWS(t *testing.T) {
+// An entry deleted in AWS is written again at its rule number by the next apply. A move to another rule number
+// writes the deny at the new number before it deletes the old one, so the address stays blocked throughout.
+func TestAccTheAWSModuleWritesADeletedNetworkACLEntryAgainAndMovesOneCreatingFirst(t *testing.T) {
 	clearXshieldEnv(t)
 	aws := newNetworkACLEndpoint(t)
 	entry := `aws_network_acl_rule.this["` + inboundDenyKey + `"]`
-	denies := []statecheck.StateCheck{holdsTheInboundDeny{aws}}
 
 	tfresource.Test(t, tfresource.TestCase{
 		Steps: []tfresource.TestStep{
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				ConfigDirectory:          networkACLModuleConfig(t, aws, true),
-				ConfigStateChecks:        denies,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ConfigStateChecks:        []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
 			},
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				PreConfig:                func() { aws.changeInAWS(50, false, "allow") },
-				ConfigDirectory:          networkACLModuleConfig(t, aws, true),
-				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction(entry, plancheck.ResourceActionDestroyBeforeCreate),
-				}},
-				ConfigStateChecks: denies,
-			},
-			{
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				PreConfig:                func() { aws.changeInAWS(50, false, "") },
-				ConfigDirectory:          networkACLModuleConfig(t, aws, true),
+				PreConfig:                func() { aws.changeInAWS(50, false, "", "") },
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
 				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 					plancheck.ExpectResourceAction(entry, plancheck.ResourceActionCreate),
 				}},
-				ConfigStateChecks: denies,
+				ConfigStateChecks: []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
 			},
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				ConfigDirectory:          networkACLModuleConfig(t, aws, false),
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 48),
+				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(entry, plancheck.ResourceActionCreateBeforeDestroy),
+				}},
+				ConfigStateChecks: []statecheck.StateCheck{holdsTheInboundDeny{aws, 48}, wroteLast{aws, []string{"create 48/false", "delete 50/false"}}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 0),
 			},
 		},
 	})
 }
 
-// holdsTheInboundDeny checks what AWS holds after an apply: the deny of 203.0.113.7/32 inbound at rule number 50 alone.
-type holdsTheInboundDeny struct{ aws *networkACLEndpoint }
+// holdsTheInboundDeny checks what AWS holds after an apply: the deny of 203.0.113.7/32 inbound at ruleNumber alone.
+type holdsTheInboundDeny struct {
+	aws        *networkACLEndpoint
+	ruleNumber int
+}
 
 func (c holdsTheInboundDeny) CheckState(_ context.Context, _ statecheck.CheckStateRequest, resp *statecheck.CheckStateResponse) {
 	held := c.aws.held()
-	if got := held[networkACLEntryKey("50", "false")]; len(held) != 1 || got.action != "deny" || got.cidr != "203.0.113.7/32" {
-		resp.Error = fmt.Errorf("AWS holds %+v, want the deny of 203.0.113.7/32 inbound at rule number 50 alone", held)
+	if got := held[networkACLEntryKey(strconv.Itoa(c.ruleNumber), "false")]; len(held) != 1 || got.action != "deny" || got.cidr != "203.0.113.7/32" {
+		resp.Error = fmt.Errorf("AWS holds %+v, want the deny of 203.0.113.7/32 inbound at rule number %d alone", held, c.ruleNumber)
+	}
+}
+
+// wroteLast checks the last writes AWS accepted, in the order it accepted them.
+type wroteLast struct {
+	aws    *networkACLEndpoint
+	writes []string
+}
+
+func (c wroteLast) CheckState(_ context.Context, _ statecheck.CheckStateRequest, resp *statecheck.CheckStateResponse) {
+	writes := c.aws.writesSoFar()
+	if len(writes) < len(c.writes) || !slices.Equal(writes[len(writes)-len(c.writes):], c.writes) {
+		resp.Error = fmt.Errorf("AWS accepted the writes %v, want them to end with %v", writes, c.writes)
 	}
 }
