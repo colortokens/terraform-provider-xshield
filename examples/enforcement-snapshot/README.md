@@ -176,7 +176,7 @@ For an account that already runs this pipeline. Each step works with what the st
 
    ```sh
    aws ec2 describe-network-acls --filters Name=association.subnet-id,Values=subnet-0a1b \
-     --query 'NetworkAcls[].Entries[].[NetworkAclId,Egress,RuleNumber,RuleAction,CidrBlock]' --output text
+     --query 'NetworkAcls[].[NetworkAclId, Entries[].[Egress,RuleNumber,RuleAction,CidrBlock||Ipv6CidrBlock]]' --output text
    ```
 
    In each direction, Xshield needs a place for each address beside your entries, AWS's default rules and two places it leaves for yours, within the account's quota of rules per network ACL (20 unless raised). It also needs a free rule number in front of every allow that covers the address: one of the even numbers from 50 to 98 when your allows are numbered after them, as the default network ACL's allow at 100 is, otherwise a number below your lowest such allow. Where there is no room or no number, the address is not blocked on that network ACL and the monitor reports it. AWS applies the lowest number that matches, so leave the numbers in front of your allows free rather than numbering an allow of yours 1.
@@ -215,7 +215,7 @@ For an account that already runs this pipeline. Each step works with what the st
 
    ```sh
    aws ec2 describe-network-acls --network-acl-ids acl-0a1b \
-     --query 'NetworkAcls[0].Entries[?RuleAction==`deny`].[Egress,RuleNumber,CidrBlock]' --output text
+     --query 'NetworkAcls[0].Entries[?RuleAction==`deny`].[Egress,RuleNumber,CidrBlock||Ipv6CidrBlock]' --output text
    ```
 
    Once the cloud connector has observed the account, `xshield_enforcement_status` reads `state = "converged"` with no drift, and the monitor reports no `network_acl_block_not_enforced`. Xshield asks the cloud connector to observe the account every 10 minutes.
