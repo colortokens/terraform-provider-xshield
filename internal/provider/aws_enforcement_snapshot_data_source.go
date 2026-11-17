@@ -200,9 +200,11 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 				"at its old number, and run `terraform state rm` on the key of any that is not the deny. When the old number is a "+
 				"deposed object of the key, left by an apply that stopped part-way, `terraform state rm` also drops any deny at the "+
 				"new number and every deposed number: note each number first, from `terraform state show`, when it shows the key, "+
-				"and the plan. Then, "+
-				"of the noted entries that still deny the key's address on all protocols, import the one at the new number back to "+
-				"the key while the version holds the key, and delete the others by hand. An address "+
+				"and the plan. Then check the entry at each. While the version holds the key and the one at the new number still "+
+				"denies the key's address on all protocols, import it back to the key and delete by hand each other noted entry "+
+				"that still does; while it does not, keep those until the apply that writes the deny at its next number, then "+
+				"delete them. Once the version no longer holds the key, delete by hand every noted entry that still denies the "+
+				"address, the one at the new number included. Leave any entry that does not. An address "+
 				"left out for want of room or of a free number is named in a `networkAclEntryRefused` notice instead. "+
 				"`network_acl_id`: network ACL the entry goes in. "+
 				"`egress`: `true` for an outbound entry, `false` for an inbound one. "+
