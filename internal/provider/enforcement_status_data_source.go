@@ -163,8 +163,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"no network ACL entry of Xshield's blocks its addresses for. " +
 					"A `networkAclEntryRefused` notice names addresses of the malicious IP block template Xshield leaves off a network ACL, so they " +
 					"are not blocked for the workloads behind it: the network ACL has no place left in that direction, no rule number is free for " +
-					"them in front of the allows that cover them nor among the even numbers 50 to 98, or they wait for entries the next apply removes. Xshield never asks AWS for a place " +
-					"it may not have, so an apply is never refused for it. A `networkAclNotObserved` notice names a network ACL the cloud " +
+					"them in front of the allows that cover them nor among the even numbers 50 to 98, or they wait for entries the next apply removes. Xshield counts the places from the cloud " +
+					"connector's last observation, so rules added to the network ACL since can still leave an apply refused with `NetworkAclEntryLimitExceeded`. A `networkAclNotObserved` notice names a network ACL the cloud " +
 					"connector has not read, or no longer shows, so Xshield adds no entry to it. A `networkAclEntryShadowed` notice names an " +
 					"entry of Xshield's that an allow rule of yours, numbered before it with no rule number free in front of it, lets the traffic through. " +
 					"A `networkAclReach` notice names a network ACL with entries of Xshield's whose subnets hold more than the workloads the malicious " +

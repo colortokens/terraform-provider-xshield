@@ -23,12 +23,13 @@ import (
 )
 
 // networkACLEndpoint stands in for EC2 holding one network ACL, acl-0a1b. As EC2 does, it holds one entry per rule
-// number and direction, and refuses to create another there.
+// number and direction, and refuses to create another there, or one past the rules per network ACL quota when set.
 type networkACLEndpoint struct {
 	url     string
 	mu      sync.Mutex
 	entries map[string]networkACLEntry
 	writes  []string
+	quota   int
 }
 
 type networkACLEntry struct {
@@ -73,6 +74,15 @@ func (e *networkACLEndpoint) answer(action string, form url.Values) (string, str
 		if _, held := e.entries[key]; held {
 			return "", "NetworkAclEntryAlreadyExists"
 		}
+		inDirection := 0
+		for _, entry := range e.entries {
+			if strconv.FormatBool(entry.egress) == form.Get("Egress") {
+				inDirection++
+			}
+		}
+		if e.quota > 0 && inDirection >= e.quota {
+			return "", "NetworkAclEntryLimitExceeded"
+		}
 		number, _ := strconv.Atoi(form.Get("RuleNumber"))
 		e.entries[key] = networkACLEntry{ruleNumber: number, egress: form.Get("Egress") == "true", action: form.Get("RuleAction"), cidr: form.Get("CidrBlock")}
 		e.writes = append(e.writes, "create "+key)
@@ -107,6 +117,12 @@ func (e *networkACLEndpoint) changeInAWS(ruleNumber int, egress bool, action, ci
 		return
 	}
 	e.entries[key] = networkACLEntry{ruleNumber: ruleNumber, egress: egress, action: action, cidr: cidr}
+}
+
+func (e *networkACLEndpoint) limitRulesPerDirectionTo(quota int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.quota = quota
 }
 
 func (e *networkACLEndpoint) writesSoFar() []string {
@@ -338,4 +354,48 @@ func (c wroteLast) CheckState(_ context.Context, _ statecheck.CheckStateRequest,
 	if len(writes) < len(c.writes) || !slices.Equal(writes[len(writes)-len(c.writes):], c.writes) {
 		resp.Error = fmt.Errorf("AWS accepted the writes %v, want them to end with %v", writes, c.writes)
 	}
+}
+
+// Xshield counts a network ACL's room from the cloud connector's last observation, and the module cannot read entries
+// at plan. So an entry of the customer's added since then can leave no room for the deny's new number: AWS refuses
+// it, and the deny at its old number stays, with nothing deleted.
+func TestAccTheAWSModuleKeepsTheDenyWhenAWSRefusesItsMoveOverTheQuota(t *testing.T) {
+	clearXshieldEnv(t)
+	aws := newNetworkACLEndpoint(t)
+
+	tfresource.Test(t, tfresource.TestCase{
+		Steps: []tfresource.TestStep{
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ConfigStateChecks:        []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig: func() {
+					aws.limitRulesPerDirectionTo(3)
+					aws.changeInAWS(40, false, "allow", "203.0.113.0/24")
+					aws.changeInAWS(100, false, "allow", "0.0.0.0/0")
+				},
+				ConfigDirectory: networkACLModuleConfig(t, aws, 38),
+				ExpectError:     regexp.MustCompile(`NetworkAclEntryLimitExceeded`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig: func() {
+					held := aws.held()
+					if len(held) != 3 || held[networkACLEntryKey("40", "false")].action != "allow" || held[networkACLEntryKey("100", "false")].action != "allow" {
+						t.Fatalf("the refused move changed the customer's entries: AWS holds %+v", held)
+					}
+					if deny := held[networkACLEntryKey("50", "false")]; deny.action != "deny" || deny.cidr != "203.0.113.7/32" {
+						t.Fatalf("the refused move unblocked the address: AWS holds %+v at rule number 50", deny)
+					}
+					if writes := aws.writesSoFar(); slices.Contains(writes, "delete 50/false") {
+						t.Fatalf("the refused move deleted the deny: writes %v", writes)
+					}
+				},
+				ConfigDirectory: networkACLModuleConfig(t, aws, 0),
+			},
+		},
+	})
 }

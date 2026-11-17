@@ -252,9 +252,10 @@ resource "aws_ssm_parameter" "directory" {
 
 # Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
 # denying all traffic from it inbound or to it outbound. Xshield numbers an entry in front of every allow that covers
-# its address, and places one only where the network ACL has room, so AWS never refuses one as over its rules per
-# network ACL. An entry moves when an allow is put in front of it: the deny is written at its new number before the old
-# entry is deleted, so the address stays blocked throughout. An entry changed in AWS, or another entry written at its
+# its address, and places one only where the network ACL had room when the cloud connector last observed it, so AWS
+# refuses one as over its rules per network ACL only after rules are added since. An entry moves when an allow is put
+# in front of it: the deny is written at its new number before the old entry is deleted, so the address stays blocked
+# throughout, and a move AWS refuses leaves the deny at its old number. An entry changed in AWS, or another entry written at its
 # number, stops the plan: it is not Xshield's, and Terraform deletes an entry by its number alone.
 #
 # The network ACLs are read at plan, so a role without ec2:DescribeNetworkAcls, such as one created before network ACL
