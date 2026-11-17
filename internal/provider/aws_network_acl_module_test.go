@@ -129,7 +129,7 @@ func (e *networkACLEndpoint) held() map[string]networkACLEntry {
 // the entry resource, lifecycle included, with a snapshot that blocks 203.0.113.7/32 inbound at ruleNumber, or, with
 // ruleNumber 0, a snapshot that blocks nothing: the harness cannot read a state holding a resource with for_each, so
 // the last step of each test takes the entry out.
-func networkACLModuleConfig(t *testing.T, aws *networkACLEndpoint, ruleNumber int) func(config.TestStepConfigRequest) string {
+func networkACLModuleConfig(t *testing.T, aws *networkACLEndpoint, ruleNumber int, extra ...string) func(config.TestStepConfigRequest) string {
 	t.Helper()
 	module, err := os.ReadFile("../../examples/enforcement-snapshot/modules/aws/main.tf")
 	if err != nil {
@@ -179,7 +179,8 @@ locals {
 }
 
 %s
-`, aws.url, entries, networkACLCode)
+%s
+`, aws.url, entries, networkACLCode, strings.Join(extra, "\n"))
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -255,6 +256,59 @@ func TestAccTheAWSModuleStopsBeforeHoldingAnotherEntryAtItsRuleNumber(t *testing
 					aws.changeInAWS(50, false, "deny", "203.0.113.7/32")
 				},
 				ConfigDirectory: networkACLModuleConfig(t, aws, 0),
+			},
+		},
+	})
+}
+
+// An apply that stops after AWS creates a moved deny at its new number, and before Terraform records it, leaves the
+// old number in state and both in AWS. The retry is refused at the new number, and an import of the entry there does
+// nothing, as the address is already in state. The deny at the old number keeps the address blocked, so the entry at
+// the new number is deleted by hand, and the next apply moves the deny again.
+func TestAccTheAWSModuleMovesADenyAgainAfterAnApplyStoppedPartWay(t *testing.T) {
+	clearXshieldEnv(t)
+	aws := newNetworkACLEndpoint(t)
+	importTheNewNumber := `
+import {
+  to = aws_network_acl_rule.this["` + inboundDenyKey + `"]
+  id = "acl-0a1b:48:-1:false"
+}`
+
+	tfresource.Test(t, tfresource.TestCase{
+		Steps: []tfresource.TestStep{
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ConfigStateChecks:        []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig:                func() { aws.changeInAWS(48, false, "deny", "203.0.113.7/32") },
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 48),
+				ExpectError:              regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 48, importTheNewNumber),
+				ExpectError:              regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig: func() {
+					if got := aws.held()[networkACLEntryKey("50", "false")]; got.action != "deny" || got.cidr != "203.0.113.7/32" {
+						t.Fatalf("the refused retries left the address unblocked: AWS holds %+v at rule number 50", got)
+					}
+					aws.changeInAWS(48, false, "", "")
+				},
+				ConfigDirectory: networkACLModuleConfig(t, aws, 48),
+				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(`aws_network_acl_rule.this["`+inboundDenyKey+`"]`, plancheck.ResourceActionCreateBeforeDestroy),
+				}},
+				ConfigStateChecks: []statecheck.StateCheck{holdsTheInboundDeny{aws, 48}, wroteLast{aws, []string{"create 48/false", "delete 50/false"}}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 0),
 			},
 		},
 	})
