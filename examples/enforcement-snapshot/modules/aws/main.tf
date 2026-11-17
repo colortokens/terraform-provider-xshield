@@ -253,10 +253,12 @@ resource "aws_ssm_parameter" "directory" {
 # Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
 # denying all traffic from it inbound or to it outbound. Xshield numbers an entry in front of every allow that covers
 # its address, and places one only where the network ACL had room when the cloud connector last observed it, so AWS
-# refuses one as over its rules per network ACL only after rules are added since. An entry moves when an allow is put
-# in front of it: the deny is written at its new number before the old entry is deleted, so the address stays blocked
-# throughout, and a move AWS refuses leaves the deny at its old number. An entry changed in AWS, or another entry written at its
-# number, stops the plan: it is not Xshield's, and Terraform deletes an entry by its number alone.
+# refuses one as over its rules per network ACL only after rules are added since. An allow put in front of an entry
+# lets its address through until the next apply moves the deny in front of the allow, writing the new number before
+# deleting the old, and a move AWS refuses leaves the deny at its old number, behind the allow. An entry changed in AWS,
+# or another entry written at its number, stops the plan while the version holds the deny: it is not Xshield's, and
+# Terraform deletes an entry by its number alone. Nothing checks an entry being destroyed, so when the version no
+# longer holds a deny, its number is deleted whatever AWS holds there.
 #
 # The network ACLs are read at plan, so a role without ec2:DescribeNetworkAcls, such as one created before network ACL
 # entries, stops the run before anything is written, and so does a network ACL deleted since Xshield planned its entries.
@@ -276,7 +278,7 @@ locals {
 check "pinned_network_acl_entries_present" {
   assert {
     condition     = length(local.network_acl_entries) == length(local.snap.network_acl_entries)
-    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out, so the apply ends with the receipt refused, after everything else is applied. Remove the pin once the cloud connector has observed those network ACLs gone: the next run applies a version without them and sends its receipt."
+    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out until the cloud connector has observed those network ACLs gone, and until then the apply ends with the receipt refused: the security groups, rules, attachments and network ACL entries this version takes away stay in place, as Terraform deletes them only after the receipt is accepted. Plan and apply again once the cloud connector has observed them gone."
   }
 }
 
@@ -304,7 +306,7 @@ resource "aws_network_acl_rule" "this" {
     # Terraform would otherwise be taken into state, and a later move or removal of the deny would delete it.
     postcondition {
       condition     = self.rule_action == "deny" && self.protocol == "-1" && coalesce(self.cidr_block, "-") == coalesce(each.value.cidr_ipv4, "-") && coalesce(self.ipv6_cidr_block, "-") == coalesce(each.value.cidr_ipv6, "-")
-      error_message = "AWS now holds another entry at rule number ${each.value.rule_number} ${each.value.egress ? "outbound" : "inbound"} of network ACL ${each.value.network_acl_id}, where Xshield's deny of ${coalesce(each.value.cidr_ipv4, each.value.cidr_ipv6)} was: it ${self.rule_action}s protocol ${self.protocol} for ${coalesce(self.cidr_block, self.ipv6_cidr_block, "-")}. It is not Xshield's, so the plan stopped before anything was applied: Terraform deletes an entry by its rule number, and would delete this one when the deny moves or is removed. Run terraform state rm on aws_network_acl_rule.this[\"${each.key}\"] of this module so that Terraform stops holding it, then plan again. Once the cloud connector observes the network ACL, Xshield gives the deny another number."
+      error_message = "AWS now holds another entry at rule number ${each.value.rule_number} ${each.value.egress ? "outbound" : "inbound"} of network ACL ${each.value.network_acl_id}, where Xshield's deny of ${coalesce(each.value.cidr_ipv4, each.value.cidr_ipv6)} was: it ${self.rule_action}s protocol ${self.protocol} for ${coalesce(self.cidr_block, self.ipv6_cidr_block, "-")}. It is not Xshield's, so the plan stopped before anything was applied: Terraform deletes an entry by its rule number, and would delete this one when the deny moves or is removed. Run terraform state rm on aws_network_acl_rule.this[\"${each.key}\"] of this module so that Terraform stops holding it, then plan again; if an import block brought it in, as recovery/ does, leave that import out instead, with recovery.tf's skipped_network_acl_entries. Once the cloud connector observes the network ACL, Xshield gives the deny another number. A pinned snapshot_version keeps this number, so until the pin is removed the apply fails on this entry with NetworkAclEntryAlreadyExists."
     }
   }
 }

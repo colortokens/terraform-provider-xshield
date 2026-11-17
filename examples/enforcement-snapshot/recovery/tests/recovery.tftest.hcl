@@ -166,3 +166,18 @@ run "a_receipted_network_acl_entry_the_module_does_not_declare_is_not_imported" 
     error_message = "the module declares no network ACL entry, so none is imported"
   }
 }
+
+# A key left out of the imports, as when AWS holds another entry at its receipted number, keeps its entry declared,
+# to be created at that number.
+run "a_skipped_network_acl_entry_is_still_declared" {
+  command = plan
+
+  variables {
+    skipped_network_acl_entries = ["acl-0a1b/in/203.0.113.7/32"]
+  }
+
+  assert {
+    condition     = module.xshield_enforcement.summary.network_acl_entries == 1
+    error_message = "the skipped entry is still declared, to be created at its receipted number"
+  }
+}

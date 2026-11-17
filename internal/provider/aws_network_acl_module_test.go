@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -285,11 +286,57 @@ func TestAccTheAWSModuleStopsBeforeHoldingAnotherEntryAtItsRuleNumber(t *testing
 	})
 }
 
+// recovery/ imports each entry at the number of the last receipt, which its pinned version keeps. When AWS holds
+// another entry there by then, the import brings it in and the plan stops; with that import left out, the apply is
+// refused at that number, and the customer's entry stays as it was.
+func TestAccTheAWSModuleLeavesAnotherEntryAtARecoveredNumberWhenItsImportIsLeftOut(t *testing.T) {
+	clearXshieldEnv(t)
+	aws := newNetworkACLEndpoint(t)
+	aws.changeInAWS(50, false, "allow", "10.0.0.0/8")
+	customersAllow := map[string]networkACLEntry{networkACLEntryKey("50", "false"): {ruleNumber: 50, action: "allow", cidr: "10.0.0.0/8"}}
+	importTheReceiptedNumber := `
+import {
+  to = aws_network_acl_rule.this["` + inboundDenyKey + `"]
+  id = "acl-0a1b:50:-1:false"
+}`
+	theCustomersAllowStays := func() {
+		if held := aws.held(); !maps.Equal(held, customersAllow) {
+			t.Fatalf("AWS holds %+v, want the customer's allow at rule number 50 alone", held)
+		}
+	}
+
+	tfresource.Test(t, tfresource.TestCase{
+		Steps: []tfresource.TestStep{
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50, importTheReceiptedNumber),
+				ExpectError:              regexp.MustCompile(`AWS now holds another entry at rule number 50 inbound`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig:                theCustomersAllowStays,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ExpectError:              regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig:                theCustomersAllowStays,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 0),
+				ConfigStateChecks:        []statecheck.StateCheck{holds{aws, customersAllow}},
+			},
+		},
+	})
+}
+
 // An apply that stops after AWS creates a moved deny at its new number, and before Terraform records it, leaves the
 // old number in state and both in AWS. The retry is refused at the new number, and an import of the entry there does
-// nothing, as the address is already in state. The deny at the old number keeps the address blocked, so the entry at
-// the new number is deleted by hand, and the next apply moves the deny again.
-func TestAccTheAWSModuleMovesADenyAgainAfterAnApplyStoppedPartWay(t *testing.T) {
+// nothing while the key is in state, even once the old number is gone from AWS. The deny moved because an allow was put
+// in front of it, so the new number alone blocks the address and the old one blocks nothing more: deleting the old one
+// by hand and taking the key out of state lets the import take the deny over with no write, and the address stays
+// blocked throughout. The harness has no state rm, so an apply without the key, which has nothing to delete as the
+// entry is gone, takes it out of state instead.
+// Deleting the new one instead, as an earlier guide said, would let the address through the allow.
+func TestAccTheAWSModuleTakesTheMovedDenyOverAfterAnApplyStoppedPartWay(t *testing.T) {
 	clearXshieldEnv(t)
 	aws := newNetworkACLEndpoint(t)
 	importTheNewNumber := `
@@ -297,6 +344,11 @@ import {
   to = aws_network_acl_rule.this["` + inboundDenyKey + `"]
   id = "acl-0a1b:48:-1:false"
 }`
+	movedInFront := map[string]networkACLEntry{
+		networkACLEntryKey("48", "false"): {ruleNumber: 48, action: "deny", cidr: "203.0.113.7/32"},
+		networkACLEntryKey("49", "false"): {ruleNumber: 49, action: "allow", cidr: "203.0.113.0/24"},
+	}
+	writesBeforeTheKeyLeavesState := 0
 
 	tfresource.Test(t, tfresource.TestCase{
 		Steps: []tfresource.TestStep{
@@ -307,9 +359,12 @@ import {
 			},
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				PreConfig:                func() { aws.changeInAWS(48, false, "deny", "203.0.113.7/32") },
-				ConfigDirectory:          networkACLModuleConfig(t, aws, 48),
-				ExpectError:              regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
+				PreConfig: func() {
+					aws.changeInAWS(49, false, "allow", "203.0.113.0/24")
+					aws.changeInAWS(48, false, "deny", "203.0.113.7/32")
+				},
+				ConfigDirectory: networkACLModuleConfig(t, aws, 48),
+				ExpectError:     regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
 			},
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -320,15 +375,34 @@ import {
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				PreConfig: func() {
 					if got := aws.held()[networkACLEntryKey("50", "false")]; got.action != "deny" || got.cidr != "203.0.113.7/32" {
-						t.Fatalf("the refused retries left the address unblocked: AWS holds %+v at rule number 50", got)
+						t.Fatalf("the refused retries changed the old deny: AWS holds %+v at rule number 50", got)
 					}
-					aws.changeInAWS(48, false, "", "")
+					aws.changeInAWS(50, false, "", "")
+					if held := aws.held(); !maps.Equal(held, movedInFront) {
+						t.Fatalf("after the hand delete AWS holds %+v, want the deny at 48 in front of the allow at 49", held)
+					}
 				},
-				ConfigDirectory: networkACLModuleConfig(t, aws, 48),
+				ConfigDirectory: networkACLModuleConfig(t, aws, 48, importTheNewNumber),
+				ExpectError:     regexp.MustCompile(`NetworkAclEntryAlreadyExists`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig: func() {
+					if held := aws.held(); !maps.Equal(held, movedInFront) {
+						t.Fatalf("the import refused with the key in state changed AWS: it holds %+v", held)
+					}
+					writesBeforeTheKeyLeavesState = len(aws.writesSoFar())
+				},
+				ConfigDirectory:   networkACLModuleConfig(t, aws, 0),
+				ConfigStateChecks: []statecheck.StateCheck{holds{aws, movedInFront}, wroteNothingSince{aws, &writesBeforeTheKeyLeavesState}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 48, importTheNewNumber),
 				ConfigPlanChecks: tfresource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction(`aws_network_acl_rule.this["`+inboundDenyKey+`"]`, plancheck.ResourceActionCreateBeforeDestroy),
+					plancheck.ExpectResourceAction(`aws_network_acl_rule.this["`+inboundDenyKey+`"]`, plancheck.ResourceActionNoop),
 				}},
-				ConfigStateChecks: []statecheck.StateCheck{holdsTheInboundDeny{aws, 48}, wroteLast{aws, []string{"create 48/false", "delete 50/false"}}},
+				ConfigStateChecks: []statecheck.StateCheck{holds{aws, movedInFront}, wroteNothingSince{aws, &writesBeforeTheKeyLeavesState}},
 			},
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -336,6 +410,30 @@ import {
 			},
 		},
 	})
+}
+
+// holds checks AWS holds exactly these entries after an apply.
+type holds struct {
+	aws  *networkACLEndpoint
+	want map[string]networkACLEntry
+}
+
+func (c holds) CheckState(_ context.Context, _ statecheck.CheckStateRequest, resp *statecheck.CheckStateResponse) {
+	if held := c.aws.held(); !maps.Equal(held, c.want) {
+		resp.Error = fmt.Errorf("AWS holds %+v, want %+v", held, c.want)
+	}
+}
+
+// wroteNothingSince checks AWS accepted no write after the count of writes it had accepted then.
+type wroteNothingSince struct {
+	aws    *networkACLEndpoint
+	writes *int
+}
+
+func (c wroteNothingSince) CheckState(_ context.Context, _ statecheck.CheckStateRequest, resp *statecheck.CheckStateResponse) {
+	if writes := c.aws.writesSoFar(); len(writes) != *c.writes {
+		resp.Error = fmt.Errorf("AWS accepted the writes %v, want none", writes[*c.writes:])
+	}
 }
 
 // holdsTheInboundDeny checks what AWS holds after an apply: the deny of 203.0.113.7/32 inbound at ruleNumber alone.
@@ -366,7 +464,8 @@ func (c wroteLast) CheckState(_ context.Context, _ statecheck.CheckStateRequest,
 
 // Xshield counts a network ACL's room from the cloud connector's last observation, and the module cannot read entries
 // at plan. So an entry of the customer's added since then can leave no room for the deny's new number: AWS refuses
-// it, and the deny at its old number stays, with nothing deleted.
+// it, and the deny stays at its old number, with nothing deleted, behind the allow that made it move, so the address
+// passes until there is room.
 func TestAccTheAWSModuleKeepsTheDenyWhenAWSRefusesItsMoveOverTheQuota(t *testing.T) {
 	clearXshieldEnv(t)
 	aws := newNetworkACLEndpoint(t)
@@ -396,7 +495,7 @@ func TestAccTheAWSModuleKeepsTheDenyWhenAWSRefusesItsMoveOverTheQuota(t *testing
 						t.Fatalf("the refused move changed the customer's entries: AWS holds %+v", held)
 					}
 					if deny := held[networkACLEntryKey("50", "false")]; deny.action != "deny" || deny.cidr != "203.0.113.7/32" {
-						t.Fatalf("the refused move unblocked the address: AWS holds %+v at rule number 50", deny)
+						t.Fatalf("the refused move took the deny from its old number: AWS holds %+v at rule number 50", deny)
 					}
 					if writes := aws.writesSoFar(); slices.Contains(writes, "delete 50/false") {
 						t.Fatalf("the refused move deleted the deny: writes %v", writes)

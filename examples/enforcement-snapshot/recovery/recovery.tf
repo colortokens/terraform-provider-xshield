@@ -11,9 +11,9 @@
 # exclusive rules resource, and the apply removes it.
 # If an instance in the last receipt has since been terminated, the receipt is also sent again, without
 # that instance's attachment. If a network ACL in the last receipt has since been deleted, its entries are
-# left out and a check names them; Xshield refuses a receipt without them, so the apply ends with that
-# refusal once the state is rebuilt. Delete this file and the pin, and run the workspace again once the
-# cloud connector has observed the network ACL gone.
+# left out, a check names them, and the receipt is sent again without them. Xshield accepts it once the
+# cloud connector has observed the network ACL gone; until then the apply ends with that refusal once the
+# state is rebuilt, so run it again after the cloud connector's next observation.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
@@ -54,9 +54,19 @@ import {
   id       = each.value
 }
 
+# Keys of network ACL entries not to import. When AWS now holds another entry at an entry's receipted number,
+# the plan stops and names the entry's key: add it here. The apply then rebuilds the rest of the state and fails
+# on that entry with NetworkAclEntryAlreadyExists, as the pinned version keeps its number. Delete this file and
+# the pin, and run the workspace again once the cloud connector has observed the network ACL: Xshield gives the
+# deny another number, and the run writes it there.
+variable "skipped_network_acl_entries" {
+  type    = set(string)
+  default = []
+}
+
 # An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
 import {
-  for_each = { for k in setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
+  for_each = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
   to       = module.xshield_enforcement.aws_network_acl_rule.this[each.key]
   id       = each.value
 }
