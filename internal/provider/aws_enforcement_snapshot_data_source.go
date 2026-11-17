@@ -197,7 +197,9 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 				"allow is put in front of it or AWS shows another entry at its number. A new number replaces the entry: the "+
 				"deny is written at it first, and the apply then deletes whatever AWS holds at the old number, which is the "+
 				"other entry when AWS shows one there. Before applying a plan that moves or removes an entry, check the entry "+
-				"at its old number, and run `terraform state rm` on the key of any that is not the deny. An address "+
+				"at its old number, and run `terraform state rm` on the key of any that is not the deny. When the old number is a "+
+				"deposed object of the key, left by an apply that stopped part-way, `terraform state rm` also drops the deny at the "+
+				"new number: import it back to the key, or delete it by hand when the version no longer holds the key. An address "+
 				"left out for want of room or of a free number is named in a `networkAclEntryRefused` notice instead. "+
 				"`network_acl_id`: network ACL the entry goes in. "+
 				"`egress`: `true` for an outbound entry, `false` for an inbound one. "+

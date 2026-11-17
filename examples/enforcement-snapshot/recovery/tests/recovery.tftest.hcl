@@ -21,6 +21,9 @@ mock_provider "aws" {
   mock_data "aws_network_acls" {
     defaults = { ids = ["acl-0a1b"] }
   }
+  mock_data "aws_ssm_parameters_by_path" {
+    defaults = { names = [], values = [] }
+  }
 }
 
 mock_provider "xshield" {
@@ -100,12 +103,12 @@ variables {
 }
 
 # A receipt that names an entry the pinned version does not hold imports only those it does, or the plan stops.
-run "each_receipted_network_acl_entry_of_the_version_is_imported" {
+run "each_receipted_network_acl_entry_of_the_version_is_declared" {
   command = plan
 
   assert {
-    condition     = module.xshield_enforcement.summary.network_acl_entries == 1
-    error_message = "the version's network ACL entry is declared, so its import has a configuration"
+    condition     = module.xshield_enforcement.summary.network_acl_entries == 1 && keys(local.recovered_network_acl_entries) == ["acl-0a1b/in/203.0.113.7/32"]
+    error_message = "the version's network ACL entry is not declared and imported alone, so an import has no configuration"
   }
 }
 
@@ -113,8 +116,98 @@ run "every_receipted_interface_still_exists" {
   command = plan
 
   assert {
-    condition     = module.xshield_enforcement.attachment_keys == ["i-1/eni-1", "i-2/eni-2"]
-    error_message = "both receipted attachments are declared and imported"
+    condition     = module.xshield_enforcement.attachment_keys == ["i-1/eni-1", "i-2/eni-2"] && keys(local.recovered_attachments) == ["i-1/eni-1", "i-2/eni-2"]
+    error_message = "a receipted attachment is not declared and imported"
+  }
+}
+
+# A group's ID is known at plan only when it is imported: one the apply creates has its ID only then.
+run "each_receipted_group_is_imported" {
+  command = plan
+
+  assert {
+    condition     = module.xshield_enforcement.security_group_ids == { "a-1" = "sg-00000000000000001", "a-2" = "sg-00000000000000002" }
+    error_message = "a receipted group is not imported"
+  }
+}
+
+# A directory parameter deleted outside Terraform since the last receipt has nothing to import: the plan leaves it out
+# and creates it again. It has no override here, and a mock provider refuses any import without one, so the run fails
+# if it is imported.
+run "a_directory_parameter_deleted_since_the_last_receipt_is_not_imported_and_stays_declared" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_snapshot.recover
+    values = {
+      cloud_account_id = "123456789012"
+      region           = "us-east-1"
+      published        = true
+      version          = "v1"
+      security_groups = {
+        "i-1" = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+        "i-2" = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+      }
+      ingress_rules = {}
+      egress_rules  = {}
+      interface_attachments = {
+        "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 }
+        "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 }
+      }
+      directory_entries = {
+        "rds/orders-db"    = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["i-1"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
+        "lambda/orders-fn" = { parameter_name = "/colortokens/v1/lambda/orders-fn/security-groups", handle = "lambda/orders-fn", security_groups = ["i-2"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
+      }
+      assets = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      network_acl_entries = {
+        "acl-0a1b/in/203.0.113.7/32" = { network_acl_id = "acl-0a1b", egress = false, rule_number = 50, cidr_ipv4 = "203.0.113.7/32", cidr_ipv6 = null }
+      }
+      withdrawing_security_groups = []
+    }
+  }
+
+  override_data {
+    target = module.xshield_enforcement.data.xshield_aws_enforcement_snapshot.this
+    values = {
+      cloud_account_id = "123456789012"
+      region           = "us-east-1"
+      published        = true
+      version          = "v1"
+      security_groups = {
+        "i-1" = { name = "ct-policy-0000000000a1", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+        "i-2" = { name = "ct-policy-0000000000a2", description = "ColorTokens add-only enforcement group", vpc_id = "vpc-1", tags = { ManagedBy = "ColorTokens", "ct:delivery" = "pipeline" } }
+      }
+      ingress_rules = {}
+      egress_rules  = {}
+      interface_attachments = {
+        "i-1/eni-1" = { security_group = "i-1", network_interface_id = "eni-1", slot_limit = 5 }
+        "i-2/eni-2" = { security_group = "i-2", network_interface_id = "eni-2", slot_limit = 5 }
+      }
+      directory_entries = {
+        "rds/orders-db"    = { parameter_name = "/colortokens/v1/rds/orders-db/security-groups", handle = "rds/orders-db", security_groups = ["i-1"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
+        "lambda/orders-fn" = { parameter_name = "/colortokens/v1/lambda/orders-fn/security-groups", handle = "lambda/orders-fn", security_groups = ["i-2"], tags = { ManagedBy = "ColorTokens" }, slot_limit = 5 }
+      }
+      assets = { "a-1" = { security_group = "i-1", attached_by = "pipeline" }, "a-2" = { security_group = "i-2", attached_by = "pipeline" } }
+      network_acl_entries = {
+        "acl-0a1b/in/203.0.113.7/32" = { network_acl_id = "acl-0a1b", egress = false, rule_number = 50, cidr_ipv4 = "203.0.113.7/32", cidr_ipv6 = null }
+      }
+      withdrawing_security_groups = []
+    }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.recover
+    values = { names = ["/colortokens/v1/rds/orders-db/security-groups"], values = ["{}"] }
+  }
+
+  override_resource {
+    target = module.xshield_enforcement.aws_ssm_parameter.directory["rds/orders-db"]
+    values = { id = "/colortokens/v1/rds/orders-db/security-groups" }
+  }
+
+  assert {
+    condition     = keys(module.xshield_enforcement.directory_entries) == ["lambda/orders-fn", "rds/orders-db"]
+    error_message = "the deleted directory parameter is no longer declared, so the apply would not create it again"
   }
 }
 

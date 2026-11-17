@@ -268,11 +268,11 @@ data "aws_network_acls" "present" {
 }
 
 locals {
-  present_network_acls = toset(try(data.aws_network_acls.present[0].ids, []))
+  present_network_acls = { for id in toset(try(data.aws_network_acls.present[0].ids, [])) : id => true }
   # Xshield never republishes a pinned version, so its entries on a network ACL deleted since are left out rather than
   # stop every plan while the pin is in place.
   network_acl_entries = var.snapshot_version == null ? local.snap.network_acl_entries : {
-    for key, entry in local.snap.network_acl_entries : key => entry if contains(local.present_network_acls, entry.network_acl_id)
+    for key, entry in local.snap.network_acl_entries : key => entry if lookup(local.present_network_acls, entry.network_acl_id, false)
   }
 }
 
@@ -299,7 +299,7 @@ resource "aws_network_acl_rule" "this" {
     ignore_changes        = [rule_action, protocol, cidr_block, ipv6_cidr_block, from_port, to_port, icmp_type, icmp_code]
 
     precondition {
-      condition     = contains(local.present_network_acls, each.value.network_acl_id)
+      condition     = lookup(local.present_network_acls, each.value.network_acl_id, false)
       error_message = "Network ACL ${each.value.network_acl_id} no longer exists in ${local.account_id}/${local.region}, so AWS would refuse its entry ${each.key}, and nothing was applied. Xshield stops planning entries for it once the cloud connector observes it gone; plan again after that."
     }
 

@@ -16,7 +16,8 @@
 # state is rebuilt, so run it again after the cloud connector's next observation.
 # An object of the last receipt deleted outside Terraform since has nothing to import: the plan stops with "Cannot
 # import non-existent remote object" and names its address. Add the key in its brackets to skipped_imports, under its
-# kind, and the apply creates it again.
+# kind, and the apply creates it again. A directory parameter needs no key there: the plan leaves out one deleted since,
+# and the apply writes it again.
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
@@ -56,6 +57,7 @@ locals {
   recovered_attachments = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys), var.skipped_imports.attachments) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
   # An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
   recovered_network_acl_entries = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_imports.network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
+  present_directory_parameters  = { for name in toset(data.aws_ssm_parameters_by_path.recover.names) : name => true }
 }
 
 import {
@@ -88,8 +90,15 @@ import {
   id       = each.value
 }
 
+data "aws_ssm_parameters_by_path" "recover" {
+  path      = "/colortokens/v1"
+  recursive = true
+}
+
+# A directory parameter deleted since the last receipt has nothing to import: the plan leaves it out, and the apply
+# writes it again.
 import {
-  for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name }
+  for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name if lookup(local.present_directory_parameters, entry.parameter_name, false) }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

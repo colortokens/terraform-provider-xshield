@@ -1,5 +1,7 @@
 # terraform test, offline: both providers are mocked, and set up as recovery.tftest.hcl says. A key in skipped_imports
 # has no override here, and a mock provider refuses any import without one, so a run fails if a skipped key is imported.
+# A plan here shows whether a key nobody skipped is imported only for a group, by its ID: the runs check that each such
+# key stays among the imports.
 
 mock_provider "aws" {
   # What the apply creates has its ID at plan, as AWS gives it at apply. These defaults name no address, so they let no
@@ -156,7 +158,13 @@ run "a_skipped_key_of_each_kind_is_not_imported_and_stays_declared" {
 
   assert {
     condition     = keys(local.recovered_security_groups) == ["i-1"] && keys(local.recovered_rules) == ["i-1/in/tcp/443/0.0.0.0/0", "i-1/out/tcp/443/0.0.0.0/0"] && keys(local.recovered_attachments) == ["i-1/eni-1"] && keys(local.recovered_network_acl_entries) == ["acl-0a1b/out/203.0.113.7/32"]
-    error_message = "a skipped key is imported, or a key nobody skipped is not"
+    error_message = "a skipped key is left in the imports, or a key nobody skipped is left out"
+  }
+
+  # A group the apply creates has the mock's default ID at plan; one imported has the receipted one.
+  assert {
+    condition     = module.xshield_enforcement.security_group_ids["a-1"] == "sg-00000000000000001"
+    error_message = "the group nobody skipped is not imported"
   }
 
   assert {
