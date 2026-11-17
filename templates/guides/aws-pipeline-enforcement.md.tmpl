@@ -212,11 +212,19 @@ resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
 
 A triggered run waits for someone to confirm its apply, unless the owner's workspace sets `auto_apply_run_trigger = true`.
 
-**Your own CI.** Make each owner's job depend on the enforcement job, so it starts only once that job's apply has succeeded: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/chain) is a GitHub Actions example.
+**Your own CI.** Make each owner's job depend on the enforcement job, so it starts only once that job's apply has succeeded: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/chain) is a GitHub Actions example, which runs the `database/`, `function/` and `apprunner/` examples after the enforcement workspace and `full-control/` after them.
 
 A revert under Full control goes the other way: step 7's table says to apply the owner's workspace first. The chain is still safe when the enforcement workspace runs first: every workload keeps its access until the owner's workspace has put the rule back, and the next enforcement run then takes out what the revert removes.
 
-**Done when** `xshield_enforcement_status` shows no `awaitingAttach` or `changeSetHeld` notice and the monitor in step 9 warns of nothing. A workload reads Synchronized at the cloud connector's first observation after its owner's apply. Xshield asks the connector to observe the account every 10 minutes.
+**When policy stops using a group**, after a rollback, an undeploy or a workload leaving policy, the same order removes it:
+
+1. The enforcement workspace's apply empties the workload's directory entry. It keeps the group and its rules, so the workload loses no access while it still carries the group.
+2. The owner's workspace takes the group out of the resource's own list at its next run.
+3. Once the cloud connector shows nothing holding the group, Xshield publishes a version without it, and the enforcement workspace's next apply deletes the group and its directory entry. In a chain that runs on a schedule, that is the next run's enforcement job. Nobody deletes the group by hand.
+
+AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as above, and the group that kept them for the workload then leaves in the same way.
+
+**Done when** `xshield_enforcement_status` shows no `awaitingAttach`, `changeSetHeld` or `withdrawing` notice and the monitor in step 9 warns of nothing. A workload reads Synchronized at the cloud connector's first observation after its owner's apply. Xshield asks the connector to observe the account every 10 minutes.
 
 ## Step 9: Watch it
 

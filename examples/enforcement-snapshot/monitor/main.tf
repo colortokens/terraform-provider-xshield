@@ -29,8 +29,10 @@
 #                          customer security group was reverted, so the group allows more than the policy
 #   unpublished            Xshield has published nothing here: wrong tenant, or the account is not onboarded
 #                          (not warned by default)
-#   group_withdrawing      policy no longer uses a group, which Xshield keeps until the workspace that owns a
-#                          workload carrying it detaches it (not warned by default)
+#   group_withdrawing      policy no longer uses a group, and something still holds it: a workload whose own workspace has
+#                          not detached it yet, or, for a function, a published version or a network interface AWS has
+#                          not released. Xshield keeps it, with its rules, and the enforcement workspace deletes it at
+#                          its first apply after discovery shows nothing holding it
 #   asg_policy_differs     the instances of an Auto Scaling group have different policies, so each gets a group
 #                          of its own (not warned by default)
 #   workload_contained     Xshield contained a workload, so its group is off its interfaces until the containment
@@ -79,7 +81,7 @@ variable "warn_on" {
   default = [
     "drift_high", "drift_medium", "drift_unrestored", "workload_not_enforced", "awaiting_attach", "prefix_list_size_unknown", "apply_overdue",
     "never_applied", "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed",
-    "carriers_not_acknowledged", "block_rule_not_enforced", "network_acl_block_not_enforced",
+    "carriers_not_acknowledged", "block_rule_not_enforced", "network_acl_block_not_enforced", "group_withdrawing",
   ]
 
   validation {
@@ -304,7 +306,7 @@ locals {
     drift_not_evaluated            = "Xshield has not evaluated drift in ${local.where} for more than ${var.max_unobserved_age}:"
     port_not_narrowed              = "Ports are deployed in Xshield in ${local.where} whose customer security group is no longer narrowed for them:"
     unpublished                    = "Xshield has published nothing for ${local.where}:"
-    group_withdrawing              = "Xshield is withdrawing security groups in ${local.where} that a workload may still carry:"
+    group_withdrawing              = "Security groups policy no longer uses in ${local.where} are still held, so the enforcement workspace cannot delete them yet:"
     asg_policy_differs             = "Instances of an Auto Scaling group in ${local.where} have different policies, so each has a group of its own:"
     workload_contained             = "Xshield has contained workloads in ${local.where}, so their groups are off their interfaces:"
     asset_policy_in_test           = "Workloads in ${local.where} have an asset policy in test, which writes no rule on AWS:"

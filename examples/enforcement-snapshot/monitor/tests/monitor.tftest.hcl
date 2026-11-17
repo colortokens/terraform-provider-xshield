@@ -20,9 +20,7 @@ mock_provider "xshield" {
       drift_evaluated               = true
       drift_observed_at             = "2999-01-01T00:00:00Z"
       drift_findings                = []
-      notices = [
-        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
-      ]
+      notices                       = []
     }
   }
 }
@@ -642,7 +640,7 @@ run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
   }
 }
 
-run "withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_are_silent_by_default" {
+run "split_auto_scaling_groups_and_contained_workloads_are_silent_by_default" {
   command = plan
 
   override_data {
@@ -652,10 +650,60 @@ run "withdrawn_groups_split_auto_scaling_groups_and_contained_workloads_are_sile
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
-        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
         { code = "asgPolicyDiffers", reason = null, asset_id = null, asset_name = null, group = "asg/web", since = null, message = "the instances of this Auto Scaling group do not have the same policy" },
         { code = "assetContained", reason = "CONTAINED", asset_id = "asset-01", asset_name = "app-01", group = null, since = null, message = "the asset is contained" },
         { code = "assetPolicyInTest", reason = "inbound", asset_id = "asset-02", asset_name = "app-02", group = null, since = null, message = "the asset's inbound policy is in test, which adds no rule on AWS" },
+      ]
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "warns_by_default_on_groups_still_held_after_policy_stopped_using_them" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v3", applied_version = "v3", applied_at = "2999-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "lambda/resize", since = null, message = "policy no longer uses this security group, but AWS cannot delete it while it is held by network interface eni-0fn (AWS Lambda VPC ENI-resize): AWS keeps a function's interface while a version of the function lists the group, so delete version 7 of resize once no alias uses it; then AWS releases the interface on its own, some time later; it is kept, with its rules, until discovery shows nothing holds it" },
+      ]
+    }
+  }
+
+  expect_failures = [check.xshield_group_withdrawing]
+
+  assert {
+    condition = output.problems.group_withdrawing == [
+      "Security groups policy no longer uses in 123456789012/us-east-1 are still held, so the enforcement workspace cannot delete them yet:",
+      "  lambda/resize: policy no longer uses this security group, but AWS cannot delete it while it is held by network interface eni-0fn (AWS Lambda VPC ENI-resize): AWS keeps a function's interface while a version of the function lists the group, so delete version 7 of resize once no alias uses it; then AWS releases the interface on its own, some time later; it is kept, with its rules, until discovery shows nothing holds it",
+    ]
+    error_message = "Reported ${jsonencode(output.problems)}."
+  }
+}
+
+run "a_group_still_held_is_silent_when_left_out_of_warn_on" {
+  command = plan
+
+  variables {
+    warn_on = ["drift_high"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "converged", expected_version = "v3", applied_version = "v3", applied_at = "2999-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
+      notices = [
+        { code = "withdrawing", reason = null, asset_id = null, asset_name = null, group = "rds/old-db", since = null, message = "kept until discovery shows it detached" },
       ]
     }
   }
@@ -871,7 +919,7 @@ run "warns_by_default_on_malicious_addresses_a_network_acl_does_not_block" {
     }
   }
 
-  expect_failures = [check.xshield_network_acl_block_not_enforced]
+  expect_failures = [check.xshield_network_acl_block_not_enforced, check.xshield_group_withdrawing]
 
   assert {
     condition = output.problems.network_acl_block_not_enforced == [

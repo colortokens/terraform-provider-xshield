@@ -23,7 +23,7 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 | `enforcement/` | An enforcement workspace, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
-| `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order. |
+| `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order, on a schedule. The same order adds a group and, once policy stops using it, removes it. |
 | `policies/` | One example policy, `xshield-checks`, for the workspace that runs the monitor. It reports every failed Xshield check of a plan, for Sentinel and for OPA. |
 
 **Files for one apply.** Each goes into the enforcement workspace when the event it names happens, and is deleted afterwards.
@@ -39,6 +39,7 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 | Directory | What it is |
 |--|--|
 | `database/` | A workspace that owns an RDS instance and attaches the group Xshield gave it beside its own. It declares none of Xshield's rules. |
+| `function/` | A workspace that owns a Lambda function in a VPC and attaches the group Xshield gave it beside its own, and gives it up again when policy stops using it. |
 | `apprunner/` | A workspace that owns an App Runner service, with a VPC connector of its own that carries the group Xshield gave it beside its own. |
 | `full-control/` | A workspace that owns a security group Xshield narrows under Full control, and declares the group's rules through `modules/aws-security-group-rules`. |
 
@@ -256,7 +257,7 @@ output "xshield_security_group_ids" {
 - `own_security_group_ids` makes the plan fail, rather than the apply, when the database's own groups and Xshield's are more than AWS allows on it.
 - The output shows Xshield's group in this workspace's plan, under `Changes to Outputs`, when it arrives and when it leaves.
 
-`database/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the one changed line marked.
+`database/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the one changed line marked. `function/` is the same for a Lambda function.
 
 | Resource | Handle |
 |--|--|
@@ -562,7 +563,7 @@ Xshield also raises a `Cloud Policy Drifted` alert in the portal for each drift 
 | `block_rule_not_enforced` | A workload has a block template in Xshield, which AWS does not enforce: a security group can only allow, so the traffic the template blocks passes wherever an allow rule covers it. Remove those ports from the templates and security groups that allow them for the workload. A line for the malicious IP block template says that no network ACL entry of Xshield's blocks its addresses for the workload: the cloud connector has shown no network ACL in front of it, so check that the connector observes the account and the workload's subnet, or the account does not block on network ACLs, so follow [Turning on the malicious IP block](#turning-on-the-malicious-ip-block). One line for each template and set of ports, which lists the workloads. A workload whose malicious IP block template Xshield blocks on its network ACL is not listed for that template: `network_acl_block_not_enforced` reports any of its addresses that are not blocked there. |
 | `network_acl_block_not_enforced` | Addresses of the malicious IP block template are not blocked on a network ACL in front of a workload: the network ACL has no room left (`ACL_FULL`), no rule number is free in front of the allows that cover them, nor among the even numbers from 50 to 98 (`NO_FREE_SLOT`), the addresses wait for the places of entries the same version removes (`AWAITING_REMOVAL`), the cloud connector has not read the network ACL (`NOT_READ`, `NOT_FOUND`), or an allow numbered below Xshield's deny, with no rule number free in front of it, lets their traffic through. One line for each network ACL and cause. |
 | `unpublished` | Xshield has published nothing here: the wrong tenant, or an account that is not onboarded. Not warned by default. |
-| `group_withdrawing` | Policy no longer uses a group, and Xshield keeps it, with its rules, until it sees the group detached. One line for each group, with what it waits for. Not warned by default. |
+| `group_withdrawing` | Policy no longer uses a group, but something still holds it: a workload whose own workspace has not detached it yet, or, for a Lambda function, a published version or a network interface AWS has not released. Xshield keeps the group, with its rules, and the enforcement workspace deletes it at its first apply after nothing holds it: see step 6. One line for each group, which says what holds it and what to do. |
 | `asg_policy_differs` | The instances of an Auto Scaling group have different policies, so each has a group of its own. One line for each Auto Scaling group. Not warned by default. |
 | `workload_contained` | Xshield contained a workload, so its group stays off its interfaces until the containment is reverted. One line lists the workloads. Not warned by default. |
 | `asset_policy_in_test` | A workload's asset policy is in test. On AWS that writes no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's own groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. One line for each direction, which lists the workloads. Not warned by default. |
@@ -615,6 +616,16 @@ resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
 ```
 
 In your own CI, make each owner's job depend on the enforcement job: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/xshield-enforcement.yml`](chain/xshield-enforcement.yml) runs all three steps as GitHub Actions jobs on one schedule.
+
+#### When policy stops using a group
+
+After a rollback, an undeploy or a workload leaving policy, the same order removes the group:
+
+1. The enforcement workspace's apply empties the workload's directory entry. It keeps the group and its rules, so the workload loses no access while it still carries the group.
+2. The owner's workspace takes the group out of the resource's own list at its next run.
+3. Once the cloud connector shows nothing holding the group, Xshield publishes a version without it, and the enforcement workspace's next apply deletes the group and its directory entry. In a chain that runs on a schedule, that is the next run's enforcement job. Nobody deletes the group by hand.
+
+AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as below, and the group that kept them for the workload then leaves in the same way.
 
 A revert under Full control goes the other way: [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace) asks for the owner's workspace first. The chain is still safe when the enforcement workspace runs first: every workload keeps its access until the owner's workspace has put the rule back, and the next enforcement run then takes out what the revert removes.
 
