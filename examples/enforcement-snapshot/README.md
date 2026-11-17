@@ -642,7 +642,7 @@ To stop enforcing, withdraw the policy in Xshield by undeploying it, for the wor
 - A network ACL entry is deleted by the enforcement run once the version no longer blocks its address there, such as when the malicious IP block template is unassigned from the workloads behind the network ACL.
 - When no group is left the run still sends its receipt, so Xshield knows the removal was applied.
 
-When the account moves to connector delivery, nothing is destroyed either. Follow `leave/`: its `removed` block makes Terraform stop managing the groups, rules, attachments, network ACL entries and directory parameters, and leaves them in the account for the cloud connector. Remove the outputs that read the module in the same change, or the configuration no longer validates.
+When the account moves to connector delivery, nothing is destroyed either. Follow `leave/`: its `removed` block makes Terraform stop managing the groups, rules, attachments, network ACL entries and directory parameters, and leaves them in the account. The cloud connector keeps the groups, but does not take the network ACL entries over: it deletes only entries it wrote itself, so each entry keeps denying its address until you delete it, and the monitor no longer reports on them once the account is handed over. Save the entries before you apply, and delete each one once its address is no longer to be blocked, as `leave/leave.tf` says. Remove the outputs that read the module in the same change, or the configuration no longer validates.
 
 If `terraform destroy` was run by mistake, run the enforcement workspace again. It creates what the current version lists and sends a new receipt.
 
