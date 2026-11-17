@@ -30,6 +30,8 @@ type networkACLEndpoint struct {
 	entries map[string]networkACLEntry
 	writes  []string
 	quota   int
+	// isDefault makes acl-0a1b the VPC's default network ACL.
+	isDefault bool
 }
 
 type networkACLEntry struct {
@@ -100,9 +102,10 @@ func (e *networkACLEndpoint) answer(action string, form url.Values) (string, str
 			items += fmt.Sprintf(`<item><ruleNumber>%d</ruleNumber><protocol>-1</protocol><ruleAction>%s</ruleAction>`+
 				`<egress>%t</egress><cidrBlock>%s</cidrBlock></item>`, entry.ruleNumber, entry.action, entry.egress, entry.cidr)
 		}
-		return `<networkAclSet><item><networkAclId>acl-0a1b</networkAclId><vpcId>vpc-1</vpcId><default>false</default>` +
+		return `<networkAclSet><item><networkAclId>acl-0a1b</networkAclId><vpcId>vpc-1</vpcId><default>` + strconv.FormatBool(e.isDefault) + `</default>` +
 			`<entrySet>` + items + `</entrySet><associationSet/><tagSet/><ownerId>123456789012</ownerId></item></networkAclSet>`, ""
 	}
+	e.writes = append(e.writes, "refused "+action)
 	return "", "UnauthorizedOperation"
 }
 
@@ -403,4 +406,70 @@ func TestAccTheAWSModuleKeepsTheDenyWhenAWSRefusesItsMoveOverTheQuota(t *testing
 			},
 		},
 	})
+}
+
+// A workspace that declares a network ACL authoritatively, as aws_default_network_acl does, deletes every entry of it
+// that it does not declare, Xshield's deny among them, whenever it applies, unless it ignores changes to its entries.
+func TestAccAnAuthoritativeNetworkACLDeletesTheDenyUnlessItIgnoresItsEntries(t *testing.T) {
+	clearXshieldEnv(t)
+	aws := newNetworkACLEndpoint(t)
+	aws.isDefault = true
+	defaultNetworkACL := func(ignored string) string {
+		return `
+resource "aws_default_network_acl" "vpc" {
+  default_network_acl_id = "acl-0a1b"
+
+  ingress {
+    protocol   = "-1"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 0
+    to_port    = 0
+  }
+
+  lifecycle {
+    ignore_changes = [` + ignored + `]
+  }
+}
+`
+	}
+
+	tfresource.Test(t, tfresource.TestCase{
+		Steps: []tfresource.TestStep{
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ConfigStateChecks:        []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50, defaultNetworkACL("subnet_ids")),
+				ExpectNonEmptyPlan:       true,
+				ConfigStateChecks:        []statecheck.StateCheck{inboundDenyAt{aws, 50, false}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50, defaultNetworkACL("subnet_ids, ingress, egress")),
+				ConfigStateChecks:        []statecheck.StateCheck{inboundDenyAt{aws, 50, true}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 0),
+			},
+		},
+	})
+}
+
+type inboundDenyAt struct {
+	aws        *networkACLEndpoint
+	ruleNumber int
+	held       bool
+}
+
+func (c inboundDenyAt) CheckState(_ context.Context, _ statecheck.CheckStateRequest, resp *statecheck.CheckStateResponse) {
+	got := c.aws.held()[networkACLEntryKey(strconv.Itoa(c.ruleNumber), "false")]
+	if held := got.action == "deny" && got.cidr == "203.0.113.7/32"; held != c.held {
+		resp.Error = fmt.Errorf("AWS holds %+v at rule number %d inbound, want the deny held %t; writes %v", got, c.ruleNumber, c.held, c.aws.writesSoFar())
+	}
 }
