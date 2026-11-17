@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -220,6 +221,40 @@ func TestAccTheAWSModuleWritesADeletedNetworkACLEntryAgainAndMovesOneCreatingFir
 			{
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				ConfigDirectory:          networkACLModuleConfig(t, aws, 0),
+			},
+		},
+	})
+}
+
+// AWS holds one entry per rule number and direction, and Terraform deletes an entry by its number alone. So an
+// entry written at Xshield's number outside Terraform, such as an allow of the customer's after Xshield's deny was
+// deleted, must stop the plan rather than be taken into state, where a later move or removal would delete it.
+func TestAccTheAWSModuleStopsBeforeHoldingAnotherEntryAtItsRuleNumber(t *testing.T) {
+	clearXshieldEnv(t)
+	aws := newNetworkACLEndpoint(t)
+
+	tfresource.Test(t, tfresource.TestCase{
+		Steps: []tfresource.TestStep{
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ConfigStateChecks:        []statecheck.StateCheck{holdsTheInboundDeny{aws, 50}},
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig:                func() { aws.changeInAWS(50, false, "allow", "10.0.0.0/8") },
+				ConfigDirectory:          networkACLModuleConfig(t, aws, 50),
+				ExpectError:              regexp.MustCompile(`AWS now holds another entry at rule number 50 inbound`),
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				PreConfig: func() {
+					if got := aws.held()[networkACLEntryKey("50", "false")]; got.action != "allow" || got.cidr != "10.0.0.0/8" {
+						t.Fatalf("the stopped plan changed the customer's entry at rule number 50: AWS holds %+v", got)
+					}
+					aws.changeInAWS(50, false, "deny", "203.0.113.7/32")
+				},
+				ConfigDirectory: networkACLModuleConfig(t, aws, 0),
 			},
 		},
 	})

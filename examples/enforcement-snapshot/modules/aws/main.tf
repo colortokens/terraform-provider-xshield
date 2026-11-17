@@ -253,10 +253,9 @@ resource "aws_ssm_parameter" "directory" {
 # Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
 # denying all traffic from it inbound or to it outbound. Xshield numbers an entry in front of every allow that covers
 # its address, and places one only where the network ACL has room, so AWS never refuses one as over its rules per
-# network ACL. An entry moves when an allow is put in front of it or AWS shows another entry at its number: the deny is
-# written at its new number before the old entry is deleted, so the address stays blocked throughout. AWS holds one
-# entry per number and direction, so an entry changed in AWS is not written again at the same number, which AWS would
-# refuse: Xshield gives it a new number once the cloud connector observes the change.
+# network ACL. An entry moves when an allow is put in front of it: the deny is written at its new number before the old
+# entry is deleted, so the address stays blocked throughout. An entry changed in AWS, or another entry written at its
+# number, stops the plan: it is not Xshield's, and Terraform deletes an entry by its number alone.
 #
 # The network ACLs are read at plan, so a role without ec2:DescribeNetworkAcls, such as one created before network ACL
 # entries, stops the run before anything is written, and so does a network ACL deleted since Xshield planned its entries.
@@ -286,6 +285,13 @@ resource "aws_network_acl_rule" "this" {
     precondition {
       condition     = contains(local.present_network_acls, each.value.network_acl_id)
       error_message = "Network ACL ${each.value.network_acl_id} no longer exists in ${local.account_id}/${local.region}, so AWS would refuse its entry ${each.key}, and nothing was applied. Xshield stops planning entries for it once the cloud connector observes it gone; plan again after that."
+    }
+
+    # Terraform reads and deletes an entry by its rule number alone, so an entry written at Xshield's number outside
+    # Terraform would otherwise be taken into state, and a later move or removal of the deny would delete it.
+    postcondition {
+      condition     = self.rule_action == "deny" && self.protocol == "-1" && coalesce(self.cidr_block, "-") == coalesce(each.value.cidr_ipv4, "-") && coalesce(self.ipv6_cidr_block, "-") == coalesce(each.value.cidr_ipv6, "-")
+      error_message = "AWS now holds another entry at rule number ${each.value.rule_number} ${each.value.egress ? "outbound" : "inbound"} of network ACL ${each.value.network_acl_id}, where Xshield's deny of ${coalesce(each.value.cidr_ipv4, each.value.cidr_ipv6)} was: it ${self.rule_action}s protocol ${self.protocol} for ${coalesce(self.cidr_block, self.ipv6_cidr_block, "-")}. It is not Xshield's, so the plan stopped before anything was applied: Terraform deletes an entry by its rule number, and would delete this one when the deny moves or is removed. Run terraform state rm on aws_network_acl_rule.this[\"${each.key}\"] of this module so that Terraform stops holding it, then plan again. Once the cloud connector observes the network ACL, Xshield gives the deny another number."
     }
   }
 }
