@@ -8,7 +8,7 @@
 # addresses on network ACLs itself may change or delete an entry at a rule number it uses. Before you apply,
 # list them from the state, which also holds any an apply created whose receipt Xshield refused, and the old
 # number of a deny that apply was moving, kept as a deposed object that terraform state show leaves out:
-#   terraform show -json | jq -r '.values.root_module | .. | objects | select(.type? == "aws_network_acl_rule") | .values | "\(.network_acl_id) \(.rule_number) \(.egress) \(.cidr_block // .ipv6_cidr_block)"'
+#   terraform show -json | jq -r '.values.root_module | .. | objects | select(.type? == "aws_network_acl_rule") | .values | "\(.network_acl_id) \(.rule_number) \(.egress) \([.cidr_block, .ipv6_cidr_block] | map(select(. != null and . != "")) | first)"'
 # Each line gives an entry's network_acl_id, rule_number, egress and address. Once an address is no
 # longer to be blocked, as when it leaves the malicious IP block template or the template is unassigned, check
 # that the entry at its number still denies that address on all protocols, as the number may hold another entry

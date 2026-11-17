@@ -49,8 +49,8 @@ variable "skipped_imports" {
 }
 
 locals {
-  recovered_security_groups = { for k, v in data.xshield_enforcement_status.recover.applied_security_groups : k => v if !contains(var.skipped_imports.security_groups, k) }
-  recovered_rules           = { for k, v in data.xshield_enforcement_status.recover.applied_rules : k => v if !contains(var.skipped_imports.rules, k) }
+  recovered_security_groups = { for k in setsubtract(keys(data.xshield_enforcement_status.recover.applied_security_groups), var.skipped_imports.security_groups) : k => data.xshield_enforcement_status.recover.applied_security_groups[k] }
+  recovered_rules           = { for k in setsubtract(keys(data.xshield_enforcement_status.recover.applied_rules), var.skipped_imports.rules) : k => data.xshield_enforcement_status.recover.applied_rules[k] }
   # An interface that went with its instance since the last receipt has no attachment to import: the module declares
   # none for it.
   recovered_attachments = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys), var.skipped_imports.attachments) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }

@@ -207,11 +207,12 @@ func receiptAdvice(err error) string {
 	switch apiErr.Status {
 	case http.StatusUnprocessableEntity:
 		if slices.Contains(apiErr.DetailNames, "networkAclEntriesMissing") {
-			return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. Under " +
-				"a pinned snapshot_version, as recovery/ sets, the aws enforcement module leaves out the entries of a network " +
-				"ACL deleted since, and Xshield accepts the receipt once the cloud connector has observed that network ACL " +
-				"gone: plan and apply again after its next observation. Otherwise create every key the snapshot lists, and " +
-				"nothing else, or use the aws enforcement module, which does."
+			return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. A " +
+				"copy of the aws enforcement module older than network ACL blocking sends no network ACL entries: update it " +
+				"to this provider release's. Under a pinned snapshot_version, as recovery/ sets, the module leaves out the " +
+				"entries of a network ACL deleted since, and Xshield accepts the receipt once the cloud connector has " +
+				"observed that network ACL gone: plan and apply again after its next observation. Otherwise create every " +
+				"key the snapshot lists, and nothing else, or use this release's aws enforcement module, which does."
 		}
 		return "The resources listed are not exactly the snapshot's: the details name the keys missing or unknown. Create " +
 			"every key the snapshot lists, and nothing else, or use the aws enforcement module, which does."
