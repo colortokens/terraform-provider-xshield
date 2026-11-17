@@ -803,7 +803,7 @@ run "a_network_acl_block_named_in_fail_on_stops_the_plan" {
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
       drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = []
       notices = [
-        { code = "networkAclEntryRefused", reason = "NO_FREE_SLOT:out", asset_id = null, asset_name = null, group = "acl-0a1b", since = null, message = "every outbound rule number Xshield blocks addresses at on this network ACL, the even numbers 50 to 98, is taken" },
+        { code = "networkAclEntryRefused", reason = "NO_FREE_SLOT:out", asset_id = null, asset_name = null, group = "acl-0a1b", since = null, message = "no outbound rule number is free for these addresses on this network ACL in front of the allows that cover them, nor among the even numbers 50 to 98" },
       ]
     }
   }

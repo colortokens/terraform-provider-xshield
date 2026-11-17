@@ -250,10 +250,12 @@ resource "aws_ssm_parameter" "directory" {
 }
 
 # Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
-# denying all traffic from it inbound or to it outbound. Xshield numbers an entry once and keeps the number, and
-# places a new one only where the network ACL has room, so AWS never refuses one as over its rules per network ACL.
-# An entry changed in AWS is deleted before it is created again: AWS holds one entry per number and direction, so
-# creating the replacement first would be refused.
+# denying all traffic from it inbound or to it outbound. Xshield numbers an entry in front of every allow that covers
+# its address, and places one only where the network ACL has room, so AWS never refuses one as over its rules per
+# network ACL. An entry moves when an allow is put in front of it or AWS shows another entry at its number: the deny is
+# written at its new number before the old entry is deleted, so the address stays blocked throughout. AWS holds one
+# entry per number and direction, so an entry changed in AWS is not written again at the same number, which AWS would
+# refuse: Xshield gives it a new number once the cloud connector observes the change.
 resource "aws_network_acl_rule" "this" {
   for_each = local.snap.network_acl_entries
 
@@ -264,6 +266,11 @@ resource "aws_network_acl_rule" "this" {
   protocol        = "-1"
   cidr_block      = each.value.cidr_ipv4
   ipv6_cidr_block = each.value.cidr_ipv6
+
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = [rule_action, protocol, cidr_block, ipv6_cidr_block, from_port, to_port, icmp_type, icmp_code]
+  }
 }
 
 # Nothing published means nothing to confirm, so no receipt is created or sent.

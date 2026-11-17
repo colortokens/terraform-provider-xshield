@@ -161,11 +161,11 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template that " +
 					"no network ACL entry of Xshield's blocks its addresses for. " +
 					"A `networkAclEntryRefused` notice names addresses of the malicious IP block template Xshield leaves off a network ACL, so they " +
-					"are not blocked for the workloads behind it: the network ACL has no place left in that direction, Xshield's rule numbers on it, " +
-					"the even numbers 50 to 98, are taken, or they wait for entries the next apply removes. Xshield never asks AWS for a place " +
+					"are not blocked for the workloads behind it: the network ACL has no place left in that direction, no rule number is free for " +
+					"them in front of the allows that cover them nor among the even numbers 50 to 98, or they wait for entries the next apply removes. Xshield never asks AWS for a place " +
 					"it may not have, so an apply is never refused for it. A `networkAclNotObserved` notice names a network ACL the cloud " +
 					"connector has not read, or no longer shows, so Xshield adds no entry to it. A `networkAclEntryShadowed` notice names an " +
-					"entry of Xshield's that an allow rule of yours, numbered before it, lets the traffic through. " +
+					"entry of Xshield's that an allow rule of yours, numbered before it with no rule number free in front of it, lets the traffic through. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved` or `networkAclEntryShadowed`. " +
 					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
 					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +

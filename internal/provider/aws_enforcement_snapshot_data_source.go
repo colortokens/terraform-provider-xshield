@@ -192,8 +192,10 @@ func (d *awsEnforcementSnapshotDataSource) Schema(ctx context.Context, req datas
 				"cidr_ipv4": types.StringType, "cidr_ipv6": types.StringType,
 			}}, "Each address the malicious IP block template blocks on a network ACL in front of a workload it is assigned to, "+
 				"keyed `<network ACL ID>/<in|out>/<address>`: one `aws_network_acl_rule` that denies all traffic from the address "+
-				"inbound, or to it outbound. Xshield numbers each entry within the even rule numbers 50 to 98, as the cloud "+
-				"connector does, and keeps an entry's number for its life, so a plan never renumbers one in place. An address "+
+				"inbound, or to it outbound. Xshield numbers each entry in front of every allow on the network ACL that covers its "+
+				"address, within the even rule numbers 50 to 98 where those are in front, and keeps an entry's number until an "+
+				"allow is put in front of it or AWS shows another entry at its number. A new number replaces the entry, writing "+
+				"the deny at it before the old entry is deleted. An address "+
 				"left out for want of room or of a free number is named in a `networkAclEntryRefused` notice instead. "+
 				"`network_acl_id`: network ACL the entry goes in. "+
 				"`egress`: `true` for an outbound entry, `false` for an inbound one. "+
