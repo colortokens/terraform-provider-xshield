@@ -131,10 +131,10 @@ run "each_receipted_group_is_imported" {
   }
 }
 
-# A directory parameter deleted outside Terraform since the last receipt has nothing to import: the plan leaves it out
-# and creates it again. It has no override here, and a mock provider refuses any import without one, so the run fails
+# A directory parameter deleted outside Terraform since the last receipt has nothing to import, and one still there is
+# imported. The deleted one has no override here, and a mock provider refuses any import without one, so the run fails
 # if it is imported.
-run "a_directory_parameter_deleted_since_the_last_receipt_is_not_imported_and_stays_declared" {
+run "a_directory_parameter_deleted_since_the_last_receipt_is_not_imported" {
   command = plan
 
   override_data {
@@ -206,8 +206,8 @@ run "a_directory_parameter_deleted_since_the_last_receipt_is_not_imported_and_st
   }
 
   assert {
-    condition     = keys(module.xshield_enforcement.directory_entries) == ["lambda/orders-fn", "rds/orders-db"]
-    error_message = "the deleted directory parameter is no longer declared, so the apply would not create it again"
+    condition     = local.recovered_directory_parameters == { "rds/orders-db" = "/colortokens/v1/rds/orders-db/security-groups" }
+    error_message = "the directory parameter still there is not selected for import, or the deleted one is"
   }
 }
 

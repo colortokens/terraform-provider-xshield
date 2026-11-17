@@ -55,8 +55,12 @@ data "aws_ssm_parameters_by_path" "handover" {
   recursive = true
 }
 
+locals {
+  present_directory_parameters = { for name in toset(data.aws_ssm_parameters_by_path.handover.names) : name => true }
+}
+
 import {
-  for_each = { for k, d in data.xshield_aws_enforcement_snapshot.handover.directory_entries : k => d.parameter_name if contains(data.aws_ssm_parameters_by_path.handover.names, d.parameter_name) }
+  for_each = { for k, d in data.xshield_aws_enforcement_snapshot.handover.directory_entries : k => d.parameter_name if lookup(local.present_directory_parameters, d.parameter_name, false) }
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }

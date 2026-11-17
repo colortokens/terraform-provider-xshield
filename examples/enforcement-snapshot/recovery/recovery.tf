@@ -58,6 +58,9 @@ locals {
   # An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
   recovered_network_acl_entries = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_imports.network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
   present_directory_parameters  = { for name in toset(data.aws_ssm_parameters_by_path.recover.names) : name => true }
+  # A directory parameter deleted since the last receipt has nothing to import: the plan leaves it out, and the apply
+  # writes it again.
+  recovered_directory_parameters = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name if lookup(local.present_directory_parameters, entry.parameter_name, false) }
 }
 
 import {
@@ -95,10 +98,8 @@ data "aws_ssm_parameters_by_path" "recover" {
   recursive = true
 }
 
-# A directory parameter deleted since the last receipt has nothing to import: the plan leaves it out, and the apply
-# writes it again.
 import {
-  for_each = { for handle, entry in data.xshield_aws_enforcement_snapshot.recover.directory_entries : handle => entry.parameter_name if lookup(local.present_directory_parameters, entry.parameter_name, false) }
+  for_each = local.recovered_directory_parameters
   to       = module.xshield_enforcement.aws_ssm_parameter.directory[each.key]
   id       = each.value
 }
