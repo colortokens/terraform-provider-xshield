@@ -236,6 +236,27 @@ run "warns_when_approved_policy_has_waited_too_long_and_counts_everything_waitin
   }
 }
 
+run "an_overdue_version_of_changes_the_status_does_not_count_is_not_reported_as_nothing_waiting" {
+  command = plan
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
+      pending_since             = "2020-02-01T00:00:00Z", pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [],
+      pending_attachments_added = [], drift_evaluated = true, drift_observed_at = "2999-01-01T00:00:00Z", drift_findings = [], notices = []
+    }
+  }
+
+  expect_failures = [check.xshield_apply_overdue]
+
+  assert {
+    condition = (length(output.problems.apply_overdue) == 2 && !strcontains(output.problems.apply_overdue[1], "0 group(s)") &&
+    strcontains(output.problems.apply_overdue[1], "network ACL entries"))
+    error_message = "A waiting version that changes only what the status does not count, such as network ACL entries, must not read as zero changes, but reported ${jsonencode(output.problems)}."
+  }
+}
+
 run "lists_twenty_waiting_changes_and_counts_the_rest" {
   command = plan
 

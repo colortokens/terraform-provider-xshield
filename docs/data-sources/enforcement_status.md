@@ -35,6 +35,7 @@ locals {
 
   # coalesce keeps a null time out of timeadd while nothing is pending.
   apply_overdue = local.status.state == "pending" && timecmp(timeadd(coalesce(local.status.pending_since, plantimestamp()), local.max_apply_age), plantimestamp()) < 0
+  counted       = length(concat(local.status.pending_security_groups_added, local.status.pending_rules_added, local.status.pending_rules_removed, local.status.pending_attachments_added))
 }
 
 check "xshield_drift_high" {
@@ -49,7 +50,9 @@ check "xshield_apply_overdue" {
     condition = !local.apply_overdue
     error_message = join("\n", [
       "Approved Xshield policy for ${local.where} has waited more than ${local.max_apply_age} for an enforcement run:",
-      "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them.",
+      local.counted == 0
+      ? "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: changes Xshield does not count here, such as network ACL entries, which the enforcement plan shows. Run the enforcement workspace to apply them."
+      : "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them.",
     ])
   }
 }
@@ -88,7 +91,7 @@ check "xshield_apply_overdue" {
 - `pending_rules_added` (List of String) Keys of rules the next enforcement run will add.
 - `pending_rules_removed` (List of String) Keys of rules the next enforcement run will remove.
 - `pending_security_groups_added` (List of String) Keys of security groups the next enforcement run will create.
-- `pending_since` (String) When the oldest policy change not yet applied was published.
+- `pending_since` (String) When the oldest policy change not yet applied was published. The pending lists name security groups, rules and interface attachments only, so a version that changes only network ACL entries is pending with every list empty.
 - `published` (Boolean) False while Xshield has published nothing for this account and region. `state` is then `unpublished`, versions are null and every list is empty, so checks stay quiet.
 - `state` (String) `converged` when the latest receipt matches the expected snapshot, `waiting` when it does but a Full control change still waits on another workspace's apply or on discovery, which its `changeSetHeld` notices name, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published nothing to apply, `handedOver` when the account moved to connector delivery, and the cloud connector keeps the groups the pipeline created.
 

@@ -17,6 +17,7 @@ locals {
 
   # coalesce keeps a null time out of timeadd while nothing is pending.
   apply_overdue = local.status.state == "pending" && timecmp(timeadd(coalesce(local.status.pending_since, plantimestamp()), local.max_apply_age), plantimestamp()) < 0
+  counted       = length(concat(local.status.pending_security_groups_added, local.status.pending_rules_added, local.status.pending_rules_removed, local.status.pending_attachments_added))
 }
 
 check "xshield_drift_high" {
@@ -31,7 +32,9 @@ check "xshield_apply_overdue" {
     condition = !local.apply_overdue
     error_message = join("\n", [
       "Approved Xshield policy for ${local.where} has waited more than ${local.max_apply_age} for an enforcement run:",
-      "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them.",
+      local.counted == 0
+      ? "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: changes Xshield does not count here, such as network ACL entries, which the enforcement plan shows. Run the enforcement workspace to apply them."
+      : "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them.",
     ])
   }
 }

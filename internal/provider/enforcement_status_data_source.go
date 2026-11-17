@@ -120,7 +120,8 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"applied_at":       str("When the latest receipt was recorded."),
 			"last_checked_at": str("When an enforcement plan last resolved the expected version. A stale value means " +
 				"the pipeline has stopped running, whatever the convergence state says."),
-			"pending_since":                 str("When the oldest policy change not yet applied was published."),
+			"pending_since": str("When the oldest policy change not yet applied was published. The pending lists name security " +
+				"groups, rules and interface attachments only, so a version that changes only network ACL entries is pending with every list empty."),
 			"pending_rules_added":           strList("Keys of rules the next enforcement run will add."),
 			"pending_rules_removed":         strList("Keys of rules the next enforcement run will remove."),
 			"pending_security_groups_added": strList("Keys of security groups the next enforcement run will create."),

@@ -176,7 +176,9 @@ locals {
     [for key in local.status.pending_attachments_added : "  attach ${key}"],
   )
   pending_lines = concat(
-    ["  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them."],
+    [length(local.pending) == 0
+      ? "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: changes Xshield does not count here, such as network ACL entries, which the enforcement plan shows. Run the enforcement workspace to apply them."
+    : "  waiting since ${coalesce(local.status.pending_since, "an unknown time")}: ${length(local.status.pending_security_groups_added)} group(s) to create, ${length(local.status.pending_rules_added)} rule(s) to add, ${length(local.status.pending_rules_removed)} rule(s) to remove, ${length(local.status.pending_attachments_added)} attachment(s) to add. Run the enforcement workspace to apply them."],
     slice(local.pending, 0, min(local.shown, length(local.pending))),
     length(local.pending) > local.shown ? ["  and ${length(local.pending) - local.shown} more"] : [],
   )
