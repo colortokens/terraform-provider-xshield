@@ -21,11 +21,28 @@ variable "snapshot_version" {
   default     = null
 }
 
+variable "enable_exclusive_rules" {
+  description = "Whether each network security group this module creates holds only the rules the snapshot declares for it, so the next apply removes a rule added to one of them outside Terraform. Set it to false to leave such a rule in place until a person removes it. Network security groups of your own are never managed this way."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "review_max_groups" {
+  description = "How many groups the review output describes in words, by key. Groups past this number are counted, not described."
+  type        = number
+  default     = 50
+
+  validation {
+    condition     = var.review_max_groups >= 0 && floor(var.review_max_groups) == var.review_max_groups
+    error_message = "review_max_groups must be a whole number, zero or more."
+  }
+}
+
 variable "tags" {
   description = "Tags added to every network security group this module creates. Xshield's own tags, which the cloud connector reads, cannot be overridden."
   type        = map(string)
   default     = {}
-  nullable    = false
 
   validation {
     condition     = alltrue([for k in keys(var.tags) : !startswith(lower(k), "ct:")])
