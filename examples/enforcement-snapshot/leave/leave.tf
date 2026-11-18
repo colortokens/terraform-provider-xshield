@@ -2,7 +2,15 @@
 # the module "xshield_enforcement" block with this one, remove the outputs that read the module (summary and
 # xshield_review in enforcement/main.tf), and apply once. The groups, rules, attachments, network ACL
 # entries and directory parameters stay in the account; Terraform only stops managing them. Delete this
-# file afterwards, change the workspaces that look their groups up as below, and then remove the directory parameters.
+# file afterwards, finish the workspaces that look their groups up as below, and then remove the directory
+# parameters.
+#
+# The cloud connector sets the groups of each database, function and service itself and leaves only its own
+# groups on it, so a workspace that still applies its lookup puts the team's groups back and takes off any group
+# the connector has added since. Before the switch to connector delivery, each such workspace adds the attribute
+# that lists the resource's groups to ignore_changes and applies, as the README's Stop enforcing section says. If
+# that was not done before the switch, stop the runs of those workspaces now, and do it in each before any of them
+# runs again and before you apply this file.
 #
 # The network ACL entries stay in place, and Xshield no longer tracks them; a cloud connector that blocks
 # addresses on network ACLs itself may change or delete an entry at a rule number it uses. Before you apply,
@@ -22,11 +30,10 @@
 #   terraform show -json | jq -r '.values.root_module | .. | objects | select(.mode? == "managed" and .type? == "aws_ssm_parameter") | .values.name'
 # Each name is /colortokens/v1/<handle>/security-groups, for the handle a group lookup names.
 #
-# The cloud connector now sets the groups of each such resource itself and leaves only its own groups on it, so a
-# workspace that still applies its lookup puts the team's groups back and takes off any group the connector has
-# added since. Once this file is applied, change each workspace with a lookup in one change: add the attribute that
-# lists the resource's groups to ignore_changes, remove the lookup module and the outputs that read it (xshield.tf in
-# the database, function and apprunner examples), and apply. Removing the lookup without ignore_changes takes the
+# Once this file is applied, remove from each workspace with a lookup the lookup module and the outputs that read
+# it, give the resource only its own groups where it took the lookup's (in the database, function and apprunner
+# examples, delete xshield.tf and make the line marked "Changed for Xshield" list the team's group alone), and
+# apply: with the attribute ignored, the plan shows no change. Removing the lookup without ignore_changes takes the
 # group off the resource, as does deleting its parameter while a lookup still reads it. The attributes are:
 #   aws_db_instance, aws_rds_cluster, aws_launch_template   vpc_security_group_ids
 #   aws_lambda_function                                     vpc_config[0].security_group_ids
