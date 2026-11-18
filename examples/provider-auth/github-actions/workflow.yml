@@ -1,0 +1,24 @@
+name: xshield
+
+on:
+  push:
+    branches: [main]
+
+# id-token: write lets the job request an OIDC token for the provider.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    env:
+      XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+      XSHIELD_TENANCY_ID: ${{ vars.XSHIELD_TENANCY_ID }}
+      XSHIELD_USER_ID: ${{ vars.XSHIELD_USER_ID }}
+      XSHIELD_OIDC_AUDIENCE: xshield
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init
+      - run: terraform plan

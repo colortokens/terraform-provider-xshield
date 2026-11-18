@@ -10,6 +10,9 @@ terraform {
 # In a pipeline, leave the credentials out of the block and set
 # XSHIELD_SERVER_URL, XSHIELD_TENANCY_ID, XSHIELD_USER_ID, XSHIELD_FINGERPRINT
 # and XSHIELD_PRIVATE_KEY (the key itself) as secret environment variables.
+# To keep no private key on the runner, sign with a key held in a cloud key
+# service (kms_key) or use workload identity federation (oidc): see
+# examples/provider-auth.
 provider "xshield" {
   # Xshield connection config
   tenancy_id       = "xxxxxxxxxx"

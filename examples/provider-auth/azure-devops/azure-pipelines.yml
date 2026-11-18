@@ -1,0 +1,19 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+# Define XSHIELD_TENANCY_ID and XSHIELD_USER_ID as pipeline variables.
+steps:
+  - script: |
+      terraform init
+      terraform plan
+    displayName: Terraform plan
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      XSHIELD_ADO_SERVICE_CONNECTION_ID: <service-connection-id>
+      XSHIELD_OIDC_SOURCE: azure-devops
+      XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+      XSHIELD_TENANCY_ID: $(XSHIELD_TENANCY_ID)
+      XSHIELD_USER_ID: $(XSHIELD_USER_ID)

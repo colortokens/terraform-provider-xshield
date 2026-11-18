@@ -116,11 +116,23 @@ func (e *snapshotAPIError) Error() string {
 // bytes and refused 12,000, so the size is named as a possible cause from here on.
 const gatewayBodyLimit = 8 << 10
 
-// unauthorizedAdvice names what Xshield's gateway checks, because it answers each failed check alike.
-func unauthorizedAdvice(bodyBytes int) string {
-	advice := "Check that the API key is still active under Settings > API Keys, that tenancy_id, user_id and fingerprint are " +
-		"that key's, that private_key is the private key of the key with that fingerprint, and that this machine's clock is " +
-		"right: Xshield refuses a request dated more than 10 seconds before it arrives"
+// unauthorizedAdvice names what Xshield's gateway checks for the authentication method in use, because it answers
+// each failed check alike.
+func unauthorizedAdvice(method sdk.AuthenticationMethod, bodyBytes int) string {
+	var advice string
+	switch method {
+	case sdk.AuthenticationFederation:
+		return "Xshield refused the access token the provider exchanged for the workload's OIDC token. Check that the " +
+			"service account tenancy_id and user_id name is still active, and that its federation trust is still enabled"
+	case sdk.AuthenticationKeyService:
+		advice = "Check that kms_key's public key is still registered as an active API key of the service account tenancy_id " +
+			"and user_id name, that the key service still lets this workload sign with kms_key, and that this machine's clock " +
+			"is right: Xshield refuses a request dated more than 10 seconds before it arrives"
+	default:
+		advice = "Check that the API key is still active under Settings > API Keys, that tenancy_id, user_id and fingerprint are " +
+			"that key's, that private_key is the private key of the key with that fingerprint, and that this machine's clock is " +
+			"right: Xshield refuses a request dated more than 10 seconds before it arrives"
+	}
 	if bodyBytes > gatewayBodyLimit {
 		advice += fmt.Sprintf(". This request's body is %d KB, and Xshield's gateway can refuse the signature of a body over "+
 			"about 8 KB, so if the key, the credentials and the clock are right, sending it again may fail the same way: report "+
@@ -147,7 +159,7 @@ func (a cloudSnapshotAPI) do(ctx context.Context, method, endpoint string, body 
 		apiErr := &snapshotAPIError{Method: method, Endpoint: endpoint, Status: res.StatusCode, Code: apiErrorCode(res.Body),
 			Detail: describeAPIError(res.Body), DetailNames: apiErrorDetailNames(res.Body)}
 		if res.StatusCode == http.StatusUnauthorized {
-			apiErr.Advice = unauthorizedAdvice(len(body))
+			apiErr.Advice = unauthorizedAdvice(a.client.AuthenticationMethod(ctx), len(body))
 		}
 		return apiErr
 	}

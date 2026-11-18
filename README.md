@@ -30,6 +30,18 @@ provider "xshield" {
 The published version comes from the release tag, which the goreleaser workflow builds on any tag
 matching `v*`. Keep the version above and `examples/provider/provider.tf` in step with it.
 
+## Authentication
+
+Configure one of three methods. The [provider documentation](docs/index.md#authentication) covers what
+to create for each, the permissions it needs, the provider block, the environment-only form for CI and
+its caveats, and [examples/provider-auth](examples/provider-auth) holds a configuration for each.
+
+| Method | Configure | Fits |
+| --- | --- | --- |
+| API key | `private_key_path` or `private_key`, with `fingerprint` | Laptops and any runner |
+| Key in a cloud key service | `kms_key`: an AWS KMS, Azure Key Vault or Google Cloud KMS key that signs every request | Runners with cloud credentials, holding no Xshield secret |
+| Workload identity federation | `oidc`: the platform's OIDC token, exchanged for a short-lived access token of a service account | HCP Terraform, GitHub Actions, GitLab CI, Azure DevOps, Kubernetes, AWS, Azure and Google Cloud workloads |
+
 ## Getting started
 
 Policy reaches a firewall in four steps, and each has a resource.

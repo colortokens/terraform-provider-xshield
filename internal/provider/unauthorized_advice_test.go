@@ -2,11 +2,17 @@ package provider
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -100,4 +106,66 @@ func TestAnUnauthorizedAnswerNamesWhatTheGatewayChecks(t *testing.T) {
 			}
 		}
 	})
+}
+
+type fixedAccessToken string
+
+func (token fixedAccessToken) AccessToken(context.Context) (string, error) { return string(token), nil }
+
+func refusedReadAdvice(t *testing.T, config shared.ConfigurationProvider) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, gatewayRefusal)
+	}))
+	t.Cleanup(srv.Close)
+	api := cloudSnapshotAPI{client: sdk.New(sdk.WithServerURL(srv.URL), sdk.WithConfigProvider(config), sdk.WithClient(srv.Client()))}
+	var m awsEnforcementSnapshotDataSourceModel
+	ok, errs := readDataSource(t, &awsEnforcementSnapshotDataSource{api: api}, pointArgs(), &m)
+	if ok {
+		t.Fatal("a refused read planned")
+	}
+	return errs
+}
+
+// Each authentication method fails a request for its own reasons, so a 401 names only those of the method in use.
+func TestAnUnauthorizedAnswerNamesTheChecksOfTheAuthenticationMethodInUse(t *testing.T) {
+	t.Parallel()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]struct {
+		config         shared.ConfigurationProvider
+		named, unnamed []string
+	}{
+		"kms_key": {
+			config:  shared.NewRemoteKeyConfigProvider("tenancy", "user", "fp", remoteKeyStandIn{key}),
+			named:   []string{"kms_key", "tenancy_id and user_id", "clock", "10 seconds"},
+			unnamed: []string{"private_key", "fingerprint", "Settings > API Keys"},
+		},
+		"oidc": {
+			config:  shared.NewFederatedConfigProvider("tenancy", "user", fixedAccessToken("access-token")),
+			named:   []string{"service account", "tenancy_id and user_id", "access token"},
+			unnamed: []string{"private_key", "fingerprint", "clock", "kms_key", "Settings > API Keys"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			errs := refusedReadAdvice(t, tc.config)
+			for _, want := range tc.named {
+				if !strings.Contains(errs, want) {
+					t.Errorf("the error does not mention %q:\n%s", want, errs)
+				}
+			}
+			for _, unrelated := range tc.unnamed {
+				if strings.Contains(errs, unrelated) {
+					t.Errorf("the error mentions %q, which %s does not use:\n%s", unrelated, name, errs)
+				}
+			}
+		})
+	}
 }
