@@ -113,6 +113,17 @@ policy, `xshield-checks`, for the workspace that runs the
 policy reports every failed Xshield check of a plan, and stops a run on them once you raise its enforcement
 level. Policies for groups under Full control are provided by ColorTokens separately.
 
+## Enforcing Azure policy through your own pipeline
+
+When an Azure subscription's policy delivery is Terraform pipeline, your pipeline creates the network security
+groups Xshield renders instead of the cloud connector, through the
+[azure enforcement module](examples/enforcement-snapshot/modules/azure/README.md).
+[enforcement-azure](examples/enforcement-snapshot/enforcement-azure) is a workspace that calls it, ready to copy.
+
+| Resource or data source | Does |
+| --- | --- |
+| [`xshield_azure_enforcement_snapshot`](docs/data-sources/azure_enforcement_snapshot.md) | Fetches the network security groups Xshield expects in one subscription and region, and where each one goes. |
+
 ## Running the provider locally
 
 With a local build, through `dev_overrides`:
