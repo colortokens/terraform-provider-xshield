@@ -94,6 +94,7 @@ module "orders_db_xshield" {
   source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
 
   handle                 = "rds/orders-db"
+  vpc_id                 = aws_security_group.orders_db.vpc_id
   own_security_group_ids = [aws_security_group.orders_db.id]
 }
 

@@ -31,6 +31,7 @@ module "resize_xshield" {
   source = "../modules/aws-group-lookup"
 
   handle                 = "lambda/${local.function_name}"
+  vpc_id                 = aws_security_group.resize.vpc_id
   own_security_group_ids = [aws_security_group.resize.id]
 }
 

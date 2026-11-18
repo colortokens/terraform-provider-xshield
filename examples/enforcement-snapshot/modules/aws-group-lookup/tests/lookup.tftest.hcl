@@ -1,11 +1,15 @@
 # terraform test, offline: the AWS provider is mocked, returning the directory
 # entry the enforcement module writes for rds/orders-db.
 
+variables {
+  vpc_id = "vpc-0a1b"
+}
+
 mock_provider "aws" {
   mock_data "aws_ssm_parameters_by_path" {
     defaults = {
       names  = ["/colortokens/v1/rds/orders-db/security-groups"]
-      values = ["{\"handle\":\"rds/orders-db\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"]}"]
+      values = ["{\"handle\":\"rds/orders-db\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"security_group_ids_by_vpc\":{\"vpc-0a1b\":[\"sg-0f1e2d3c4b5a69788\"]}}"]
     }
   }
 }
@@ -233,4 +237,81 @@ run "reads_an_auto_scaling_group_by_its_name" {
     condition     = data.aws_ssm_parameters_by_path.entry.path == "/colortokens/v1/asg/Orders-Web" && output.security_group_ids == ["sg-0asg"]
     error_message = "an Auto Scaling group is read under asg/ and its name, in the name's own case"
   }
+}
+
+# AWS refuses a group from another VPC, so the lookup returns only the groups in the resource's.
+run "returns_only_the_groups_in_the_resource_vpc" {
+  variables {
+    handle = "lambda/resize"
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/lambda/resize/security-groups"]
+      values = ["{\"handle\":\"lambda/resize\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\",\"sg-0123456789abcdef0\"],\"security_group_ids_by_vpc\":{\"vpc-0a1b\":[\"sg-0f1e2d3c4b5a69788\"],\"vpc-1\":[\"sg-0123456789abcdef0\"]}}"]
+    }
+  }
+
+  assert {
+    condition     = output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
+    error_message = "the lookup returns only the group in the resource's VPC"
+  }
+}
+
+# On the run that moves a function to another VPC, Xshield's group is still in the old one: the
+# function moves without it, and the plan warns, rather than AWS failing the apply.
+run "a_resource_moved_to_another_vpc_gets_no_group_until_xshield_has_one_there" {
+  command = plan
+
+  variables {
+    handle = "lambda/resize"
+    vpc_id = "vpc-2"
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/lambda/resize/security-groups"]
+      values = ["{\"handle\":\"lambda/resize\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"security_group_ids_by_vpc\":{\"vpc-1\":[\"sg-0f1e2d3c4b5a69788\"]},\"slot_limit\":5}"]
+    }
+  }
+
+  expect_failures = [check.group_in_vpc]
+
+  assert {
+    condition     = output.security_group_ids == [] && output.own_security_groups_allowed == 5
+    error_message = "a resource in a VPC Xshield has no group in gets none, and all of its room is its own"
+  }
+}
+
+# An entry written before the enforcement module kept groups by VPC still attaches its groups.
+run "an_entry_without_groups_by_vpc_returns_every_group" {
+  variables {
+    handle = "rds/orders-db"
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.entry
+    values = {
+      names  = ["/colortokens/v1/rds/orders-db/security-groups"]
+      values = ["{\"handle\":\"rds/orders-db\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"]}"]
+    }
+  }
+
+  assert {
+    condition     = output.security_group_ids == ["sg-0f1e2d3c4b5a69788"]
+    error_message = "an entry without groups by VPC returns every group it lists"
+  }
+}
+
+run "rejects_a_vpc_id_that_is_not_one" {
+  command = plan
+
+  variables {
+    handle = "rds/orders-db"
+    vpc_id = "sg-0f1e2d3c4b5a69788"
+  }
+
+  expect_failures = [var.vpc_id]
 }

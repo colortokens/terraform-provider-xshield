@@ -236,16 +236,18 @@ resource "aws_network_interface_sg_attachment" "this" {
 }
 
 # One parameter per database, function or service its own workspace attaches;
-# the aws-group-lookup module reads it by handle.
+# the aws-group-lookup module reads it by handle, and takes only the groups in the
+# resource's VPC, as AWS refuses a group from another.
 resource "aws_ssm_parameter" "directory" {
   for_each = local.snap.directory_entries
 
   name = each.value.parameter_name
   type = "String"
   insecure_value = jsonencode({
-    handle             = each.value.handle
-    security_group_ids = [for key in each.value.security_groups : local.security_group_ids[key]]
-    slot_limit         = each.value.slot_limit
+    handle                    = each.value.handle
+    security_group_ids        = [for key in each.value.security_groups : local.security_group_ids[key]]
+    security_group_ids_by_vpc = { for key in each.value.security_groups : local.snap.security_groups[key].vpc_id => local.security_group_ids[key]... }
+    slot_limit                = each.value.slot_limit
   })
   tags = merge(var.tags, each.value.tags)
 }

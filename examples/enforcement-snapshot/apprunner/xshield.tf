@@ -20,6 +20,7 @@ module "orders_web_xshield" {
   source = "../modules/aws-group-lookup"
 
   handle                 = "apprunner/${local.service_name}"
+  vpc_id                 = aws_security_group.orders_web.vpc_id
   own_security_group_ids = [aws_security_group.orders_web.id]
 }
 

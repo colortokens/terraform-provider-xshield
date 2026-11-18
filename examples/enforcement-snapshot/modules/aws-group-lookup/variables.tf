@@ -3,6 +3,16 @@ variable "handle" {
   type        = string
 }
 
+variable "vpc_id" {
+  description = "The VPC the resource is in, such as the vpc_id of its own security group. The lookup returns only Xshield's groups in that VPC, as AWS refuses a group from another, so a resource moving to another VPC gets none until Xshield has created its group there."
+  type        = string
+
+  validation {
+    condition     = can(regex("^vpc-[0-9a-f]+$", var.vpc_id))
+    error_message = "vpc_id must be a VPC ID, such as vpc-0123456789abcdef0."
+  }
+}
+
 variable "own_security_group_ids" {
   description = "The resource's own security group IDs, which it carries beside Xshield's. When given, the plan fails if together they are more than AWS allows on the resource, rather than AWS failing the apply. Leave null to skip the check."
   type        = list(string)

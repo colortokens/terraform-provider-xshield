@@ -5,7 +5,7 @@ mock_provider "aws" {
   mock_data "aws_ssm_parameters_by_path" {
     defaults = {
       names  = ["/colortokens/v1/apprunner/orders-web/security-groups"]
-      values = ["{\"handle\":\"apprunner/orders-web\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"slot_limit\":5}"]
+      values = ["{\"handle\":\"apprunner/orders-web\",\"security_group_ids\":[\"sg-0f1e2d3c4b5a69788\"],\"security_group_ids_by_vpc\":{\"vpc-0a1b2c3d4e5f60718\":[\"sg-0f1e2d3c4b5a69788\"]},\"slot_limit\":5}"]
     }
   }
 

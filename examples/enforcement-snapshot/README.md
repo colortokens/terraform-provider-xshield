@@ -238,6 +238,7 @@ module "orders_db_xshield" {
   source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
 
   handle                 = "rds/orders-db"
+  vpc_id                 = aws_security_group.orders_db.vpc_id
   own_security_group_ids = [aws_security_group.orders_db.id]
 }
 
@@ -254,6 +255,7 @@ output "xshield_security_group_ids" {
 
 - `module.orders_db_xshield.security_group_ids` is the group Xshield gave the database. Its rules show in the enforcement workspace's plan, never in this one.
 - `aws_security_group.orders_db` is the database's own group, with the rules this workspace declares for it. Xshield's group goes beside it. Xshield changes a group of your own only under Full control, through step 4.
+- `vpc_id` is the database's VPC. The lookup returns only Xshield's groups in it, as AWS refuses a group from another VPC. A resource moved to another VPC gets its group there once Xshield has discovered the move and the enforcement run has applied; until then the lookup returns nothing and warns.
 - `own_security_group_ids` makes the plan fail, rather than the apply, when the database's own groups and Xshield's are more than AWS allows on it.
 - The output shows Xshield's group in this workspace's plan, under `Changes to Outputs`, when it arrives and when it leaves.
 

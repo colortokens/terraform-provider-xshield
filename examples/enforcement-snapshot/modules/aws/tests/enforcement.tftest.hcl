@@ -160,6 +160,10 @@ run "receipt_lists_what_was_created" {
     error_message = "the directory gives the database its group's ID"
   }
   assert {
+    condition     = jsondecode(aws_ssm_parameter.directory["rds/orders-db"].insecure_value).security_group_ids_by_vpc == { "vpc-0abc" = [aws_security_group.this["rds/orders-db"].id] }
+    error_message = "the directory gives the database its group's ID under the group's VPC, for the lookup to take only the groups in the database's"
+  }
+  assert {
     condition     = jsondecode(aws_ssm_parameter.directory["rds/orders-db"].insecure_value).slot_limit == 5
     error_message = "the directory tells the database's workspace how many groups AWS allows on it"
   }

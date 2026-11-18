@@ -27,6 +27,21 @@ locals {
     : jsonencode({ handle = local.handle, security_group_ids = [] })
   )
   slot_limit = try(local.entry.slot_limit, null)
+
+  # Only the groups in the resource's VPC; an entry written before the enforcement module kept
+  # groups by VPC gives all of them.
+  by_vpc             = try(local.entry.security_group_ids_by_vpc, null)
+  security_group_ids = try(local.by_vpc[var.vpc_id], [for id in local.entry.security_group_ids : id if local.by_vpc == null])
+  other_vpcs         = local.by_vpc == null ? [] : sort([for vpc, ids in local.by_vpc : vpc if vpc != var.vpc_id && length(ids) > 0])
+}
+
+# A resource moved to another VPC gets no group of Xshield's until Xshield has discovered it
+# there and the enforcement workspace has created its group in that VPC.
+check "group_in_vpc" {
+  assert {
+    condition     = length(local.other_vpcs) == 0 || length(local.security_group_ids) > 0
+    error_message = "Xshield's group for ${local.handle} is in ${join(", ", local.other_vpcs)}, not ${var.vpc_id}, so the resource gets none of Xshield's groups. This is expected on the run that moves it to ${var.vpc_id}: once Xshield has discovered it there and the enforcement workspace has applied, the next apply here attaches its group in ${var.vpc_id}. Otherwise, check that vpc_id is the VPC the resource is in."
+  }
 }
 
 # Warns rather than fails when asked to: a resource the same plan creates has no
