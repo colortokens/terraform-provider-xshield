@@ -203,7 +203,7 @@ For an account that already runs this pipeline. Each step works with what the st
        }
 
      # module.xshield_enforcement.aws_network_acl_rule.this["acl-0a1b/out/203.0.113.7/32"] will be created
-     # module.xshield_enforcement.xshield_enforcement_receipt.this[0] will be updated in-place
+     # module.xshield_enforcement.xshield_aws_enforcement_receipt.this[0] will be updated in-place
    ```
 
    Under `Changes to Outputs`, `xshield_review` says the same in words, and how far each network ACL reaches beyond the template's workloads once the cloud connector has observed it:
@@ -214,7 +214,7 @@ For an account that already runs this pipeline. Each step works with what the st
    + "Network ACL acl-0a1b: AWS applies this network ACL to every resource in the subnets associated with it, so it blocks these addresses of the malicious IP block template for more than the workloads the template is assigned to: workloads the template is not assigned to, web-1. Any other resource in those subnets, such as a NAT gateway or a load balancer, can neither reach them nor be reached from them: 203.0.113.7/32.",
    ```
 
-   An address that is missing from the plan is named in a notice of `xshield_enforcement_status`: `networkAclEntryRefused` for no room or no rule number, `networkAclNotObserved` for a network ACL the cloud connector has not read, `networkAclEntryShadowed` for an allow of yours that lets its traffic through. The plan stops before anything is applied when the role cannot read network ACLs, or a network ACL it names no longer exists: see [When something goes wrong](#when-something-goes-wrong).
+   An address that is missing from the plan is named in a notice of `xshield_aws_enforcement_status`: `networkAclEntryRefused` for no room or no rule number, `networkAclNotObserved` for a network ACL the cloud connector has not read, `networkAclEntryShadowed` for an allow of yours that lets its traffic through. The plan stops before anything is applied when the role cannot read network ACLs, or a network ACL it names no longer exists: see [When something goes wrong](#when-something-goes-wrong).
 
 7. **Apply, then check.** After the apply, AWS shows each deny in front of your allows:
 
@@ -223,7 +223,7 @@ For an account that already runs this pipeline. Each step works with what the st
      --query 'NetworkAcls[0].Entries[?RuleAction==`deny`].[Egress,RuleNumber,CidrBlock||Ipv6CidrBlock]' --output text
    ```
 
-   Once the cloud connector has observed the account, `xshield_enforcement_status` reads `state = "converged"` with no drift, and the monitor reports no `network_acl_block_not_enforced`. Xshield asks the cloud connector to observe the account every 10 minutes.
+   Once the cloud connector has observed the account, `xshield_aws_enforcement_status` reads `state = "converged"` with no drift, and the monitor reports no `network_acl_block_not_enforced`. Xshield asks the cloud connector to observe the account every 10 minutes.
 
 To stop blocking an address, remove it from the **Malicious Deny** template, or unassign the template from the workloads, in Xshield: the next enforcement run deletes its entries. Do not delete an entry in AWS or take it out of the state: an entry deleted outside Terraform is drift, which the next apply restores.
 
@@ -448,7 +448,7 @@ Read the first plan before you apply it. For each group it imports the rules, an
 - **A group to replace.** The `name` or `description` of the new `aws_security_group` block differs from the group's own. A description cannot be changed in place, so Terraform plans a new group.
 - **`Configuration for import target does not exist`.** The key of an `import` block is not a key of the map. Or a change that narrows the group was approved before this step, and Xshield already takes that rule out, so the module no longer declares it.
 
-Do this step before a change that narrows the group is approved. If one was approved first, nothing is lost: the change waits, every workload keeps the access the rule gives, `xshield_enforcement_status` reads `waiting`, and its `changeSetHeld` notice names the group and the rule. Once the module takes that rule out, its `import` block has no target. Delete that one `import` block and revoke that one rule yourself. That is the removal this workspace's plan would have made, and Xshield takes a rule out of the module only when every workload that still needs it carries its `ct-cohort-` group:
+Do this step before a change that narrows the group is approved. If one was approved first, nothing is lost: the change waits, every workload keeps the access the rule gives, `xshield_aws_enforcement_status` reads `waiting`, and its `changeSetHeld` notice names the group and the rule. Once the module takes that rule out, its `import` block has no target. Delete that one `import` block and revoke that one rule yourself. That is the removal this workspace's plan would have made, and Xshield takes a rule out of the module only when every workload that still needs it carries its `ct-cohort-` group:
 
 ```bash
 aws ec2 revoke-security-group-ingress --group-id <group ID> --security-group-rule-ids <rule ID>
@@ -463,7 +463,7 @@ What a plan of this workspace shows:
 - A group no approved change applies to plans exactly as its code declares it. The module reads nothing from Xshield for that group.
 - When an approved change applies to the group, the module asks Xshield which declared rules to keep. A group is matched by its name and its VPC, so a group of the same name in another VPC is not affected. A rule is matched by what it allows: its direction, protocol, ports and source or destination. Its key plays no part in the match.
 - A rule Xshield narrows stays in the plan until every workload that still needs it carries a `ct-cohort-` group that keeps that access. The enforcement workspace creates those groups, so run it first. The next plan of this workspace then removes the rule, and no workload loses access part-way.
-- Until this workspace has applied, the group keeps its broad rule. `xshield_enforcement_status` reads `waiting` while the change waits for this workspace, and the monitor reports `owner_apply_overdue` when the wait passes `max_owner_apply_age`.
+- Until this workspace has applied, the group keeps its broad rule. `xshield_aws_enforcement_status` reads `waiting` while the change waits for this workspace, and the monitor reports `owner_apply_overdue` when the wait passes `max_owner_apply_age`.
 - While an approved change applies to the group, the plan also shows two `xshield_aws_security_group_changes_receipt` resources, `applying` and `applied`. They tell Xshield which change sets the rules came from. The apply sends `applying` before any rule of the group is created or updated, and `applied` once they are. A rule the apply takes out of the group is destroyed after `applied`: see [How a revert waits for this workspace](#how-a-revert-waits-for-this-workspace).
 
 Keep every rule in the map, before and after Xshield leaves it out. If you delete a rule yourself before Xshield leaves it out, the workloads that still rely on it lose that traffic early. If the change is reverted, the rule comes back only while your code still declares it. Do not add a rule that gives back traffic a change took away: every workload in the group gets that traffic again.
@@ -497,7 +497,7 @@ When a change that narrowed the group is reverted, every workload keeps the acce
 - each receipt ID that reported the change narrowing the group has sent an `applied` receipt, after the revert, without it narrowing the group;
 - Xshield then sees the group holding the rule again.
 
-So after a revert, plan and apply each workspace that owns such a group. Until then `xshield_enforcement_status` reads `waiting`. A `changeSetHeld` notice names each workspace by its receipt's label and ID.
+So after a revert, plan and apply each workspace that owns such a group. Until then `xshield_aws_enforcement_status` reads `waiting`. A `changeSetHeld` notice names each workspace by its receipt's label and ID.
 
 A receipt sends what its plan read, so a plan saved before a revert still reports the change narrowing the group. Once the revert has been requested, Xshield refuses that plan's `applying` receipt, and the apply stops before any rule changes:
 
@@ -684,7 +684,7 @@ Policies for groups under Full control are provided by ColorTokens separately.
 
 `terraform destroy` on the enforcement workspace is not the way to stop enforcing. Neither is deleting the `module "xshield_enforcement"` block. Both delete Xshield's groups and network ACL entries and tell Xshield nothing:
 
-- Xshield keeps the last receipt, so `xshield_enforcement_status` reads as it did before. The missing groups show only as drift findings, once the cloud connector observes the account.
+- Xshield keeps the last receipt, so `xshield_aws_enforcement_status` reads as it did before. The missing groups show only as drift findings, once the cloud connector observes the account.
 - Under Full control the `ct-cohort-` groups are deleted too. They keep the access a workload still needs after a broad rule left one of your own groups, so those workloads lose that access.
 - AWS refuses to delete a group that a database, function or service still carries, so the destroy can fail part-way.
 
@@ -735,7 +735,7 @@ cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=fal
 
 ## What happens if
 
-Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and how to put it right. `state`, notices and drift findings are what `xshield_enforcement_status` returns. Names such as `drift_high` are the monitor's problems. The messages a plan prints are listed under [When something goes wrong](#when-something-goes-wrong).
+Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and how to put it right. `state`, notices and drift findings are what `xshield_aws_enforcement_status` returns. Names such as `drift_high` are the monitor's problems. The messages a plan prints are listed under [When something goes wrong](#when-something-goes-wrong).
 
 | What happens | In AWS | What Xshield shows | To put it right |
 |--|--|--|--|
@@ -834,7 +834,7 @@ Deleting such a resource in AWS also clears the error, but only while nothing re
 | `Xshield did not accept the customer group changes receipt` with `-> 404` and `no published snapshot` | The account and region have no published snapshot any more, so the changes this plan read no longer exist. Rules waiting on the refused receipt did not change | Run a new plan and apply it |
 | `Xshield did not forget the customer group changes receipt` | Destroying the receipt failed: Xshield could not be reached, refused the API key, or failed. Until it forgets the receipt, a revert of a change it reported keeps waiting | Fix the cause, then destroy again |
 | `handle must be <kind>/<name>` | The lookup's handle has no kind | Use one of the handles in the table above |
-| Warning: `Xshield lists no entry for <handle>`, with `warn_when_unlisted` set | The resource is new and Xshield has not yet discovered it, Xshield's policy gives it nothing to attach, Xshield refuses it, or the handle is misspelt | Nothing for a new resource. Otherwise compare the handle with the enforcement module's `directory_entries` output, and look for the resource among the `assetRefused` and `groupRefused` notices of `xshield_enforcement_status` |
+| Warning: `Xshield lists no entry for <handle>`, with `warn_when_unlisted` set | The resource is new and Xshield has not yet discovered it, Xshield's policy gives it nothing to attach, Xshield refuses it, or the handle is misspelt | Nothing for a new resource. Otherwise compare the handle with the enforcement module's `directory_entries` output, and look for the resource among the `assetRefused` and `groupRefused` notices of `xshield_aws_enforcement_status` |
 | `InvalidGroup.Duplicate` or `InvalidPermission.Duplicate` when applying | An earlier apply stopped after AWS created the group or rule and before Terraform saved it in state | Import it, as [An interrupted apply](#an-interrupted-apply) shows, then apply again |
 | `DependencyViolation`, or a timeout, deleting a security group in the enforcement apply | The version no longer has a group that a database, function, service or Auto Scaling group still carries, most often because `snapshot_version` is pinned to an earlier version. AWS refuses to delete a group in use. The apply has already removed the group's directory entry | Run the workspace that owns the resource, which takes the group off it, then run the enforcement workspace again. For an Auto Scaling group, that apply changes only its launch template: AWS refuses the delete until its running instances have been replaced from a version without the group, as [When policy stops using a group](#when-policy-stops-using-a-group) says. A chain built as step 6 says, such as `chain/`, runs the owners' jobs even when the enforcement job fails, so its next run does both |
 | `InvalidGroup.Duplicate` on the first enforcement apply for an account the cloud connector enforced | The groups exist already: the connector created them, and the workspace did not take them over | Add `handover/handover.tf` to the workspace, plan and apply, then delete the file |

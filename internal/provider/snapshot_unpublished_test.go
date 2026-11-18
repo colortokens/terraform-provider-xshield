@@ -285,8 +285,8 @@ func TestDeclaredRulesLoseWhatAReleasedChangeRevokes(t *testing.T) {
 func TestStatusOfAnAccountWithNothingPublishedIsQuiet(t *testing.T) {
 	t.Parallel()
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusNotFound, xshieldNotPublished}})
-	var m enforcementStatusDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
+	var m awsEnforcementStatusDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("a monitor must not fail on an account with nothing published: %s", errs)
 	}
 	if m.Published.ValueBool() || m.State.ValueString() != "unpublished" || !m.ExpectedVersion.IsNull() || !m.AppliedVersion.IsNull() ||
@@ -308,8 +308,8 @@ func TestStatusWithoutDriftReadsAsUnevaluated(t *testing.T) {
 		t.Fatal(err)
 	}
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusOK, string(body)}})
-	var m enforcementStatusDataSourceModel
-	if ok, errs := readDataSource(t, &enforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
+	var m awsEnforcementStatusDataSourceModel
+	if ok, errs := readDataSource(t, &awsEnforcementStatusDataSource{api: api}, pointArgs(), &m); !ok {
 		t.Fatalf("a status without drift must plan: %s", errs)
 	}
 	if m.DriftEvaluated.ValueBool() || len(m.DriftFindings) != 0 || !m.DriftObservedAt.IsNull() || !m.Published.ValueBool() {

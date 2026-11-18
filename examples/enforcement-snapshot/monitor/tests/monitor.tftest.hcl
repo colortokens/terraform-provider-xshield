@@ -4,7 +4,7 @@
 # 2999 stands for "just now", since the checks compare with the plan's time.
 
 mock_provider "xshield" {
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = {
       published                     = true
       state                         = "converged"
@@ -43,7 +43,7 @@ run "quiet_when_nothing_is_published" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = false, state = "unpublished", expected_version = null, applied_version = null, applied_at = null, last_checked_at = null,
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -65,7 +65,7 @@ run "warns_that_nothing_is_published_when_asked" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = false, state = "unpublished", expected_version = null, applied_version = null, applied_at = null, last_checked_at = null,
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -80,7 +80,7 @@ run "warns_on_high_and_medium_severity_drift" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -117,7 +117,7 @@ run "warns_on_medium_severity_drift_when_asked" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -135,7 +135,7 @@ run "warns_on_a_refused_workload" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -158,7 +158,7 @@ run "warns_by_default_on_workloads_awaiting_their_own_workspaces_attach" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -192,7 +192,7 @@ run "a_workload_awaiting_its_attach_named_in_fail_on_stops_the_plan" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -210,7 +210,7 @@ run "warns_once_per_cause_on_groups_whose_rule_count_is_a_guess_and_gives_the_co
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -241,7 +241,7 @@ run "a_notice_code_the_monitor_does_not_know_is_not_reported" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -262,7 +262,7 @@ run "warns_when_approved_policy_has_waited_too_long_and_counts_everything_waitin
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since             = "2020-02-01T00:00:00Z", pending_security_groups_added = ["i-0new"], pending_rules_added = [], pending_rules_removed = ["i-0a1/in/tcp/22/10.0.0.0/8"],
@@ -290,7 +290,7 @@ run "an_overdue_version_of_changes_the_status_does_not_count_is_not_reported_as_
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since             = "2020-02-01T00:00:00Z", pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [],
@@ -311,7 +311,7 @@ run "lists_twenty_waiting_changes_and_counts_the_rest" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published                     = true
       state                         = "pending"
@@ -344,7 +344,7 @@ run "quiet_while_approved_policy_has_waited_less_than_the_limit" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published                 = true, state = "pending", expected_version = "v3", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since             = "2999-01-01T00:00:00Z", pending_security_groups_added = [], pending_rules_added = ["i-0a1/in/tcp/443/10.0.0.0/8"], pending_rules_removed = [],
@@ -362,7 +362,7 @@ run "warns_when_published_policy_was_never_applied" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published                 = true, state = "unapplied", expected_version = "v1", applied_version = null, applied_at = null, last_checked_at = null,
       pending_since             = "2020-02-01T00:00:00Z", pending_security_groups_added = ["i-0a1"], pending_rules_added = ["i-0a1/in/tcp/443/10.0.0.0/8"], pending_rules_removed = [],
@@ -382,7 +382,7 @@ run "warns_when_a_full_control_change_has_waited_too_long_for_the_owning_workspa
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -413,7 +413,7 @@ run "warns_when_the_enforcement_pipeline_has_stopped" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -433,7 +433,7 @@ run "quiet_about_the_pipeline_once_the_account_is_handed_back_to_the_connector" 
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -451,7 +451,7 @@ run "warns_when_drift_has_not_been_evaluated_since_an_apply_long_ago" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -471,7 +471,7 @@ run "warns_when_the_latest_observation_is_older_than_max_unobserved_age" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -496,7 +496,7 @@ run "quiet_on_an_old_observation_once_handed_over" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -514,7 +514,7 @@ run "warns_on_drift_still_there_after_max_apply_age" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -542,7 +542,7 @@ run "quiet_while_drift_is_not_yet_evaluated_after_a_fresh_apply" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2999-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -560,7 +560,7 @@ run "warns_on_a_port_whose_group_is_no_longer_narrowed" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -583,7 +583,7 @@ run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -618,7 +618,7 @@ run "one_cause_shared_by_many_workloads_prints_one_line_that_names_them_all" {
 
   assert {
     condition = alltrue([
-      for n in data.xshield_enforcement_status.this.notices : alltrue([
+      for n in data.xshield_aws_enforcement_status.this.notices : alltrue([
         for shown in [n.asset_name, n.group, n.reason, n.since, n.message] :
         strcontains(join("\n", output.problems[n.code == "changeSetHeld" ? "owner_apply_overdue" : "port_not_narrowed"]), shown)
       ])
@@ -644,7 +644,7 @@ run "split_auto_scaling_groups_and_contained_workloads_are_silent_by_default" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -667,7 +667,7 @@ run "warns_by_default_on_groups_still_held_after_policy_stopped_using_them" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v3", applied_version = "v3", applied_at = "2999-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -697,7 +697,7 @@ run "a_group_still_held_is_silent_when_left_out_of_warn_on" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v3", applied_version = "v3", applied_at = "2999-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -722,7 +722,7 @@ run "warns_on_withdrawn_groups_split_auto_scaling_groups_and_contained_workloads
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -750,7 +750,7 @@ run "warns_on_withdrawn_groups_split_auto_scaling_groups_and_contained_workloads
 
   assert {
     condition = alltrue([
-      for n in data.xshield_enforcement_status.this.notices : alltrue([
+      for n in data.xshield_aws_enforcement_status.this.notices : alltrue([
         for shown in compact([n.asset_name, n.group, n.reason, n.message]) :
         strcontains(join("\n", output.problems[{ withdrawing = "group_withdrawing", asgPolicyDiffers = "asg_policy_differs", assetContained = "workload_contained" }[n.code]]), shown)
       ])
@@ -777,7 +777,7 @@ run "warns_on_asset_policies_in_test_when_asked_with_one_line_for_each_direction
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -806,7 +806,7 @@ run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_no
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -850,7 +850,7 @@ run "a_malicious_ip_block_template_aws_does_not_enforce_points_at_turning_it_on"
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -877,7 +877,7 @@ run "warns_on_an_ended_revert_when_asked" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -905,7 +905,7 @@ run "warns_by_default_on_malicious_addresses_a_network_acl_does_not_block" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -941,7 +941,7 @@ run "a_network_acl_block_named_in_fail_on_stops_the_plan" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -964,7 +964,7 @@ run "a_block_template_named_in_fail_on_stops_the_plan" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -987,7 +987,7 @@ run "a_contained_workload_named_in_fail_on_stops_the_plan" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1009,7 +1009,7 @@ run "a_problem_left_out_of_warn_on_is_silent" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-06-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1034,7 +1034,7 @@ run "a_problem_named_in_fail_on_stops_the_plan" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1070,7 +1070,7 @@ run "fail_on_alone_stops_the_plan_without_a_warning" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1112,7 +1112,7 @@ run "notices_that_differ_in_group_message_reason_or_time_each_keep_a_line" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "converged", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1156,7 +1156,7 @@ run "held_changes_ports_and_states_that_differ_in_subject_change_set_time_or_kin
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "waiting", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2999-01-01T00:00:00Z",
       pending_since   = null, pending_security_groups_added = [], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
@@ -1219,7 +1219,7 @@ run "quiet_about_every_notice_and_finding_frozen_at_the_hand_over" {
   }
 
   override_data {
-    target = data.xshield_enforcement_status.this
+    target = data.xshield_aws_enforcement_status.this
     values = {
       published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-01-01T00:00:00Z",
       pending_since   = "2020-01-01T00:00:00Z", pending_security_groups_added = ["web-1"], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],

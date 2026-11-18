@@ -338,7 +338,7 @@ func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resou
 	return []func() resource.Resource{
 		NewAssetResource,
 		newAWSSecurityGroupChangesReceiptResource,
-		newEnforcementReceiptResource,
+		newAWSEnforcementReceiptResource,
 		NewNamedNetworkResource,
 		NewPolicyDeploymentResource,
 		NewSegmentResource,
@@ -375,7 +375,7 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		NewWorkRequestDataSource,
 
 		newAWSEnforcementSnapshotDataSource,
-		newEnforcementStatusDataSource,
+		newAWSEnforcementStatusDataSource,
 		newAWSSecurityGroupChangesDataSource,
 		newAWSSecurityGroupRulesDataSource,
 	}

@@ -13,7 +13,7 @@ import (
 // example must set every map of resource IDs the schema has.
 func TestTheReceiptExampleSetsEveryMapOfResourceIDs(t *testing.T) {
 	t.Parallel()
-	example, err := os.ReadFile("../../examples/resources/xshield_enforcement_receipt/resource.tf")
+	example, err := os.ReadFile("../../examples/resources/xshield_aws_enforcement_receipt/resource.tf")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
@@ -173,7 +173,7 @@ run "a_full_interface_keeps_the_group_already_applied_and_leaves_only_the_new_on
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this[0]
+    target = data.xshield_aws_enforcement_status.this[0]
     values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0ours" }, handover_attachments = {} }
   }
   override_data {

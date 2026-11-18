@@ -164,8 +164,8 @@ locals {
   # AWS applies a network ACL to every resource in its subnets. Xshield's notice of one that blocks for more than the
   # template's workloads is repeated while it is about this version.
   review_network_acl_reach = [
-    for notice in try(tolist(data.xshield_enforcement_status.this[0].notices), []) : "Network ACL ${notice.group}: ${notice.message}."
-    if notice.code == "networkAclReach" && try(data.xshield_enforcement_status.this[0].expected_version == local.snap.version, false)
+    for notice in try(tolist(data.xshield_aws_enforcement_status.this[0].notices), []) : "Network ACL ${notice.group}: ${notice.message}."
+    if notice.code == "networkAclReach" && try(data.xshield_aws_enforcement_status.this[0].expected_version == local.snap.version, false)
   ]
   review_counts = concat(
     [

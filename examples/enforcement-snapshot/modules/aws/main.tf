@@ -164,7 +164,7 @@ locals {
 # Xshield refuses the workload once discovery shows the interface full. Only those
 # interfaces, and the groups new to them, are read. A version with network ACL entries
 # reads the status too, for the review's account of how far each network ACL reaches.
-data "xshield_enforcement_status" "this" {
+data "xshield_aws_enforcement_status" "this" {
   count = length(local.attachments) > 0 || length(local.snap.network_acl_entries) > 0 ? 1 : 0
 
   cloud_account_id = local.account_id
@@ -172,7 +172,7 @@ data "xshield_enforcement_status" "this" {
 }
 
 locals {
-  held_attachments = { for key in toset(concat(try(keys(data.xshield_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_enforcement_status.this[0].handover_attachments), []))) : key => true }
+  held_attachments = { for key in toset(concat(try(keys(data.xshield_aws_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_aws_enforcement_status.this[0].handover_attachments), []))) : key => true }
   new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !lookup(local.held_attachments, key, false) }
 }
 
@@ -322,7 +322,7 @@ resource "aws_network_acl_rule" "this" {
 }
 
 # Nothing published means nothing to confirm, so no receipt is created or sent.
-resource "xshield_enforcement_receipt" "this" {
+resource "xshield_aws_enforcement_receipt" "this" {
   count = local.snap.published ? 1 : 0
 
   cloud_account_id = local.snap.cloud_account_id

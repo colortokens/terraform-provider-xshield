@@ -156,13 +156,13 @@ variable "max_unobserved_age" {
   }
 }
 
-data "xshield_enforcement_status" "this" {
+data "xshield_aws_enforcement_status" "this" {
   cloud_account_id = var.cloud_account_id
   region           = var.region
 }
 
 locals {
-  status = data.xshield_enforcement_status.this
+  status = data.xshield_aws_enforcement_status.this
   where  = "${var.cloud_account_id}/${var.region}"
   now    = plantimestamp()
   shown  = 20

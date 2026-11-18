@@ -94,7 +94,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
@@ -148,11 +148,11 @@ run "receipt_lists_what_was_created" {
   command = apply
 
   assert {
-    condition     = toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
+    condition     = toset(keys(xshield_aws_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
     error_message = "the receipt lists every security group, and only those"
   }
   assert {
-    condition     = length(xshield_enforcement_receipt.this[0].rules) == 5 && length(xshield_enforcement_receipt.this[0].attachments) == 2
+    condition     = length(xshield_aws_enforcement_receipt.this[0].rules) == 5 && length(xshield_aws_enforcement_receipt.this[0].attachments) == 2
     error_message = "the receipt lists every rule and attachment"
   }
   assert {
@@ -188,11 +188,11 @@ run "gone_interface_is_neither_attached_nor_receipted" {
     error_message = "only the interface that still exists is attached"
   }
   assert {
-    condition     = toset(keys(xshield_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1"])
+    condition     = toset(keys(xshield_aws_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1"])
     error_message = "the receipt leaves out the gone interface's attachment"
   }
   assert {
-    condition     = toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
+    condition     = toset(keys(xshield_aws_enforcement_receipt.this[0].security_groups)) == toset(keys(aws_security_group.this))
     error_message = "the receipt still lists every group"
   }
 }
@@ -215,7 +215,7 @@ run "new_attachment_is_left_off_a_full_interface" {
     error_message = "the full interface is left out and the other attached"
   }
   assert {
-    condition     = toset(keys(xshield_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1b"])
+    condition     = toset(keys(xshield_aws_enforcement_receipt.this[0].attachments)) == toset(["i-0a1/eni-0a1b"])
     error_message = "the receipt leaves out the attachment the interface had no room for"
   }
   assert {
@@ -229,7 +229,7 @@ run "applied_attachment_stays_on_a_full_interface" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this[0]
+    target = data.xshield_aws_enforcement_status.this[0]
     values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0abc" } }
   }
 
@@ -244,7 +244,7 @@ run "handed_over_attachment_stays_on_a_full_interface" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this[0]
+    target = data.xshield_aws_enforcement_status.this[0]
     values = { applied_attachments = {}, handover_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0abc" } }
   }
 
@@ -311,7 +311,7 @@ run "empty_snapshot_still_reports" {
   }
 
   assert {
-    condition     = length(aws_security_group.this) == 0 && xshield_enforcement_receipt.this[0].snapshot_version == "v43"
+    condition     = length(aws_security_group.this) == 0 && xshield_aws_enforcement_receipt.this[0].snapshot_version == "v43"
     error_message = "moving to Off removes every group and still confirms the version"
   }
 }

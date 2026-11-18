@@ -28,9 +28,9 @@ func planReceipt(t *testing.T, p receiptPlan) (warnings []string, errors int) {
 	t.Helper()
 	ctx := context.Background()
 	api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": p.held})
-	receipt := &enforcementReceiptResource{api: api}
+	receipt := &awsEnforcementReceiptResource{api: api}
 	if p.unwired {
-		receipt = &enforcementReceiptResource{}
+		receipt = &awsEnforcementReceiptResource{}
 	}
 	var schemaResp resource.SchemaResponse
 	receipt.Schema(ctx, resource.SchemaRequest{}, &schemaResp)

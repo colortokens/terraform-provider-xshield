@@ -60,7 +60,7 @@ the xshield agent and cannot be created through Terraform; its tests import an
 existing asset and then update it.
 
 The enforcement snapshot tests need an account and region whose policy delivery
-is Terraform pipeline. The `xshield_enforcement_receipt` test sends receipts with
+is Terraform pipeline. The `xshield_aws_enforcement_receipt` test sends receipts with
 placeholder AWS IDs, so use an account that no real pipeline applies. Without a
 tenant, the unit tests in `internal/provider` cover each snapshot, status,
 receipt and customer group change request against a local stand-in, and the

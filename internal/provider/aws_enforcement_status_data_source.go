@@ -6,25 +6,23 @@ import (
 	"net/http"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &enforcementStatusDataSource{}
-var _ datasource.DataSourceWithConfigure = &enforcementStatusDataSource{}
+var _ datasource.DataSource = &awsEnforcementStatusDataSource{}
+var _ datasource.DataSourceWithConfigure = &awsEnforcementStatusDataSource{}
 
-func newEnforcementStatusDataSource() datasource.DataSource {
-	return &enforcementStatusDataSource{}
+func newAWSEnforcementStatusDataSource() datasource.DataSource {
+	return &awsEnforcementStatusDataSource{}
 }
 
-// enforcementStatusDataSource reports what Xshield knows about an enforcement
+// awsEnforcementStatusDataSource reports what Xshield knows about an enforcement
 // point without changing anything, so it can run inside a check block that is
 // evaluated when no apply is happening.
-type enforcementStatusDataSource struct {
+type awsEnforcementStatusDataSource struct {
 	api cloudSnapshotAPI
 }
 
@@ -59,8 +57,7 @@ type wireNotice struct {
 	Message   string `json:"message"`
 }
 
-type enforcementStatusDataSourceModel struct {
-	Cloud                    types.String        `tfsdk:"cloud"`
+type awsEnforcementStatusDataSourceModel struct {
 	CloudAccountID           types.String        `tfsdk:"cloud_account_id"`
 	Region                   types.String        `tfsdk:"region"`
 	Published                types.Bool          `tfsdk:"published"`
@@ -87,11 +84,11 @@ type enforcementStatusDataSourceModel struct {
 	HandOverAttachments      types.Map           `tfsdk:"handover_attachments"`
 }
 
-func (d *enforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_enforcement_status"
+func (d *awsEnforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_enforcement_status"
 }
 
-func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	str := func(description string) schema.StringAttribute {
 		return schema.StringAttribute{Computed: true, Description: description}
 	}
@@ -104,9 +101,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 			"It reads only, so it can run inside a `check` block. Where checks are evaluated on a schedule, such as HCP " +
 			"Terraform continuous validation, that alerts on drift and stalled pipelines without anyone running an apply.",
 		Attributes: map[string]schema.Attribute{
-			"cloud": schema.StringAttribute{Optional: true, Computed: true, Validators: []validator.String{stringvalidator.OneOf(cloudAWS)},
-				Description: "Cloud to report on. Only `aws` is supported, and it is the default."},
-			"cloud_account_id": schema.StringAttribute{Required: true, Description: "Cloud account to report on."},
+			"cloud_account_id": schema.StringAttribute{Required: true, Description: "AWS account to report on."},
 			"region":           schema.StringAttribute{Required: true, Description: "Region to report on."},
 			"published": schema.BoolAttribute{Computed: true, Description: "False while Xshield has published nothing for this " +
 				"account and region. `state` is then `unpublished`, versions are null and every list is empty, so checks stay quiet."},
@@ -233,7 +228,7 @@ func (d *enforcementStatusDataSource) Schema(ctx context.Context, req datasource
 	}
 }
 
-func (d *enforcementStatusDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *awsEnforcementStatusDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -279,8 +274,8 @@ type wireDrift struct {
 	} `json:"findings"`
 }
 
-func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data enforcementStatusDataSourceModel
+func (d *awsEnforcementStatusDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data awsEnforcementStatusDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -289,16 +284,13 @@ func (d *enforcementStatusDataSource) Read(ctx context.Context, req datasource.R
 		resp.Diagnostics.AddError("provider not configured", "the xshield provider block was not configured before this data source was read")
 		return
 	}
-	if data.Cloud.IsNull() {
-		data.Cloud = types.StringValue(cloudAWS)
-	}
 	account, region := data.CloudAccountID.ValueString(), data.Region.ValueString()
 
 	data.DriftFindings = []driftFindingModel{}
 	data.DriftEvaluated = types.BoolValue(false)
 	data.DriftObservedAt = types.StringNull()
 	var st wireStatus
-	err := d.api.get(ctx, d.api.endpoint(data.Cloud.ValueString(), account, region, "status"), &st)
+	err := d.api.get(ctx, d.api.endpoint(cloudAWS, account, region, "status"), &st)
 	if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {
 		setUnpublished(&data)
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -336,13 +328,13 @@ func stringMap(m map[string]string) types.Map {
 	return types.MapValueMust(types.StringType, values)
 }
 
-func setUnpublished(data *enforcementStatusDataSourceModel) {
+func setUnpublished(data *awsEnforcementStatusDataSourceModel) {
 	setStatus(data, wireStatus{State: "unpublished"})
 	data.Published = types.BoolValue(false)
 	data.ExpectedVersion = types.StringNull()
 }
 
-func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
+func setStatus(data *awsEnforcementStatusDataSourceModel, st wireStatus) {
 	data.Published = types.BoolValue(true)
 	data.State = types.StringValue(st.State)
 	data.ExpectedVersion = types.StringValue(st.Expected.Version)
@@ -377,7 +369,7 @@ func setStatus(data *enforcementStatusDataSourceModel, st wireStatus) {
 	}
 }
 
-func setDrift(data *enforcementStatusDataSourceModel, drift wireDrift) {
+func setDrift(data *awsEnforcementStatusDataSourceModel, drift wireDrift) {
 	data.DriftEvaluated = types.BoolValue(!drift.ObservationStale)
 	data.DriftObservedAt = optionalString(drift.ObservedAt)
 	for _, f := range drift.Findings {

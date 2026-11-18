@@ -20,14 +20,14 @@ import (
 func sentExclusiveRules(t *testing.T, exclusiveRules types.Bool) any {
 	t.Helper()
 	api, recorder, _ := newSnapshotTestAPI(t, http.StatusCreated, `{"receiptId":"rcpt-1","appliedAt":"2026-01-02T03:04:05Z"}`)
-	data := enforcementReceiptResourceModel{
-		Cloud: types.StringValue(cloudAWS), CloudAccountID: types.StringValue("111111111111"), Region: types.StringValue("us-east-1"),
+	data := awsEnforcementReceiptResourceModel{
+		CloudAccountID: types.StringValue("111111111111"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType),
 		ExclusiveRules: exclusiveRules,
 	}
 	var diags diag.Diagnostics
-	(&enforcementReceiptResource{api: api}).send(context.Background(), &data, &diags)
+	(&awsEnforcementReceiptResource{api: api}).send(context.Background(), &data, &diags)
 	if diags.HasError() || len(recorder.requests) != 1 {
 		t.Fatalf("send: %v over %d requests", diags, len(recorder.requests))
 	}
@@ -110,17 +110,17 @@ func TestChangingExclusiveRulesUpdatesTheReceiptInPlace(t *testing.T) {
 		"run_id":          tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
 	})
 	resp := resource.UpdateResponse{State: tfsdk.State{Schema: s, Raw: prior}}
-	(&enforcementReceiptResource{api: api}).Update(ctx, resource.UpdateRequest{
+	(&awsEnforcementReceiptResource{api: api}).Update(ctx, resource.UpdateRequest{
 		Plan:  tfsdk.Plan{Schema: s, Raw: plan},
 		State: tfsdk.State{Schema: s, Raw: prior},
 	}, &resp)
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("update: %v", resp.Diagnostics)
 	}
-	var before, applied enforcementReceiptResourceModel
+	var before, applied awsEnforcementReceiptResourceModel
 	(&tfsdk.State{Schema: s, Raw: prior}).Get(ctx, &before)
 	resp.State.Get(ctx, &applied)
-	if !applied.ExclusiveRules.ValueBool() || !applied.CloudAccountID.Equal(before.CloudAccountID) || !applied.Region.Equal(before.Region) || !applied.Cloud.Equal(before.Cloud) {
+	if !applied.ExclusiveRules.ValueBool() || !applied.CloudAccountID.Equal(before.CloudAccountID) || !applied.Region.Equal(before.Region) {
 		t.Errorf("after the update the receipt holds %+v, want only exclusive_rules changed from %+v", applied, before)
 	}
 }
@@ -134,8 +134,8 @@ func TestReceiptStateWithoutExclusiveRulesReadsAsFalse(t *testing.T) {
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/status": {http.StatusOK, readTestdata(t, "status.json")}})
 	s := receiptSchema(ctx)
 	stored := tfsdk.State{Schema: s}
-	model := enforcementReceiptResourceModel{
-		ID: types.StringValue(held.Applied.ReceiptID), Cloud: types.StringValue(cloudAWS), CloudAccountID: types.StringValue("111111111111"),
+	model := awsEnforcementReceiptResourceModel{
+		ID: types.StringValue(held.Applied.ReceiptID), CloudAccountID: types.StringValue("111111111111"),
 		Region: types.StringValue("us-east-1"), Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType),
 		NetworkACLEntries: types.MapNull(types.StringType), RunID: types.StringValue(""), AppliedAt: types.StringValue("2026-01-01T00:00:00Z"), ExclusiveRules: types.BoolNull(),
@@ -144,7 +144,7 @@ func TestReceiptStateWithoutExclusiveRulesReadsAsFalse(t *testing.T) {
 		t.Fatal(diags)
 	}
 	resp := resource.ReadResponse{State: stored}
-	(&enforcementReceiptResource{api: api}).Read(ctx, resource.ReadRequest{State: stored}, &resp)
+	(&awsEnforcementReceiptResource{api: api}).Read(ctx, resource.ReadRequest{State: stored}, &resp)
 	var exclusiveRules types.Bool
 	resp.State.GetAttribute(ctx, path.Root("exclusive_rules"), &exclusiveRules)
 	if exclusiveRules.IsNull() || exclusiveRules.ValueBool() {
@@ -165,9 +165,9 @@ func TestImportedReceiptTakesExclusiveRulesFromTheOneXshieldHolds(t *testing.T) 
 		if err := json.Unmarshal([]byte(held), &status); err != nil {
 			t.Fatal(err)
 		}
-		var imported enforcementReceiptResourceModel
+		var imported awsEnforcementReceiptResourceModel
 		var diags diag.Diagnostics
-		(&enforcementReceiptResource{}).adopt(context.Background(), &imported, status, &diags)
+		(&awsEnforcementReceiptResource{}).adopt(context.Background(), &imported, status, &diags)
 		if diags.HasError() || imported.ExclusiveRules.IsNull() || imported.ExclusiveRules.ValueBool() != want {
 			t.Errorf("held %s: imported exclusive_rules %s, want %v (%v)", held, imported.ExclusiveRules, want, diags)
 		}

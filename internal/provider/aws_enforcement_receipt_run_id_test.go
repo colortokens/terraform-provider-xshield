@@ -19,7 +19,6 @@ func receiptObject(t *testing.T, receiptSchema schema.Schema, overrides map[stri
 	ids := tftypes.Map{ElementType: tftypes.String}
 	values := map[string]tftypes.Value{
 		"id":                  tftypes.NewValue(tftypes.String, "receipt-1"),
-		"cloud":               tftypes.NewValue(tftypes.String, cloudAWS),
 		"cloud_account_id":    tftypes.NewValue(tftypes.String, "123456789012"),
 		"region":              tftypes.NewValue(tftypes.String, "us-east-1"),
 		"workspace":           tftypes.NewValue(tftypes.String, "enforcement"),
@@ -66,7 +65,7 @@ func TestAReceiptSentAgainByALaterRunRecordsThatRun(t *testing.T) {
 	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{
 		"/receipts": {http.StatusCreated, `{"receiptId":"receipt-2","appliedAt":"2026-01-02T00:00:00Z"}`},
 	})
-	receipt := &enforcementReceiptResource{api: api}
+	receipt := &awsEnforcementReceiptResource{api: api}
 	var schemaResp resource.SchemaResponse
 	receipt.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
 	receiptSchema := schemaResp.Schema
@@ -92,7 +91,7 @@ func TestAReceiptSentAgainByALaterRunRecordsThatRun(t *testing.T) {
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("update: %v", resp.Diagnostics)
 	}
-	var applied enforcementReceiptResourceModel
+	var applied awsEnforcementReceiptResourceModel
 	if diags := resp.State.Get(ctx, &applied); diags.HasError() {
 		t.Fatalf("reading state back: %v", diags)
 	}

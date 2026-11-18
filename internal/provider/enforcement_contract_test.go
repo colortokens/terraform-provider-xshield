@@ -176,7 +176,7 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 		wireNotice{Code: "assetRefused", Reason: "NO_FREE_SLOT", AssetID: "a-db-1", AssetName: "rds/db-1", Message: "no Xshield group can be written for this workload as it stands"},
 		wireNotice{Code: "changeSetHeld", Reason: "cs-1", Group: "vpc-1/web", Since: "2026-11-01T09:00:00Z", Message: "the change waits for the workspace that owns web to apply"})
 
-	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
+	data := awsEnforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"), DriftFindings: []driftFindingModel{}}
 	setStatus(&data, st)
 	setDrift(&data, *st.Drift)
 
@@ -210,7 +210,7 @@ func TestStatusMapsPendingWorkNoticesAndDrift(t *testing.T) {
 	}
 
 	var resp datasource.SchemaResponse
-	(&enforcementStatusDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
+	(&awsEnforcementStatusDataSource{}).Schema(ctx, datasource.SchemaRequest{}, &resp)
 	state := tfsdk.State{Schema: resp.Schema}
 	if diags := state.Set(ctx, data); diags.HasError() {
 		t.Errorf("the status model does not fit its schema: %v", diags)
@@ -221,12 +221,12 @@ func TestReceiptModelFitsTheResourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var resp resource.SchemaResponse
-	(&enforcementReceiptResource{}).Schema(ctx, resource.SchemaRequest{}, &resp)
+	(&awsEnforcementReceiptResource{}).Schema(ctx, resource.SchemaRequest{}, &resp)
 	mapOf := func(m map[string]string) types.Map {
 		v, _ := types.MapValueFrom(ctx, types.StringType, m)
 		return v
 	}
-	data := enforcementReceiptResourceModel{
+	data := awsEnforcementReceiptResourceModel{
 		ID: types.StringValue("rcpt-1"), CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: mapOf(map[string]string{"i-db-1": "sg-1"}), Rules: mapOf(map[string]string{"k": "sgr-1"}),
@@ -285,7 +285,7 @@ func ptr[T any](v T) *T { return &v }
 // Until its first receipt, an account moved from connector delivery gets the connector's IDs to import.
 func TestStatusMapsTheHandOverForImport(t *testing.T) {
 	t.Parallel()
-	var data enforcementStatusDataSourceModel
+	var data awsEnforcementStatusDataSourceModel
 	setStatus(&data, wireStatus{State: "unapplied", HandOver: &wireRenderedResources{
 		SecurityGroups: map[string]string{"i-web": "sg-0web"},
 		Rules:          map[string]string{"i-web/in/tcp/443/0.0.0.0/0": "sgr-in"},

@@ -35,7 +35,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
@@ -52,7 +52,7 @@ run "nothing_published_creates_nothing" {
       length(aws_vpc_security_group_egress_rule.this) == 0,
       length(aws_network_interface_sg_attachment.this) == 0,
       length(aws_ssm_parameter.directory) == 0,
-      length(xshield_enforcement_receipt.this) == 0,
+      length(xshield_aws_enforcement_receipt.this) == 0,
     ])
     error_message = "with nothing published the module must create nothing, not even a receipt"
   }
@@ -102,11 +102,11 @@ run "first_version_applies_and_is_confirmed" {
     error_message = "the first version creates its groups, attachment and directory entry"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v1" && toset(keys(xshield_enforcement_receipt.this[0].security_groups)) == toset(["i-1", "rds/orders-db"])
+    condition     = xshield_aws_enforcement_receipt.this[0].snapshot_version == "v1" && toset(keys(xshield_aws_enforcement_receipt.this[0].security_groups)) == toset(["i-1", "rds/orders-db"])
     error_message = "the first apply is confirmed with a receipt for exactly what it created"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].attachments["i-1/eni-1"] == "eni-1_${aws_security_group.this["i-1"].id}"
+    condition     = xshield_aws_enforcement_receipt.this[0].attachments["i-1/eni-1"] == "eni-1_${aws_security_group.this["i-1"].id}"
     error_message = "the receipt records each attachment by the ID that imports it, network interface first"
   }
 }
@@ -170,7 +170,7 @@ run "changes_touch_only_what_changed" {
     error_message = "the database's directory entry still names the same group"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v2" && length(xshield_enforcement_receipt.this[0].rules) == 3
+    condition     = xshield_aws_enforcement_receipt.this[0].snapshot_version == "v2" && length(xshield_aws_enforcement_receipt.this[0].rules) == 3
     error_message = "the receipt moves to the new version"
   }
 }
@@ -306,7 +306,7 @@ run "off_removes_everything_and_still_confirms" {
     error_message = "an empty published version removes every group"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].snapshot_version == "v5"
+    condition     = xshield_aws_enforcement_receipt.this[0].snapshot_version == "v5"
     error_message = "and still confirms the version, so Xshield knows the removal was applied"
   }
 }

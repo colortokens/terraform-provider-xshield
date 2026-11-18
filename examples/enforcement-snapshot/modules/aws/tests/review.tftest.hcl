@@ -191,7 +191,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }

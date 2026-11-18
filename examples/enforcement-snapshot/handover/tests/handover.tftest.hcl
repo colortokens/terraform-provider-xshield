@@ -43,7 +43,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = {
       applied_version          = null
       handover_security_groups = { "i-1" = "sg-00000000000000001", "i-2" = "sg-00000000000000002" }

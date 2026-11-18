@@ -12,33 +12,29 @@ import (
 	"time"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ resource.Resource = &enforcementReceiptResource{}
-var _ resource.ResourceWithConfigure = &enforcementReceiptResource{}
-var _ resource.ResourceWithImportState = &enforcementReceiptResource{}
-var _ resource.ResourceWithModifyPlan = &enforcementReceiptResource{}
+var _ resource.Resource = &awsEnforcementReceiptResource{}
+var _ resource.ResourceWithConfigure = &awsEnforcementReceiptResource{}
+var _ resource.ResourceWithImportState = &awsEnforcementReceiptResource{}
+var _ resource.ResourceWithModifyPlan = &awsEnforcementReceiptResource{}
 
-func newEnforcementReceiptResource() resource.Resource { return &enforcementReceiptResource{} }
+func newAWSEnforcementReceiptResource() resource.Resource { return &awsEnforcementReceiptResource{} }
 
-type enforcementReceiptResource struct {
+type awsEnforcementReceiptResource struct {
 	api cloudSnapshotAPI
 }
 
-type enforcementReceiptResourceModel struct {
+type awsEnforcementReceiptResourceModel struct {
 	ID                types.String `tfsdk:"id"`
-	Cloud             types.String `tfsdk:"cloud"`
 	CloudAccountID    types.String `tfsdk:"cloud_account_id"`
 	Region            types.String `tfsdk:"region"`
 	Workspace         types.String `tfsdk:"workspace"`
@@ -52,11 +48,11 @@ type enforcementReceiptResourceModel struct {
 	AppliedAt         types.String `tfsdk:"applied_at"`
 }
 
-func (r *enforcementReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_enforcement_receipt"
+func (r *awsEnforcementReceiptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_enforcement_receipt"
 }
 
-func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *awsEnforcementReceiptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	idMap := func(description string, required bool) schema.MapAttribute {
 		return schema.MapAttribute{ElementType: types.StringType, Required: required, Optional: !required, Description: description}
 	}
@@ -80,17 +76,9 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 				Computed:    true,
 				Description: "Receipt identifier assigned by Xshield.",
 			},
-			"cloud": schema.StringAttribute{
-				Optional:      true,
-				Computed:      true,
-				Default:       stringdefault.StaticString(cloudAWS),
-				Validators:    []validator.String{stringvalidator.OneOf(cloudAWS)},
-				Description:   "Cloud the snapshot was applied to. Only `aws` is supported, and it is the default.",
-				PlanModifiers: replace,
-			},
 			"cloud_account_id": schema.StringAttribute{
 				Required:      true,
-				Description:   "Cloud account the snapshot was applied to.",
+				Description:   "AWS account the snapshot was applied to.",
 				PlanModifiers: replace,
 			},
 			"region": schema.StringAttribute{
@@ -136,7 +124,7 @@ func (r *enforcementReceiptResource) Schema(ctx context.Context, req resource.Sc
 	}
 }
 
-func (r *enforcementReceiptResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *awsEnforcementReceiptResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -173,7 +161,7 @@ type wireConvergence struct {
 	Applied *wireReceipt `json:"applied"`
 }
 
-func receiptRequest(ctx context.Context, data *enforcementReceiptResourceModel, runID string) (wireReceipt, diag.Diagnostics) {
+func receiptRequest(ctx context.Context, data *awsEnforcementReceiptResourceModel, runID string) (wireReceipt, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	ids := func(m types.Map) map[string]string {
 		out := map[string]string{}
@@ -241,7 +229,7 @@ func receiptIsCurrent(status wireConvergence, receiptID string) bool {
 	return status.Applied != nil && status.Applied.ReceiptID == receiptID
 }
 
-func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcementReceiptResourceModel, diags *diag.Diagnostics) {
+func (r *awsEnforcementReceiptResource) send(ctx context.Context, data *awsEnforcementReceiptResourceModel, diags *diag.Diagnostics) {
 	runID := os.Getenv("TFC_RUN_ID")
 	body, d := receiptRequest(ctx, data, runID)
 	diags.Append(d...)
@@ -252,7 +240,7 @@ func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcement
 		ReceiptID string    `json:"receiptId"`
 		AppliedAt time.Time `json:"appliedAt"`
 	}
-	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
+	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
 	if err := r.api.post(ctx, endpoint, body, http.StatusCreated, &created); err != nil {
 		diags.AddError("Xshield did not accept the apply receipt", err.Error()+"\n\n"+receiptAdvice(err))
 		return
@@ -262,8 +250,8 @@ func (r *enforcementReceiptResource) send(ctx context.Context, data *enforcement
 	data.RunID = types.StringValue(runID)
 }
 
-func (r *enforcementReceiptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data enforcementReceiptResourceModel
+func (r *awsEnforcementReceiptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data awsEnforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -275,8 +263,8 @@ func (r *enforcementReceiptResource) Create(ctx context.Context, req resource.Cr
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *enforcementReceiptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data enforcementReceiptResourceModel
+func (r *awsEnforcementReceiptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data awsEnforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -288,16 +276,11 @@ func (r *enforcementReceiptResource) Update(ctx context.Context, req resource.Up
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data enforcementReceiptResourceModel
+func (r *awsEnforcementReceiptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var data awsEnforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
-	}
-	// State written before the attribute existed holds no cloud, and every such receipt was for AWS.
-	if data.Cloud.IsNull() {
-		data.Cloud = types.StringValue(cloudAWS)
-		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud"), cloudAWS)...)
 	}
 	if data.ExclusiveRules.IsNull() {
 		data.ExclusiveRules = types.BoolValue(false)
@@ -305,7 +288,7 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 	}
 
 	var status wireConvergence
-	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
+	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
 		resp.Diagnostics.AddWarning("Cannot confirm Xshield still holds this apply receipt", err.Error())
 		return
@@ -329,17 +312,17 @@ func (r *enforcementReceiptResource) Read(ctx context.Context, req resource.Read
 
 // ModifyPlan warns before a receipt is created where Xshield already holds one: the state was lost, or another
 // workspace applies to the same place. A warning, because applying again after a destroy looks the same from here.
-func (r *enforcementReceiptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *awsEnforcementReceiptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.api.client == nil || req.Plan.Raw.IsNull() || !req.State.Raw.IsNull() {
 		return
 	}
-	var data enforcementReceiptResourceModel
+	var data awsEnforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() || data.Cloud.IsUnknown() || data.CloudAccountID.IsUnknown() || data.Region.IsUnknown() {
+	if resp.Diagnostics.HasError() || data.CloudAccountID.IsUnknown() || data.Region.IsUnknown() {
 		return
 	}
 	var status wireConvergence
-	endpoint := r.api.endpoint(data.Cloud.ValueString(), data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
+	endpoint := r.api.endpoint(cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
 		resp.Diagnostics.AddWarning("Cannot check whether Xshield already holds an apply receipt", err.Error())
 		return
@@ -357,7 +340,7 @@ func (r *enforcementReceiptResource) ModifyPlan(ctx context.Context, req resourc
 
 // plansHeldReceipt is true when the held receipt is the one this plan sends, as after an apply whose receipt Xshield
 // recorded but whose answer never arrived: the resources it names stay in state and the receipt does not.
-func plansHeldReceipt(ctx context.Context, held wireReceipt, planned enforcementReceiptResourceModel) bool {
+func plansHeldReceipt(ctx context.Context, held wireReceipt, planned awsEnforcementReceiptResourceModel) bool {
 	if planned.SnapshotVersion.IsUnknown() || planned.Workspace.IsUnknown() || planned.ExclusiveRules.IsUnknown() {
 		return false
 	}
@@ -370,7 +353,7 @@ func plansHeldReceipt(ctx context.Context, held wireReceipt, planned enforcement
 		maps.Equal(sent.Resources.NetworkACLEntries, held.Resources.NetworkACLEntries)
 }
 
-func resentReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
+func resentReceiptWarning(held wireReceipt, planned awsEnforcementReceiptResourceModel) string {
 	return fmt.Sprintf("Xshield's latest receipt for account %s in %s, sent by workspace %q%s, is exactly what this plan sends: "+
 		"the same snapshot version, security group, rule, attachment and network ACL entry IDs, and exclusive_rules. The apply that sent it most "+
 		"likely did not get Xshield's answer, so this workspace's state does not hold the receipt. It names the resources this "+
@@ -379,7 +362,7 @@ func resentReceiptWarning(held wireReceipt, planned enforcementReceiptResourceMo
 		planned.CloudAccountID.ValueString(), planned.Region.ValueString(), held.Workspace, appliedOn(held))
 }
 
-func heldReceiptWarning(held wireReceipt, planned enforcementReceiptResourceModel) string {
+func heldReceiptWarning(held wireReceipt, planned awsEnforcementReceiptResourceModel) string {
 	by := fmt.Sprintf("by workspace %q", held.Workspace)
 	if !planned.Workspace.IsUnknown() && planned.Workspace.ValueString() == held.Workspace {
 		by = fmt.Sprintf("under this workspace's name, %q,", held.Workspace)
@@ -401,7 +384,7 @@ func appliedOn(held wireReceipt) string {
 
 // adopt fills an imported receipt from the one Xshield currently holds, so a
 // lost state file can be recovered without sending a new receipt.
-func (r *enforcementReceiptResource) adopt(ctx context.Context, data *enforcementReceiptResourceModel, status wireConvergence, diags *diag.Diagnostics) {
+func (r *awsEnforcementReceiptResource) adopt(ctx context.Context, data *awsEnforcementReceiptResourceModel, status wireConvergence, diags *diag.Diagnostics) {
 	if status.Applied == nil {
 		diags.AddError("Nothing to import", "Xshield holds no apply receipt for this account and region yet.")
 		return
@@ -434,20 +417,18 @@ func appliedAtValue(at *time.Time) types.String {
 	return types.StringValue(at.UTC().Format(time.RFC3339Nano))
 }
 
-func (r *enforcementReceiptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *awsEnforcementReceiptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// A receipt is a historical record; Xshield keeps it after the resource goes.
 }
 
-// ImportState takes "<cloud_account_id>/<region>" for an AWS account and adopts
-// the receipt Xshield currently holds for it. An id with more parts is refused,
-// so one that names the cloud first can be added without changing this one.
-func (r *enforcementReceiptResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+// ImportState takes "<cloud_account_id>/<region>" and adopts the receipt Xshield currently holds for that AWS account
+// and region. No region holds a slash, so an id with more parts is refused.
+func (r *awsEnforcementReceiptResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	account, region, ok := strings.Cut(req.ID, "/")
 	if !ok || account == "" || region == "" || strings.Contains(region, "/") {
 		resp.Diagnostics.AddError("Invalid import id", fmt.Sprintf("expected <cloud_account_id>/<region>, got %q", req.ID))
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud"), cloudAWS)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("cloud_account_id"), account)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("region"), region)...)
 }

@@ -68,7 +68,7 @@ func TestASnapshotWithNoNetworkACLEntryHasAnEmptyMap(t *testing.T) {
 	}
 }
 
-func receiptWithNetworkACLEntries(entries map[string]string) enforcementReceiptResourceModel {
+func receiptWithNetworkACLEntries(entries map[string]string) awsEnforcementReceiptResourceModel {
 	ctx := context.Background()
 	mapOf := func(m map[string]string) types.Map {
 		if m == nil {
@@ -77,7 +77,7 @@ func receiptWithNetworkACLEntries(entries map[string]string) enforcementReceiptR
 		v, _ := types.MapValueFrom(ctx, types.StringType, m)
 		return v
 	}
-	return enforcementReceiptResourceModel{
+	return awsEnforcementReceiptResourceModel{
 		CloudAccountID:    types.StringValue("123456789012"),
 		Region:            types.StringValue("us-east-1"),
 		Workspace:         types.StringValue("ws"),
@@ -159,9 +159,9 @@ func TestAnImportedReceiptTakesTheNetworkACLEntriesXshieldHolds(t *testing.T) {
 	} {
 		status := wireConvergence{Applied: &wireReceipt{ReceiptID: "receipt-1", Version: "version-1", Workspace: "enforcement",
 			Resources: wireRenderedResources{SecurityGroups: map[string]string{"web": "sg-0web"}, NetworkACLEntries: c.held}}}
-		var imported enforcementReceiptResourceModel
+		var imported awsEnforcementReceiptResourceModel
 		var diags diag.Diagnostics
-		(&enforcementReceiptResource{}).adopt(context.Background(), &imported, status, &diags)
+		(&awsEnforcementReceiptResource{}).adopt(context.Background(), &imported, status, &diags)
 		if diags.HasError() {
 			t.Fatal(diags)
 		}
@@ -184,7 +184,7 @@ func TestStatusNamesTheNetworkACLEntriesTheLastReceiptHolds(t *testing.T) {
 	t.Parallel()
 	st := loadJSON[wireStatus](t, "status.json")
 	st.Applied.Resources.NetworkACLEntries = map[string]string{inboundDenyKey: "acl-0a1b:50:-1:false"}
-	data := enforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1")}
+	data := awsEnforcementStatusDataSourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1")}
 	setStatus(&data, st)
 	got := map[string]string{}
 	data.AppliedNetworkACLEntries.ElementsAs(context.Background(), &got, false)

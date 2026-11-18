@@ -70,7 +70,7 @@ func TestAttributesTakeXshieldsFieldNamesExceptWhereListed(t *testing.T) {
 		}
 		return s.Schema.Attributes
 	}
-	snapshot, status, rules := attributesOf("xshield_aws_enforcement_snapshot"), attributesOf("xshield_enforcement_status"),
+	snapshot, status, rules := attributesOf("xshield_aws_enforcement_snapshot"), attributesOf("xshield_aws_enforcement_status"),
 		attributesOf("xshield_aws_security_group_rules")
 	published := fieldType(reflect.TypeOf(wireSnapshot{}), "AWS")
 

@@ -1,5 +1,5 @@
 # Rebuilds a lost enforcement state from the last receipt. Add this file to the enforcement workspace,
-# set snapshot_version = data.xshield_enforcement_status.recover.applied_version on the module, apply
+# set snapshot_version = data.xshield_aws_enforcement_status.recover.applied_version on the module, apply
 # once, then delete this file and the pin.
 #
 # The plan shows every resource as an import, network ACL entries among them, nothing to add and nothing
@@ -21,7 +21,7 @@
 data "aws_caller_identity" "recover" {}
 data "aws_region" "recover" {}
 
-data "xshield_enforcement_status" "recover" {
+data "xshield_aws_enforcement_status" "recover" {
   cloud_account_id = data.aws_caller_identity.recover.account_id
   region           = data.aws_region.recover.region
 }
@@ -29,7 +29,7 @@ data "xshield_enforcement_status" "recover" {
 data "xshield_aws_enforcement_snapshot" "recover" {
   cloud_account_id = data.aws_caller_identity.recover.account_id
   region           = data.aws_region.recover.region
-  version          = data.xshield_enforcement_status.recover.applied_version
+  version          = data.xshield_aws_enforcement_status.recover.applied_version
 }
 
 # Keys of the last receipt's objects not to import, by kind: one deleted outside Terraform since, which the apply creates
@@ -50,13 +50,13 @@ variable "skipped_imports" {
 }
 
 locals {
-  recovered_security_groups = { for k in setsubtract(keys(data.xshield_enforcement_status.recover.applied_security_groups), var.skipped_imports.security_groups) : k => data.xshield_enforcement_status.recover.applied_security_groups[k] }
-  recovered_rules           = { for k in setsubtract(keys(data.xshield_enforcement_status.recover.applied_rules), var.skipped_imports.rules) : k => data.xshield_enforcement_status.recover.applied_rules[k] }
+  recovered_security_groups = { for k in setsubtract(keys(data.xshield_aws_enforcement_status.recover.applied_security_groups), var.skipped_imports.security_groups) : k => data.xshield_aws_enforcement_status.recover.applied_security_groups[k] }
+  recovered_rules           = { for k in setsubtract(keys(data.xshield_aws_enforcement_status.recover.applied_rules), var.skipped_imports.rules) : k => data.xshield_aws_enforcement_status.recover.applied_rules[k] }
   # An interface that went with its instance since the last receipt has no attachment to import: the module declares
   # none for it.
-  recovered_attachments = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys), var.skipped_imports.attachments) : k => data.xshield_enforcement_status.recover.applied_attachments[k] }
+  recovered_attachments = { for k in setsubtract(setintersection(keys(data.xshield_aws_enforcement_status.recover.applied_attachments), module.xshield_enforcement.attachment_keys), var.skipped_imports.attachments) : k => data.xshield_aws_enforcement_status.recover.applied_attachments[k] }
   # An entry on a network ACL deleted since the last receipt has nothing to import: the module declares none for it.
-  recovered_network_acl_entries = { for k in setsubtract(setintersection(keys(data.xshield_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_imports.network_acl_entries) : k => data.xshield_enforcement_status.recover.applied_network_acl_entries[k] }
+  recovered_network_acl_entries = { for k in setsubtract(setintersection(keys(data.xshield_aws_enforcement_status.recover.applied_network_acl_entries), module.xshield_enforcement.network_acl_entry_keys), var.skipped_imports.network_acl_entries) : k => data.xshield_aws_enforcement_status.recover.applied_network_acl_entries[k] }
   present_directory_parameters  = { for name in toset(data.aws_ssm_parameters_by_path.recover.names) : name => true }
   # A directory parameter deleted since the last receipt has nothing to import: the plan leaves it out, and the apply
   # writes it again.
@@ -111,6 +111,6 @@ import {
 }
 
 import {
-  to = module.xshield_enforcement.xshield_enforcement_receipt.this[0]
+  to = module.xshield_enforcement.xshield_aws_enforcement_receipt.this[0]
   id = "${data.aws_caller_identity.recover.account_id}/${data.aws_region.recover.region}"
 }

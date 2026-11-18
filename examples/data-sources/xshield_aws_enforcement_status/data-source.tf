@@ -1,13 +1,13 @@
 # Two of the problems examples/enforcement-snapshot/monitor reports, each as a named check with the monitor's
 # own condition. The monitor is the full version: every problem, including policy that has never been applied,
 # a list of what is waiting, each limit as a variable, and a fail_on list that stops a plan.
-data "xshield_enforcement_status" "this" {
+data "xshield_aws_enforcement_status" "this" {
   cloud_account_id = "123456789012"
   region           = "us-east-1"
 }
 
 locals {
-  status        = data.xshield_enforcement_status.this
+  status        = data.xshield_aws_enforcement_status.this
   where         = "${local.status.cloud_account_id}/${local.status.region}"
   max_apply_age = "24h"
 

@@ -48,7 +48,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = { applied_attachments = {}, handover_attachments = {} }
   }
 }
@@ -83,7 +83,7 @@ run "denies_each_listed_address_on_its_network_acl" {
     error_message = "the outbound IPv6 entry takes the snapshot's direction, number and address"
   }
   assert {
-    condition = xshield_enforcement_receipt.this[0].network_acl_entries == tomap({
+    condition = xshield_aws_enforcement_receipt.this[0].network_acl_entries == tomap({
       "acl-0a1b/in/203.0.113.7/32"   = "acl-0a1b:50:-1:false"
       "acl-0a1b/out/2001:db8::7/128" = "acl-0a1b:98:-1:true"
     })
@@ -102,7 +102,7 @@ run "denies_each_listed_address_on_its_network_acl" {
     error_message = "the review says what each network ACL blocks and counts its entries"
   }
   assert {
-    condition     = length(data.aws_network_acls.present) == 1 && length(data.xshield_enforcement_status.this) == 1
+    condition     = length(data.aws_network_acls.present) == 1 && length(data.xshield_aws_enforcement_status.this) == 1
     error_message = "a version with network ACL entries reads the network ACLs, so an old role stops at plan, and the status, for the review"
   }
   assert {
@@ -139,7 +139,7 @@ run "a_pinned_version_leaves_out_the_entries_of_a_network_acl_aws_no_longer_show
   expect_failures = [check.pinned_network_acl_entries_present]
 
   assert {
-    condition     = length(aws_network_acl_rule.this) == 0 && xshield_enforcement_receipt.this[0].network_acl_entries == null && length(output.network_acl_entry_keys) == 0
+    condition     = length(aws_network_acl_rule.this) == 0 && xshield_aws_enforcement_receipt.this[0].network_acl_entries == null && length(output.network_acl_entry_keys) == 0
     error_message = "a pinned version declares and receipts no entry on a network ACL AWS no longer shows"
   }
 }
@@ -148,7 +148,7 @@ run "reviews_how_far_a_network_acl_reaches" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this[0]
+    target = data.xshield_aws_enforcement_status.this[0]
     values = {
       expected_version     = "v42"
       applied_attachments  = {}
@@ -184,7 +184,7 @@ run "leaves_out_a_reach_notice_about_another_version" {
   command = plan
 
   override_data {
-    target = data.xshield_enforcement_status.this[0]
+    target = data.xshield_aws_enforcement_status.this[0]
     values = {
       expected_version     = "v41"
       applied_attachments  = {}
@@ -235,7 +235,7 @@ run "sends_no_network_acl_entry_without_one" {
     error_message = "no entry without one in the snapshot"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].network_acl_entries == null
+    condition     = xshield_aws_enforcement_receipt.this[0].network_acl_entries == null
     error_message = "a receipt without network ACL entries leaves them null, as a receipt sent before them holds, so upgrading plans no change"
   }
   assert {
@@ -243,7 +243,7 @@ run "sends_no_network_acl_entry_without_one" {
     error_message = "the review's count reads as before for a version without network ACL entries"
   }
   assert {
-    condition     = length(data.aws_network_acls.present) == 0 && length(data.xshield_enforcement_status.this) == 0
+    condition     = length(data.aws_network_acls.present) == 0 && length(data.xshield_aws_enforcement_status.this) == 0
     error_message = "a version without network ACL entries or attachments reads neither the network ACLs nor the status"
   }
 }

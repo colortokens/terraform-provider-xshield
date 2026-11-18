@@ -20,7 +20,7 @@
 # its configuration changes, and a published version keeps the configuration it
 # was published with, so with publish = true delete the versions that list the
 # group once no alias uses them. The withdrawing notice of the
-# xshield_enforcement_status data source names what still holds the group.
+# xshield_aws_enforcement_status data source names what still holds the group.
 #
 # The module reads only SSM, so this workspace needs no Xshield provider and no
 # Xshield credentials. A change to the group's rules never shows in its plan.

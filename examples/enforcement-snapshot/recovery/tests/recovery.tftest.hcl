@@ -49,7 +49,7 @@ mock_provider "xshield" {
       withdrawing_security_groups = []
     }
   }
-  mock_data "xshield_enforcement_status" {
+  mock_data "xshield_aws_enforcement_status" {
     defaults = {
       applied_version         = "v1"
       applied_security_groups = { "i-1" = "sg-00000000000000001", "i-2" = "sg-00000000000000002" }
@@ -93,7 +93,7 @@ override_resource {
   values = { id = "nacl-1950887270" }
 }
 override_resource {
-  target = module.xshield_enforcement.xshield_enforcement_receipt.this[0]
+  target = module.xshield_enforcement.xshield_aws_enforcement_receipt.this[0]
   values = { id = "receipt-1" }
 }
 

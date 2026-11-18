@@ -15,7 +15,7 @@ const gatewayRefusal = `{"message":"invalid signature"}`
 
 var unauthorizedCauses = []string{"Settings > API Keys", "tenancy_id, user_id and fingerprint", "private_key", "clock", "10 seconds"}
 
-func receiptWithRules(t *testing.T, n int) enforcementReceiptResourceModel {
+func receiptWithRules(t *testing.T, n int) awsEnforcementReceiptResourceModel {
 	t.Helper()
 	rules := map[string]string{}
 	for i := range n {
@@ -25,16 +25,16 @@ func receiptWithRules(t *testing.T, n int) enforcementReceiptResourceModel {
 	if diags.HasError() {
 		t.Fatal(diags)
 	}
-	return enforcementReceiptResourceModel{Cloud: types.StringValue(cloudAWS), CloudAccountID: types.StringValue("123456789012"),
+	return awsEnforcementReceiptResourceModel{CloudAccountID: types.StringValue("123456789012"),
 		Region: types.StringValue("us-east-1"), Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: ruleIDs, Attachments: types.MapNull(types.StringType)}
 }
 
-func sendReceipt(t *testing.T, status int, answer string, receipt enforcementReceiptResourceModel) (sentBytes int, refusal string) {
+func sendReceipt(t *testing.T, status int, answer string, receipt awsEnforcementReceiptResourceModel) (sentBytes int, refusal string) {
 	t.Helper()
 	api, recorder, _ := newSnapshotTestAPI(t, status, answer)
 	var diags diag.Diagnostics
-	(&enforcementReceiptResource{api: api}).send(context.Background(), &receipt, &diags)
+	(&awsEnforcementReceiptResource{api: api}).send(context.Background(), &receipt, &diags)
 	if !diags.HasError() || len(recorder.requests) != 1 {
 		t.Fatalf("want one refused request, got %d request(s) and %v", len(recorder.requests), diags)
 	}

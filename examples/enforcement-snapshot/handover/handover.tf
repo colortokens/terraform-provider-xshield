@@ -12,7 +12,7 @@
 data "aws_caller_identity" "handover" {}
 data "aws_region" "handover" {}
 
-data "xshield_enforcement_status" "handover" {
+data "xshield_aws_enforcement_status" "handover" {
   cloud_account_id = data.aws_caller_identity.handover.account_id
   region           = data.aws_region.handover.region
 }
@@ -23,25 +23,25 @@ data "xshield_aws_enforcement_snapshot" "handover" {
 }
 
 import {
-  for_each = data.xshield_enforcement_status.handover.handover_security_groups
+  for_each = data.xshield_aws_enforcement_status.handover.handover_security_groups
   to       = module.xshield_enforcement.aws_security_group.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if can(data.xshield_aws_enforcement_snapshot.handover.ingress_rules[k]) }
+  for_each = { for k, v in data.xshield_aws_enforcement_status.handover.handover_rules : k => v if can(data.xshield_aws_enforcement_snapshot.handover.ingress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_ingress_rule.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = { for k, v in data.xshield_enforcement_status.handover.handover_rules : k => v if can(data.xshield_aws_enforcement_snapshot.handover.egress_rules[k]) }
+  for_each = { for k, v in data.xshield_aws_enforcement_status.handover.handover_rules : k => v if can(data.xshield_aws_enforcement_snapshot.handover.egress_rules[k]) }
   to       = module.xshield_enforcement.aws_vpc_security_group_egress_rule.this[each.key]
   id       = each.value
 }
 
 import {
-  for_each = module.xshield_enforcement.exclusive_rules_enabled ? data.xshield_enforcement_status.handover.handover_security_groups : {}
+  for_each = module.xshield_enforcement.exclusive_rules_enabled ? data.xshield_aws_enforcement_status.handover.handover_security_groups : {}
   to       = module.xshield_enforcement.aws_vpc_security_group_rules_exclusive.this[each.key]
   id       = each.value
 }
@@ -49,7 +49,7 @@ import {
 # An interface that went with its instance since the connector last looked has no attachment to
 # import: the module declares none for it.
 import {
-  for_each = { for k in setintersection(keys(data.xshield_enforcement_status.handover.handover_attachments), module.xshield_enforcement.attachment_keys) : k => data.xshield_enforcement_status.handover.handover_attachments[k] }
+  for_each = { for k in setintersection(keys(data.xshield_aws_enforcement_status.handover.handover_attachments), module.xshield_enforcement.attachment_keys) : k => data.xshield_aws_enforcement_status.handover.handover_attachments[k] }
   to       = module.xshield_enforcement.aws_network_interface_sg_attachment.this[each.key]
   id       = each.value
 }

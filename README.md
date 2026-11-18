@@ -101,8 +101,8 @@ explains each step in depth, and its modules use these:
 | Resource or data source | Does |
 | --- | --- |
 | [`xshield_aws_enforcement_snapshot`](docs/data-sources/aws_enforcement_snapshot.md) | Fetches the groups, rules and attachments Xshield expects in one account and region. |
-| [`xshield_enforcement_receipt`](docs/resources/enforcement_receipt.md) | Reports which AWS resource was created for each key in the snapshot. |
-| [`xshield_enforcement_status`](docs/data-sources/enforcement_status.md) | Says whether the account has converged, and what drift the cloud connector sees. |
+| [`xshield_aws_enforcement_receipt`](docs/resources/aws_enforcement_receipt.md) | Reports which AWS resource was created for each key in the snapshot. |
+| [`xshield_aws_enforcement_status`](docs/data-sources/aws_enforcement_status.md) | Says whether the account has converged, and what drift the cloud connector sees. |
 | [`xshield_aws_security_group_changes`](docs/data-sources/aws_security_group_changes.md) | Lists your own groups that an approved Full control change applies to. |
 | [`xshield_aws_security_group_rules`](docs/data-sources/aws_security_group_rules.md) | Returns the rules to declare for one of those groups, with the approved change applied. |
 

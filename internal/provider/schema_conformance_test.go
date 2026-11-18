@@ -167,7 +167,7 @@ var pipelineDataSources = []string{
 	"data.xshield_aws_enforcement_snapshot",
 	"data.xshield_aws_security_group_changes",
 	"data.xshield_aws_security_group_rules",
-	"data.xshield_enforcement_status",
+	"data.xshield_aws_enforcement_status",
 }
 
 // `terraform test` cannot set a computed nested attribute from mock_data: the mocked value comes back empty, as

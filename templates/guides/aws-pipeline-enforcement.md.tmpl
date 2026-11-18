@@ -227,7 +227,7 @@ An Auto Scaling group's running instances keep the group they launched with, and
 
 AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as above, and the group that kept them for the workload then leaves in the same way.
 
-**Done when** `xshield_enforcement_status` shows no `awaitingAttach`, `changeSetHeld` or `withdrawing` notice and the monitor in step 9 warns of nothing. A workload reads Synchronized at the cloud connector's first observation after its owner's apply. Xshield asks the connector to observe the account every 10 minutes.
+**Done when** `xshield_aws_enforcement_status` shows no `awaitingAttach`, `changeSetHeld` or `withdrawing` notice and the monitor in step 9 warns of nothing. A workload reads Synchronized at the cloud connector's first observation after its owner's apply. Xshield asks the connector to observe the account every 10 minutes.
 
 ## Step 9: Watch it
 

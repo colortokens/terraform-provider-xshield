@@ -111,7 +111,7 @@ run "each_created_group_holds_exactly_its_own_rules" {
     error_message = "a group with no rule gets empty sets, so any rule added to it is removed"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].exclusive_rules == true && output.exclusive_rules_enabled == true
+    condition     = xshield_aws_enforcement_receipt.this[0].exclusive_rules == true && output.exclusive_rules_enabled == true
     error_message = "the receipt and the output say the groups hold only their declared rules"
   }
 }
@@ -128,7 +128,7 @@ run "turned_off_creates_none" {
     error_message = "turned off, no exclusive rules resource is created and the groups still are"
   }
   assert {
-    condition     = xshield_enforcement_receipt.this[0].exclusive_rules == false && output.exclusive_rules_enabled == false
+    condition     = xshield_aws_enforcement_receipt.this[0].exclusive_rules == false && output.exclusive_rules_enabled == false
     error_message = "turned off, the receipt and the output say a rule added by hand stays"
   }
 }

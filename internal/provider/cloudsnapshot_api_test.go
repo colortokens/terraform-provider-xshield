@@ -153,7 +153,7 @@ func TestReceiptRequestCarriesEveryRenderedID(t *testing.T) {
 		v, _ := types.MapValueFrom(ctx, types.StringType, m)
 		return v
 	}
-	data := enforcementReceiptResourceModel{
+	data := awsEnforcementReceiptResourceModel{
 		CloudAccountID:  types.StringValue("123456789012"),
 		Region:          types.StringValue("us-east-1"),
 		Workspace:       types.StringValue("ws"),
@@ -194,8 +194,8 @@ func TestReceiptTimeReadsTheSameWhenCreatedAndWhenImported(t *testing.T) {
 	t.Parallel()
 	const served = "2026-10-29T16:59:08.123456Z"
 	api, _, _ := newSnapshotTestAPI(t, http.StatusCreated, `{"receiptId":"rcpt-1","appliedAt":"`+served+`"}`)
-	r := &enforcementReceiptResource{api: api}
-	created := enforcementReceiptResourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
+	r := &awsEnforcementReceiptResource{api: api}
+	created := awsEnforcementReceiptResourceModel{CloudAccountID: types.StringValue("123456789012"), Region: types.StringValue("us-east-1"),
 		Workspace: types.StringValue("ws"), SnapshotVersion: types.StringValue(testVersion),
 		SecurityGroups: types.MapNull(types.StringType), Rules: types.MapNull(types.StringType), Attachments: types.MapNull(types.StringType)}
 	var diags diag.Diagnostics
@@ -204,7 +204,7 @@ func TestReceiptTimeReadsTheSameWhenCreatedAndWhenImported(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"applied":{"receiptId":"rcpt-1","appliedAt":"`+served+`"}}`), &status); err != nil {
 		t.Fatal(err)
 	}
-	var imported enforcementReceiptResourceModel
+	var imported awsEnforcementReceiptResourceModel
 	r.adopt(context.Background(), &imported, status, &diags)
 	if diags.HasError() {
 		t.Fatal(diags)
