@@ -5,7 +5,9 @@
 # on it instead, with no other tooling. Run this on a schedule, or where
 # checks are evaluated between runs, such as HCP Terraform continuous
 # validation. It manages no resources, so -detailed-exitcode says nothing
-# here: read the warnings, the problems output, or use fail_on.
+# here: read the warnings, the problems output, or use fail_on. Once the
+# account is handed back to the cloud connector it reports nothing: the status
+# keeps what it showed at the hand-over, and no pipeline run can change it.
 #
 #   drift_high             the cloud differs from what was applied, and access may be wider than approved
 #   drift_medium           the cloud differs in a way the next enforcement apply restores
@@ -21,8 +23,7 @@
 #   never_applied          published policy has never been applied, for longer than max_apply_age
 #   owner_apply_overdue    a Full control change has waited longer than max_owner_apply_age for the workspace
 #                          that owns a customer security group
-#   pipeline_stopped       no enforcement plan has run for longer than max_run_gap, while the account is not
-#                          handed back to the cloud connector
+#   pipeline_stopped       no enforcement plan has run for longer than max_run_gap
 #   drift_not_evaluated    Xshield has not looked for drift for longer than max_unobserved_age: since the last apply, or
 #                          since its latest observation
 #   port_not_narrowed      a port is still deployed in Xshield, but the Full control change that narrowed its
@@ -236,7 +237,7 @@ locals {
     }
   ]
 
-  problems = tomap({
+  found = tomap({
     drift_high = [
       for f in local.status.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
     ]
@@ -263,10 +264,10 @@ locals {
       for c in local.overdue_held_causes :
       "  ${c.label}: ${c.message} (change set ${coalesce(c.reason, "unknown")}, waiting since ${coalesce(c.since, "an unknown time")}${length(c.workloads) == 0 ? "" : "; workloads: ${join(", ", c.workloads)}"})"
     ]
-    pipeline_stopped = local.status.published && local.status.state != "handedOver" && local.status.last_checked_at != null && local.run_overdue ? [
+    pipeline_stopped = local.status.published && local.status.last_checked_at != null && local.run_overdue ? [
       "  last enforcement plan: ${coalesce(local.status.last_checked_at, "never")}. Until that workspace plans again, nothing new Xshield approves is applied and the state below may be stale.",
     ] : []
-    drift_not_evaluated = local.status.applied_version != null && local.status.state != "handedOver" && local.unobserved ? [
+    drift_not_evaluated = local.status.applied_version != null && local.unobserved ? [
       "  applied ${coalesce(local.status.applied_at, "at an unknown time")}; last observation ${coalesce(local.status.drift_observed_at, "none")}${local.status.drift_evaluated || local.status.drift_observed_at == null ? "" : ", taken before that apply"}. No drift finding here means nobody looked, not that nothing drifted: check that the cloud connector is running and can reach the account.",
     ] : []
     port_not_narrowed = [
@@ -291,6 +292,8 @@ locals {
       if contains(["networkAclEntryRefused", "networkAclNotObserved", "networkAclEntryShadowed"], n.code)
     ]
   })
+
+  problems = local.status.state == "handedOver" ? tomap({ for name, lines in local.found : name => [] }) : local.found
 
   headlines = {
     drift_high                     = "Xshield sees high-severity drift in ${local.where}:"

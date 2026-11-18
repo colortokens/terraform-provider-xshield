@@ -16,6 +16,14 @@
 #   aws ec2 describe-network-acls --network-acl-ids <network_acl_id> --query 'NetworkAcls[].Entries[?RuleNumber==`<rule_number>` && Egress==`<egress>`]'
 #   aws ec2 delete-network-acl-entry --network-acl-id <network_acl_id> --rule-number <rule_number> --ingress
 # with --egress instead of --ingress for an entry whose egress is true.
+#
+# The directory parameters stay because the workspaces that own a database, function or service look their groups
+# up through them. List them before you apply, as the state stops holding them:
+#   terraform show -json | jq -r '.values.root_module | .. | objects | select(.mode? == "managed" and .type? == "aws_ssm_parameter") | .values.name'
+# Each name is /colortokens/v1/<handle>/security-groups, for the handle a group lookup names. A lookup whose
+# parameter is gone returns no group, so the next apply of a workspace that still uses it takes the group off its
+# resource. Delete a parameter only once no workspace uses a lookup with its handle:
+#   aws ssm delete-parameter --name <name>
 removed {
   from = module.xshield_enforcement
 

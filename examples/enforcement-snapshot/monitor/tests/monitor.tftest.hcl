@@ -1204,3 +1204,42 @@ run "held_changes_ports_and_states_that_differ_in_subject_change_set_time_or_kin
     error_message = "A withdrawn group and a split Auto Scaling group with the same words are two problems, but reported ${jsonencode(output.problems)}."
   }
 }
+
+run "quiet_about_every_notice_and_finding_frozen_at_the_hand_over" {
+  command = plan
+
+  variables {
+    warn_on = [
+      "drift_high", "drift_medium", "drift_unrestored", "workload_not_enforced", "awaiting_attach", "prefix_list_size_unknown", "apply_overdue", "never_applied",
+      "owner_apply_overdue", "pipeline_stopped", "drift_not_evaluated", "port_not_narrowed", "unpublished",
+      "group_withdrawing", "asg_policy_differs", "workload_contained", "asset_policy_in_test", "carriers_not_acknowledged",
+      "revert_ended", "block_rule_not_enforced", "network_acl_block_not_enforced",
+    ]
+    fail_on = ["awaiting_attach", "group_withdrawing", "drift_high"]
+  }
+
+  override_data {
+    target = data.xshield_enforcement_status.this
+    values = {
+      published       = true, state = "handedOver", expected_version = "v2", applied_version = "v2", applied_at = "2020-01-01T00:00:00Z", last_checked_at = "2020-01-01T00:00:00Z",
+      pending_since   = "2020-01-01T00:00:00Z", pending_security_groups_added = ["web-1"], pending_rules_added = [], pending_rules_removed = [], pending_attachments_added = [],
+      drift_evaluated = true, drift_observed_at = "2020-01-02T00:00:00Z"
+      drift_findings = [
+        { kind = "ruleUnmanaged", severity = "high", restoration = "manual", resource = "sgr-0a1", resource_name = null, key = "i-0a1", detail = "tcp 22 from 0.0.0.0/0 was added outside the pipeline", detected_at = "2020-01-01T00:00:00Z" },
+        { kind = "ruleMissing", severity = "medium", restoration = "pipeline", resource = "sg-0b2", resource_name = null, key = "i-0b2/in/tcp/443/10.0.0.0/8", detail = "the rule is gone", detected_at = null },
+      ]
+      notices = [
+        for code in [
+          "assetRefused", "groupRefused", "awaitingAttach", "prefixListSizeUnknown", "changeSetHeld", "portNotNarrowed", "withdrawing", "asgPolicyDiffers",
+          "assetContained", "assetPolicyInTest", "carriersNotAcknowledged", "revertEnded", "blockRuleNotEnforced", "networkAclEntryRefused",
+          "networkAclNotObserved", "networkAclEntryShadowed",
+        ] : { code = code, reason = null, asset_id = "asset-db-1", asset_name = "rds/db-1", group = "rds/db-1", since = "2020-01-01T00:00:00Z", message = "frozen at the hand-over" }
+      ]
+    }
+  }
+
+  assert {
+    condition     = length(output.problems) == 0
+    error_message = "The status keeps what it showed at the hand-over and the cloud connector delivers now, so nothing here can be cleared, but the monitor reported ${jsonencode(output.problems)}."
+  }
+}
