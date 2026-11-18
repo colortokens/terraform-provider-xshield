@@ -13,12 +13,14 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | [`modules/aws`](../../modules/aws/) | The enforcement module. One block per AWS account and region. |
 | [`modules/aws-group-lookup`](../../modules/aws-group-lookup/) | Gives a database, function or service the group it must attach. Reads only SSM. |
 | [`modules/aws-security-group-rules`](../../modules/aws-security-group-rules/) | Declares one of your own security group's rules under Full control. |
+| [`modules/azure`](modules/azure/) | The enforcement module for Azure. One block per subscription and region. |
 
 **Workspaces to copy and fill in.**
 
 | Directory | What it is |
 |--|--|
 | `enforcement/` | An enforcement workspace. |
+| `enforcement-azure/` | An enforcement workspace for an Azure subscription and region. |
 | `enforcement-role/` | The IAM role the enforcement workspace assumes, with only the permissions it needs. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and can stop a plan on the ones you choose. |
 | `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order, on a schedule. |
