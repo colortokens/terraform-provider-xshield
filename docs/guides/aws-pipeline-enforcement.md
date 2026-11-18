@@ -220,7 +220,7 @@ A revert under Full control goes the other way: step 7's table says to apply the
 **When policy stops using a group**, after a rollback, an undeploy or a workload leaving policy, the same order removes it:
 
 1. The enforcement workspace's apply empties the workload's directory entry. It keeps the group and its rules, so the workload loses no access while it still carries the group.
-2. The owner's workspace takes the group out of the resource's own list at its next run.
+2. The owner's workspace takes the group out of the resource's own list at its next run. An Auto Scaling group's instances keep the group they launched with until they are replaced: start an instance refresh once its workspace has applied, or give the Auto Scaling group an `instance_refresh` block, with its `launch_template` naming the template's `latest_version` rather than `$Latest`, so that apply starts one.
 3. Once the cloud connector shows nothing holding the group, Xshield publishes a version without it, and the enforcement workspace's next apply deletes the group and its directory entry. In a chain that runs on a schedule, that is the next run's enforcement job. Nobody deletes the group by hand.
 
 AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as above, and the group that kept them for the workload then leaves in the same way.
