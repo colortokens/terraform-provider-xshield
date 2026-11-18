@@ -73,6 +73,8 @@ func TestAttributesTakeXshieldsFieldNamesExceptWhereListed(t *testing.T) {
 	snapshot, status, rules := attributesOf("xshield_aws_enforcement_snapshot"), attributesOf("xshield_aws_enforcement_status"),
 		attributesOf("xshield_aws_security_group_rules")
 	published := fieldType(reflect.TypeOf(wireSnapshot{}), "AWS")
+	azureSnapshot, azurePublished := attributesOf("xshield_azure_enforcement_snapshot"), fieldType(reflect.TypeOf(wireSnapshot{}), "Azure")
+	azureGroup := objectFields(azureSnapshot["network_security_groups"].GetType())
 
 	for _, mirrored := range []struct {
 		what      string
@@ -88,6 +90,12 @@ func TestAttributesTakeXshieldsFieldNamesExceptWhereListed(t *testing.T) {
 		{"a notice of the status", reflect.TypeOf(wireNotice{}), objectFields(status["notices"].GetType())},
 		{"a drift finding of the status", fieldType(reflect.TypeOf(wireDrift{}), "Findings"), objectFields(status["drift_findings"].GetType())},
 		{"a rule a change moves", reflect.TypeOf(wireRuleMatch{}), objectFields(rules["undeclared_pending_rules"].GetType())},
+		{"the Azure snapshot", azurePublished, attributeNames(azureSnapshot)},
+		{"a network security group of the Azure snapshot", fieldType(azurePublished, "NetworkSecurityGroups"), azureGroup},
+		{"a security rule of the Azure snapshot", reflect.TypeOf(wireAzureSecurityRule{}), objectFields(azureGroup["security_rules"])},
+		{"a subnet association of the Azure snapshot", fieldType(azurePublished, "SubnetAssociations"), objectFields(azureSnapshot["subnet_associations"].GetType())},
+		{"an interface association of the Azure snapshot", fieldType(azurePublished, "InterfaceAssociations"), objectFields(azureSnapshot["interface_associations"].GetType())},
+		{"an asset of the Azure snapshot", fieldType(azurePublished, "Assets"), objectFields(azureSnapshot["assets"].GetType())},
 	} {
 		changed := xshieldNamesChangedForTerraform[mirrored.what]
 		used := map[string]bool{}
