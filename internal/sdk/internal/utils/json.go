@@ -521,6 +521,10 @@ func unmarshalValue(value json.RawMessage, v reflect.Value, tag reflect.StructTa
 			if err := json.Unmarshal(value, &s); err != nil {
 				return err
 			}
+			// The API writes a timestamp it has no value for as "".
+			if s == "" {
+				return nil
+			}
 
 			t, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
