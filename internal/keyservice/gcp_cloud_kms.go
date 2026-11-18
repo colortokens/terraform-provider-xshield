@@ -30,7 +30,7 @@ type gcpCloudKMSKey struct {
 }
 
 func newGCPCloudKMSKey(versionName string, client *http.Client) (*gcpCloudKMSKey, error) {
-	tokens, err := cloudauth.NewDefaultGoogleTokens(gcpCloudKMSScope)
+	tokens, err := cloudauth.NewDefaultGoogleTokens(gcpCloudKMSScope, client)
 	if err != nil {
 		return nil, err
 	}

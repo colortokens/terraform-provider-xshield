@@ -163,8 +163,11 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 			},
 			// Proxy config
 			"proxy_url": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "HTTP proxy URL (format: http://proxy-ip:port)",
+				Optional: true,
+				MarkdownDescription: "HTTP proxy URL (format: http://proxy-ip:port). Requests to Xshield, to the key service of `kms_key`, and for " +
+					"the cloud credentials and OIDC tokens that `kms_key` and `oidc` use go through it, except those to the instance metadata, " +
+					"container and managed identity endpoints on the machine's own network. The Azure CLI and an AWS `credential_process` " +
+					"run as processes of their own, which use the proxy their own settings name.",
 			},
 			"proxy_creds": schema.StringAttribute{
 				Optional:            true,

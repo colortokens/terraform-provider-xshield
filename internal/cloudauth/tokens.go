@@ -3,6 +3,7 @@ package cloudauth
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -35,9 +36,11 @@ func NewAzureTokens(credential azcore.TokenCredential, scope string) *AzureToken
 }
 
 // NewDefaultAzureTokens uses DefaultAzureCredential: environment, workload identity, managed identity, then the
-// developer tools.
-func NewDefaultAzureTokens(scope string) (*AzureTokens, error) {
-	credential, err := azidentity.NewDefaultAzureCredential(nil)
+// developer tools. Its token requests go through client; the developer tools run as processes that use their own
+// proxy settings.
+func NewDefaultAzureTokens(scope string, client *http.Client) (*AzureTokens, error) {
+	options := &azidentity.DefaultAzureCredentialOptions{ClientOptions: azcore.ClientOptions{Transport: credentialHTTPClient(client)}}
+	credential, err := azidentity.NewDefaultAzureCredential(options)
 	if err != nil {
 		return nil, fmt.Errorf("setting up DefaultAzureCredential: %w", err)
 	}
@@ -62,9 +65,10 @@ type googleTokens struct {
 	source oauth2.TokenSource
 }
 
-// NewDefaultGoogleTokens uses Application Default Credentials.
-func NewDefaultGoogleTokens(scope string) (BearerTokens, error) {
-	source, err := google.DefaultTokenSource(context.Background(), scope)
+// NewDefaultGoogleTokens uses Application Default Credentials, with its token requests sent through client. On
+// Google Cloud the metadata server is asked for the token directly, never through a proxy.
+func NewDefaultGoogleTokens(scope string, client *http.Client) (BearerTokens, error) {
+	source, err := google.DefaultTokenSource(context.WithValue(context.Background(), oauth2.HTTPClient, credentialHTTPClient(client)), scope)
 	if err != nil {
 		return nil, fmt.Errorf("finding Google Application Default Credentials: %w", err)
 	}

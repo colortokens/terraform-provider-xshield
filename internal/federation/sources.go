@@ -110,7 +110,7 @@ func NewSubjectTokenSource(ctx context.Context, settings Settings, client *http.
 	case sourceAWS:
 		return newAWSWebIdentityToken(ctx, settings.Audience, client)
 	case sourceAzure:
-		tokens, err := cloudauth.NewDefaultAzureTokens(strings.TrimSuffix(settings.Audience, "/") + "/.default")
+		tokens, err := cloudauth.NewDefaultAzureTokens(strings.TrimSuffix(settings.Audience, "/")+"/.default", client)
 		if err != nil {
 			return nil, err
 		}
@@ -315,7 +315,7 @@ type awsWebIdentityToken struct {
 }
 
 func newAWSWebIdentityToken(ctx context.Context, audience string, client *http.Client) (SubjectTokenSource, error) {
-	cfg, err := cloudauth.LoadAWSConfig(ctx, "")
+	cfg, err := cloudauth.LoadAWSConfig(ctx, "", client)
 	if err != nil {
 		return nil, &SettingError{"source", "Source aws found no AWS region or credentials for the workload: " + err.Error() + ". Set AWS_REGION, " +
 			"and run where the default AWS credential chain finds the workload's role."}

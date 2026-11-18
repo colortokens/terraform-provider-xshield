@@ -30,7 +30,7 @@ type azureKeyVaultKey struct {
 }
 
 func newAzureKeyVaultKey(keyID string, client *http.Client) (*azureKeyVaultKey, error) {
-	tokens, err := cloudauth.NewDefaultAzureTokens(azureKeyVaultScope)
+	tokens, err := cloudauth.NewDefaultAzureTokens(azureKeyVaultScope, client)
 	if err != nil {
 		return nil, err
 	}

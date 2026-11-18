@@ -528,7 +528,7 @@ provider "xshield" {
 - `private_key` (String, Sensitive) The API key's PEM private key itself, for runners that hold it as a secret rather than a file. Can also be set with `XSHIELD_PRIVATE_KEY`. Set this or `private_key_path`.
 - `private_key_path` (String) Path to the API key's PEM private key. Can also be set with `XSHIELD_PRIVATE_KEY_PATH`. Set this or `private_key`.
 - `proxy_creds` (String, Sensitive) Proxy credentials (format: username:password)
-- `proxy_url` (String) HTTP proxy URL (format: http://proxy-ip:port)
+- `proxy_url` (String) HTTP proxy URL (format: http://proxy-ip:port). Requests to Xshield, to the key service of `kms_key`, and for the cloud credentials and OIDC tokens that `kms_key` and `oidc` use go through it, except those to the instance metadata, container and managed identity endpoints on the machine's own network. The Azure CLI and an AWS `credential_process` run as processes of their own, which use the proxy their own settings name.
 - `request_timeout` (Number) HTTP request timeout in seconds (defaults to 60)
 - `server_url` (String) Your Xshield URL, such as `https://<tenant>.colortokens.com`. Can also be set with `XSHIELD_SERVER_URL`. Defaults to `https://ng.colortokens.com`.
 - `tenancy_id` (String) Tenancy ID of the API key, shown with the key in Xshield under **Settings > API Keys**. Can also be set with `XSHIELD_TENANCY_ID`.

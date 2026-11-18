@@ -15,14 +15,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 )
 
-// LoadAWSConfig reads the default AWS credential chain. An empty region is found in the environment, the shared
-// config files or, failing those, the instance metadata service.
-func LoadAWSConfig(ctx context.Context, region string) (aws.Config, error) {
-	option := config.WithRegion(region)
+// LoadAWSConfig reads the default AWS credential chain, whose requests go through client. An empty region is found
+// in the environment, the shared config files or, failing those, the instance metadata service. A credential_process
+// runs as a process that uses its own proxy settings.
+func LoadAWSConfig(ctx context.Context, region string, client *http.Client) (aws.Config, error) {
+	regionOption := config.WithRegion(region)
 	if region == "" {
-		option = config.WithEC2IMDSRegion()
+		regionOption = config.WithEC2IMDSRegion()
 	}
-	cfg, err := config.LoadDefaultConfig(ctx, option)
+	cfg, err := config.LoadDefaultConfig(ctx, regionOption, config.WithHTTPClient(credentialHTTPClient(client)))
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("loading the AWS credential chain: %w", err)
 	}

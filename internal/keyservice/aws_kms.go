@@ -34,7 +34,7 @@ func newAWSKMSKey(ctx context.Context, keyARN string, client *http.Client) (*aws
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := cloudauth.LoadAWSConfig(ctx, region)
+	cfg, err := cloudauth.LoadAWSConfig(ctx, region, client)
 	if err != nil {
 		return nil, err
 	}
