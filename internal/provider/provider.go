@@ -377,6 +377,7 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 		newAWSEnforcementSnapshotDataSource,
 		newAWSEnforcementStatusDataSource,
 		newAzureEnforcementSnapshotDataSource,
+		newAzureEnforcementStatusDataSource,
 		newAWSSecurityGroupChangesDataSource,
 		newAWSSecurityGroupRulesDataSource,
 	}

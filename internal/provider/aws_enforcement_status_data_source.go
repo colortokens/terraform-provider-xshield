@@ -316,12 +316,7 @@ func setStatus(data *awsEnforcementStatusDataSourceModel, st wireStatus) {
 		data.PendingGroups = toStrList(st.PendingDelta.SecurityGroupsAdded)
 		data.PendingAttachments = toStrList(st.PendingDelta.AttachmentsAdded)
 	}
-	data.Notices = []noticeModel{}
-	for _, n := range st.Notices {
-		data.Notices = append(data.Notices, noticeModel{Code: types.StringValue(n.Code), Reason: optionalString(n.Reason),
-			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Since: optionalString(n.Since),
-			Message: types.StringValue(n.Message)})
-	}
+	data.Notices = noticesOf(st.Notices)
 }
 
 func setDrift(data *awsEnforcementStatusDataSourceModel, drift wireDrift) {
