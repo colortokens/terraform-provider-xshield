@@ -34,7 +34,7 @@ func loadJSON[T any](t *testing.T, name string) T {
 func sampleSnapshotModel(t *testing.T) awsEnforcementSnapshotDataSourceModel {
 	t.Helper()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
-	if err := renderable(snap); err != nil {
+	if err := renderable(cloudAWS, snap); err != nil {
 		t.Fatal(err)
 	}
 	return snapshotModel(types.StringValue("123456789012"), types.StringValue("us-east-1"), &snap)
@@ -158,12 +158,12 @@ func TestSnapshotOfAnotherFormatIsRefusedRatherThanAppliedInPart(t *testing.T) {
 	t.Parallel()
 	snap := loadJSON[wireSnapshot](t, "snapshot.json")
 	snap.SchemaVersion = "5"
-	if err := renderable(snap); err == nil || !strings.Contains(err.Error(), "Upgrade the xshield provider") {
+	if err := renderable(cloudAWS, snap); err == nil || !strings.Contains(err.Error(), "Upgrade the xshield provider") {
 		t.Errorf("a newer snapshot schema was accepted: %v", err)
 	}
 	snap = loadJSON[wireSnapshot](t, "snapshot.json")
 	snap.AWS = nil
-	if err := renderable(snap); err == nil {
+	if err := renderable(cloudAWS, snap); err == nil {
 		t.Error("a snapshot without an AWS plan was accepted")
 	}
 }

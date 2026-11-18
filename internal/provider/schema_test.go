@@ -150,6 +150,7 @@ var dataSourceLookupAttributes = map[string][]string{
 	// what makes the read converge on the expected version.
 	"xshield_aws_enforcement_snapshot":   {"cloud_account_id", "region"},
 	"xshield_aws_enforcement_status":     {"cloud_account_id", "region"},
+	"xshield_azure_enforcement_snapshot": {"cloud_account_id", "region"},
 	"xshield_aws_security_group_changes": {"cloud_account_id", "region"},
 	"xshield_aws_security_group_rules":   {"cloud_account_id", "region", "vpc_id", "group_name"},
 }
