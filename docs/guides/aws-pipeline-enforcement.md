@@ -113,7 +113,7 @@ resource "aws_db_instance" "orders" {
 | App Runner service | `apprunner/<service name>` |
 | Auto Scaling group | `asg/<Auto Scaling group name>` |
 
-Apply that workspace after the enforcement workspace has applied. A new resource gets its group once Xshield has discovered it: apply its workspace again then. In an account the cloud connector enforced, add the lookup only once the first enforcement apply, the one with `handover.tf`, has succeeded: until that apply has written the resource's entry, the lookup returns no group, and an apply takes the connector's group off the resource. Where an earlier move to connector delivery put the resource's group attribute in `ignore_changes`, take it out in the same change.
+Apply that workspace after the enforcement workspace has applied. A new resource gets its group once Xshield has discovered it: apply its workspace again then. In an account the cloud connector enforced, add the lookup only once the first enforcement apply, the one with `handover.tf`, has succeeded: until that apply has written the resource's entry, the lookup returns no group, and an apply takes the connector's group off the resource. Where an earlier move to connector delivery put the resource's group attribute in `ignore_changes`, take it out in the same change, or point a module call back from the copy of its module that ignores it.
 
 **Done when** the resource lists Xshield's group beside its own. [`database/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/database) is a complete example.
 
