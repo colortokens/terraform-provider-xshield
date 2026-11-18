@@ -8,6 +8,11 @@
 # workload's directory entry and keeps the group, the attach job takes the group off the workload, and once Xshield has
 # seen nothing holding the group, the enforcement job of a later run deletes it.
 #
+# The attach job also runs when the enforcement job fails. An enforcement apply removes a group's directory entry before
+# it deletes the group, and AWS refuses to delete a group a resource still carries, as when snapshot_version is pinned to
+# a version without it. Only the owner's apply frees such a group, so the attach job must not wait for the enforcement
+# job to succeed. The full-control job still does: it narrows your groups only after a successful enforcement apply.
+#
 # Copy this file to .github/workflows/ in the repository that holds the workspaces. Change the directories, the
 # region, the schedule and the role each job assumes to yours. The XSHIELD_* values are set as repository secrets and
 # variables, as step 1 of the guide describes. The lookup workspaces need no Xshield credentials.
@@ -61,6 +66,7 @@ jobs:
 
   attach:
     needs: enforcement
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
