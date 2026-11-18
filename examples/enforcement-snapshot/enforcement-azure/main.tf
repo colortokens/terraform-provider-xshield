@@ -48,3 +48,8 @@ output "summary" {
   description = "What the applied version holds, for plan review and run logs."
   value       = module.xshield_enforcement.summary
 }
+
+output "xshield_review" {
+  description = "What the applied version holds, in words. A plan lists the sentences that change."
+  value       = module.xshield_enforcement.review
+}
