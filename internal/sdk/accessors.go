@@ -9,6 +9,7 @@ import (
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/hooks"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/internal/utils"
+	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/retry"
 )
 
@@ -31,6 +32,33 @@ func (e *ResponseTooLargeError) Error() string {
 		size = fmt.Sprintf("%d MiB, over", (e.ContentLength+(1<<20)-1)>>20)
 	}
 	return fmt.Sprintf("the response is %s the %d MiB this provider reads", size, e.Limit>>20)
+}
+
+type AuthenticationMethod int
+
+const (
+	AuthenticationPrivateKey AuthenticationMethod = iota
+	AuthenticationKeyService
+	AuthenticationFederation
+)
+
+// AuthenticationMethod tells how requests are authenticated, by the same tests the authentication hook applies.
+func (s *Xshield) AuthenticationMethod(ctx context.Context) AuthenticationMethod {
+	if s.sdkConfiguration.Security == nil {
+		return AuthenticationPrivateKey
+	}
+	source, err := s.sdkConfiguration.Security(ctx)
+	if err != nil {
+		return AuthenticationPrivateKey
+	}
+	switch source.(type) {
+	case shared.AccessTokenSource:
+		return AuthenticationFederation
+	case shared.RemoteSigner:
+		return AuthenticationKeyService
+	default:
+		return AuthenticationPrivateKey
+	}
 }
 
 func (s *Xshield) ServerURL() string {
