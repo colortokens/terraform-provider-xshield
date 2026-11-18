@@ -1,9 +1,9 @@
 # Runs the enforcement workspace, then the workspaces that attach Xshield's groups through the lookup module, then,
 # under Full control, the workspaces that own a security group Xshield narrows. Each job starts once the jobs it needs
-# have finished, so an owner's workspace reads what the enforcement apply wrote; the enforcement apply writes a
-# directory entry only once every rule of the groups it names is in place. They all run on every schedule, with or
-# without an enforcement change, because some changes become ready at a discovery rather than an apply. A workspace
-# with nothing to change plans no change and applies nothing.
+# have finished, so an owner's workspace reads what the enforcement apply wrote; the enforcement apply writes the
+# directory entries only once every rule is in place. They all run on every schedule, with or without an enforcement
+# change, because some changes become ready at a discovery rather than an apply. A workspace with nothing to change
+# plans no change and applies nothing.
 #
 # The same order removes a group once policy stops using it, as after a rollback: the enforcement job empties the
 # workload's directory entry and keeps the group, the attach job takes the group off the workload, and once Xshield has

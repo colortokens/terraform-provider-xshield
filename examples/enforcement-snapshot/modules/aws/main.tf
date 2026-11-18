@@ -237,10 +237,12 @@ resource "aws_network_interface_sg_attachment" "this" {
 
 # One parameter per database, function or service its own workspace attaches;
 # the aws-group-lookup module reads it by handle, and takes only the groups in the
-# resource's VPC, as AWS refuses a group from another. A parameter is written only
-# once every rule is in place: when AWS refuses a rule, the apply leaves each
-# parameter as it was, so an owner's workspace that runs after the failed apply
-# keeps the groups it carries rather than take a group that is missing a rule.
+# resource's VPC, as AWS refuses a group from another. The parameters are written
+# only once every rule is in place: when AWS refuses any rule, the apply writes or
+# changes none of them, so an owner's workspace that runs after the failed apply
+# reads what the last complete apply wrote rather than a group missing a rule, and
+# no group where no apply has completed yet, as on the first apply after a move
+# from connector delivery.
 resource "aws_ssm_parameter" "directory" {
   for_each = local.snap.directory_entries
 

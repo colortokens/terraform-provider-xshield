@@ -4,7 +4,10 @@
 # A rule in one of those groups that the snapshot does not declare shows as an in-place change of the
 # group's exclusive rules resource, and the apply removes it.
 # Add this file to the enforcement workspace for the first apply after the account moves to pipeline
-# delivery, then delete it.
+# delivery, then delete it. Add the group lookups to the workspaces that own a database, function or service,
+# and take the resource's group attribute out of ignore_changes where an earlier move to connector delivery put
+# it there, only once this apply has succeeded: until it has written their entries, a lookup returns no group,
+# and an apply takes the connector's group off the resource.
 data "aws_caller_identity" "handover" {}
 data "aws_region" "handover" {}
 
