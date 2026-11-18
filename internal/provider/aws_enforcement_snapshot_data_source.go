@@ -282,10 +282,11 @@ type wireMovedRule struct {
 }
 
 type wireSnapshot struct {
-	SchemaVersion  string `json:"schemaVersion"`
-	Version        string `json:"version"`
-	CloudAccountID string `json:"cloudAccountId"`
-	Region         string `json:"region"`
+	SchemaVersion  string         `json:"schemaVersion"`
+	Version        string         `json:"version"`
+	CloudAccountID string         `json:"cloudAccountId"`
+	Region         string         `json:"region"`
+	Azure          *wireAzurePlan `json:"azure"`
 	AWS            *struct {
 		SecurityGroups map[string]struct {
 			Name        string            `json:"name"`
@@ -334,18 +335,21 @@ type wireCustomerGroupChanges struct {
 	Groups         map[string]wireCustomerGroupChange `json:"customerGroupChanges"`
 }
 
-// renderedSnapshotSchemas are the AWS plan formats this provider renders: schema 4 adds network ACL entries to schema 3,
-// which Xshield still serves for a plan that holds none. Another cloud's plan carries a version of its own, so adding
-// one never changes these; a newer AWS format may carry resources this provider would leave out.
-var renderedSnapshotSchemas = []string{"3", "4"}
+// renderedSnapshotSchemas are the plan formats this provider renders, per cloud, as each cloud's plan carries a version
+// of its own: AWS schema 4 adds network ACL entries to schema 3, which Xshield still serves for a plan that holds none.
+// A newer format may carry resources this provider would leave out.
+var renderedSnapshotSchemas = map[string][]string{cloudAWS: {"3", "4"}, cloudAzure: {"1"}}
 
-func renderable(snap wireSnapshot) error {
-	if !slices.Contains(renderedSnapshotSchemas, snap.SchemaVersion) {
-		return fmt.Errorf("this provider applies snapshot schemas %s, and Xshield sent schema %q. Upgrade the xshield provider; "+
-			"applying with this one could leave out resources the snapshot asks for", strings.Join(renderedSnapshotSchemas, " and "), snap.SchemaVersion)
+var cloudNames = map[string]string{cloudAWS: "AWS", cloudAzure: "Azure"}
+
+func renderable(cloud string, snap wireSnapshot) error {
+	schemas := renderedSnapshotSchemas[cloud]
+	if !slices.Contains(schemas, snap.SchemaVersion) {
+		return fmt.Errorf("this provider applies %s snapshot schemas %s, and Xshield sent schema %q. Upgrade the xshield provider; "+
+			"applying with this one could leave out resources the snapshot asks for", cloudNames[cloud], strings.Join(schemas, " and "), snap.SchemaVersion)
 	}
-	if snap.AWS == nil {
-		return fmt.Errorf("the snapshot holds no AWS plan; this account's cloud is not one this provider can apply yet")
+	if hasPlan := map[string]bool{cloudAWS: snap.AWS != nil, cloudAzure: snap.Azure != nil}; !hasPlan[cloud] {
+		return fmt.Errorf("the snapshot holds no %s plan", cloudNames[cloud])
 	}
 	return nil
 }
@@ -367,13 +371,8 @@ func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasou
 		return
 	}
 
-	snap, ok := fetchSnapshot(ctx, d.api, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, data.EnforcementPlan.ValueBool(), &resp.Diagnostics)
+	snap, ok := fetchSnapshot(ctx, d.api, cloudAWS, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, data.EnforcementPlan.ValueBool(), &resp.Diagnostics)
 	if !ok {
-		return
-	}
-	if snap != nil && (snap.CloudAccountID != data.CloudAccountID.ValueString() || snap.Region != data.Region.ValueString()) {
-		resp.Diagnostics.AddError("Xshield served a snapshot for another account or region",
-			fmt.Sprintf("asked for %s/%s, got %s/%s; nothing is applied", data.CloudAccountID.ValueString(), data.Region.ValueString(), snap.CloudAccountID, snap.Region))
 		return
 	}
 	model := snapshotModel(data.CloudAccountID, data.Region, snap)
@@ -381,25 +380,34 @@ func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasou
 	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
+// handedOverAdvice says, per cloud, what to do with this workspace's resources once Xshield hands its account back to
+// the cloud connector: the AWS connector keeps them, while the Azure connector takes over none of them.
+var handedOverAdvice = map[string]string{
+	cloudAWS: "The cloud connector now keeps the groups, rules and attachments this workspace created, so applying would remove " +
+		"what it enforces. Unless it was done before the switch, first stop the runs of each workspace that looks its " +
+		"groups up and add the resource's group attribute to its ignore_changes, as the provider's " +
+		"enforcement-snapshot/leave example says: its lookup would put back the groups the connector takes off. Then " +
+		"replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as that example " +
+		"shows, and stop running this workspace.",
+	cloudAzure: "The cloud connector takes over none of the network security groups this workspace created, and Xshield " +
+		"switches an account back only once the version it expects holds none. Remove the module block and apply, which " +
+		"deletes any group and association this workspace still holds, as when the last version was not applied, then stop " +
+		"running this workspace.",
+}
+
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
 // it has published nothing; a pinned version must exist. Only a read that says
 // it is the enforcement plan is a heartbeat: reading /expected records it as the
 // pipeline's last check, pinned or not, while other readers take the version
 // from /status.
-func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region string, pinned types.String, heartbeat bool, diags *diag.Diagnostics) (*wireSnapshot, bool) {
+func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, cloud, account, region string, pinned types.String, heartbeat bool, diags *diag.Diagnostics) (*wireSnapshot, bool) {
 	isPinned := !pinned.IsNull() && !pinned.IsUnknown()
 	version := pinned.ValueString()
 	if heartbeat || !isPinned {
-		expected, published, err := expectedVersion(ctx, api, account, region, heartbeat)
+		expected, published, err := expectedVersion(ctx, api, cloud, account, region, heartbeat)
 		switch {
 		case isAPIRefusal(err, http.StatusConflict, codeHandedOver):
-			diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery",
-				"The cloud connector now keeps the groups, rules and attachments this workspace created, so applying would remove "+
-					"what it enforces. Unless it was done before the switch, first stop the runs of each workspace that looks its "+
-					"groups up and add the resource's group attribute to its ignore_changes, as the provider's "+
-					"enforcement-snapshot/leave example says: its lookup would put back the groups the connector takes off. Then "+
-					"replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as that example "+
-					"shows, and stop running this workspace.")
+			diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery", handedOverAdvice[cloud])
 			return nil, false
 		case err != nil:
 			diags.AddError("Cannot resolve the snapshot Xshield expects for "+account+"/"+region,
@@ -413,27 +421,32 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 		}
 	}
 	var snap wireSnapshot
-	if err := api.get(ctx, api.endpoint(cloudAWS, account, region, "versions", version), &snap); err != nil {
+	if err := api.get(ctx, api.endpoint(cloud, account, region, "versions", version), &snap); err != nil {
 		diags.AddError(fmt.Sprintf("Cannot fetch snapshot version %s for %s/%s", version, account, region), err.Error())
 		return nil, false
 	}
-	if err := renderable(snap); err != nil {
+	if err := renderable(cloud, snap); err != nil {
 		diags.AddError("This provider version cannot apply this snapshot", fmt.Sprintf("%s/%s: %s", account, region, err))
+		return nil, false
+	}
+	if snap.CloudAccountID != account || snap.Region != region {
+		diags.AddError("Xshield served a snapshot for another account or region",
+			fmt.Sprintf("asked for %s/%s, got %s/%s; nothing is applied", account, region, snap.CloudAccountID, snap.Region))
 		return nil, false
 	}
 	return &snap, true
 }
 
-func expectedVersion(ctx context.Context, api cloudSnapshotAPI, account, region string, heartbeat bool) (string, bool, error) {
+func expectedVersion(ctx context.Context, api cloudSnapshotAPI, cloud, account, region string, heartbeat bool) (string, bool, error) {
 	var version string
 	var err error
 	if heartbeat {
 		var exp wireExpected
-		err = api.get(ctx, api.endpoint(cloudAWS, account, region, "expected"), &exp)
+		err = api.get(ctx, api.endpoint(cloud, account, region, "expected"), &exp)
 		version = exp.Version
 	} else {
 		var st wireStatus
-		err = api.get(ctx, api.endpoint(cloudAWS, account, region, "status"), &st)
+		err = api.get(ctx, api.endpoint(cloud, account, region, "status"), &st)
 		version = st.Expected.Version
 	}
 	if isAPIRefusal(err, http.StatusNotFound, codeNotPublished) {

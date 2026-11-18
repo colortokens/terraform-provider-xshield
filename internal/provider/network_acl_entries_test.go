@@ -24,10 +24,10 @@ func networkACLSnapshot(t *testing.T) wireSnapshot {
 
 func TestASnapshotThatBlocksAddressesOnANetworkACLIsApplied(t *testing.T) {
 	t.Parallel()
-	if err := renderable(networkACLSnapshot(t)); err != nil {
+	if err := renderable(cloudAWS, networkACLSnapshot(t)); err != nil {
 		t.Fatalf("a snapshot with network ACL entries was refused, so its pipeline stops: %v", err)
 	}
-	if err := renderable(loadJSON[wireSnapshot](t, "snapshot.json")); err != nil {
+	if err := renderable(cloudAWS, loadJSON[wireSnapshot](t, "snapshot.json")); err != nil {
 		t.Fatalf("a snapshot with no network ACL entry, which Xshield still serves as schema 3, was refused: %v", err)
 	}
 }
