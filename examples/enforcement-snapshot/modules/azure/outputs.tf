@@ -8,6 +8,11 @@ output "published" {
   value       = local.snap.published
 }
 
+output "exclusive_rules_enabled" {
+  description = "Whether each network security group this module creates holds only the rules the snapshot declares for it, so the next apply removes a rule added outside Terraform."
+  value       = var.enable_exclusive_rules
+}
+
 output "summary" {
   description = "What the applied version holds, for plan review and run logs."
   value = {
@@ -18,6 +23,11 @@ output "summary" {
     interface_associations  = length(local.snap.interface_associations)
     subnet_associations     = length(local.snap.subnet_associations)
   }
+}
+
+output "review" {
+  description = "What the applied version holds, as sentences: where each group is associated and for which assets, what its rules allow and deny in the order Azure applies them, and a closing count. Export it from the root module and a plan shows a change in words under Changes to Outputs."
+  value       = local.review
 }
 
 output "network_security_group_ids" {

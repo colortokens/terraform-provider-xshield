@@ -48,6 +48,42 @@ check "xshield_published" {
   }
 }
 
+# azurerm has no resource that leaves a group's other rules alone: a group's rules are given either inline or as rule
+# resources, and using both on one group makes each overwrite the other's rules. So with enable_exclusive_rules off,
+# the rules a group already holds that are not Xshield's are read back and given again with Xshield's. Xshield names
+# its rules CT-Rule- or CT-Test-Rule-, as the cloud connector does, so a rule named otherwise is someone else's.
+data "azurerm_resources" "network_security_groups" {
+  count = var.enable_exclusive_rules || length(local.snap.network_security_groups) == 0 ? 0 : 1
+
+  type = "Microsoft.Network/networkSecurityGroups"
+}
+
+locals {
+  present_network_security_groups = { for group in try(data.azurerm_resources.network_security_groups[0].resources, []) : lower("${group.resource_group_name}/${group.name}") => true }
+}
+
+data "azurerm_network_security_group" "kept_rules" {
+  for_each = { for key, group in local.snap.network_security_groups : key => group if lookup(local.present_network_security_groups, lower("${group.resource_group_name}/${group.name}"), false) }
+
+  name                = each.value.name
+  resource_group_name = each.value.resource_group_name
+}
+
+locals {
+  kept_rules = {
+    for key, group in data.azurerm_network_security_group.kept_rules : key => [
+      for rule in group.security_rule : rule if !startswith(rule.name, "CT-Rule-") && !startswith(rule.name, "CT-Test-Rule-")
+    ]
+  }
+  # Azure takes one rule for each priority and direction in a group.
+  kept_rule_conflicts = {
+    for key, rules in local.kept_rules : key => [
+      for rule in rules : "${rule.name} (${rule.direction} ${rule.priority})"
+      if contains([for xshield in local.snap.network_security_groups[key].security_rules : lower("${xshield.direction}/${xshield.priority}")], lower("${rule.direction}/${rule.priority}"))
+    ]
+  }
+}
+
 resource "azurerm_network_security_group" "this" {
   for_each = local.snap.network_security_groups
 
@@ -57,12 +93,23 @@ resource "azurerm_network_security_group" "this" {
   tags                = merge(var.tags, each.value.tags)
 
   # Given as an argument rather than as blocks, the rules are the group's whole rule set, so the next apply removes a
-  # rule added to the group outside Terraform. The three fields Xshield never sets take the values Azure reads back.
-  security_rule = [for rule in each.value.security_rules : merge(rule, {
-    description                                = ""
-    source_application_security_group_ids      = []
-    destination_application_security_group_ids = []
-  })]
+  # rule added to the group outside Terraform unless it is kept. The three fields Xshield never sets take the values
+  # Azure reads back.
+  security_rule = concat(
+    [for rule in each.value.security_rules : merge(rule, {
+      description                                = ""
+      source_application_security_group_ids      = []
+      destination_application_security_group_ids = []
+    })],
+    try(local.kept_rules[each.key], []),
+  )
+
+  lifecycle {
+    precondition {
+      condition     = length(try(local.kept_rule_conflicts[each.key], [])) == 0
+      error_message = "Network security group ${each.value.name} holds rules added outside Terraform at a priority and direction one of Xshield's rules takes: ${join(", ", try(local.kept_rule_conflicts[each.key], []))}. Azure takes one rule for each priority and direction in a group, so move each to a priority Xshield's rules leave free, or set enable_exclusive_rules = true for the apply to remove them."
+    }
+  }
 }
 
 # Every association below reads its group's ID from this map, which Terraform builds once. Indexing the resource with a
