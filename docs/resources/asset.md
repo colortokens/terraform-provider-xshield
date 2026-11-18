@@ -76,7 +76,7 @@ output "enforcement" {
 
 - `agent_id` (String)
 - `deterministic_id` (String)
-- `id` (String) The asset's UUID, assigned by the platform. Either this or the asset's name works as the terraform import identifier.
+- `id` (String) The asset's ID, assigned by the platform: a UUID, or for a cloud asset the ID its cloud connector gave it. The ID or the asset's name works as the terraform import identifier.
 - `vendor_info` (String)
 
 ## Import
