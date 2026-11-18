@@ -85,7 +85,7 @@ run "another_workloads_group_of_xshields_holding_the_name_stops_the_plan" {
   override_data {
     target = data.aws_security_group.name_holder["rds/orders-db sg-0123456789abcdef0"]
     values = {
-      id = "sg-0123456789abcdef0", name = "policy-orders-db-3f2a9c1d7e4b", vpc_id = "vpc-0a1b2c3d4e5f60718"
+      id   = "sg-0123456789abcdef0", name = "policy-orders-db-3f2a9c1d7e4b", vpc_id = "vpc-0a1b2c3d4e5f60718"
       tags = { ManagedBy = "ColorTokens", "ct:kind" = "policy", "ct:owner" = "9e8d7c6b5a493827" }
     }
   }
@@ -104,7 +104,7 @@ run "xshields_own_group_holding_the_name_is_planned_again" {
   override_data {
     target = data.aws_security_group.name_holder["rds/orders-db sg-0123456789abcdef0"]
     values = {
-      id = "sg-0123456789abcdef0", name = "policy-orders-db-3f2a9c1d7e4b", vpc_id = "vpc-0a1b2c3d4e5f60718"
+      id   = "sg-0123456789abcdef0", name = "policy-orders-db-3f2a9c1d7e4b", vpc_id = "vpc-0a1b2c3d4e5f60718"
       tags = { ManagedBy = "ColorTokens", "ct:kind" = "policy", "ct:owner" = "3f2a9c1d7e4b5a69" }
     }
   }
@@ -112,6 +112,88 @@ run "xshields_own_group_holding_the_name_is_planned_again" {
   assert {
     condition     = keys(aws_security_group.this) == ["rds/orders-db"]
     error_message = "the group of Xshield's for this key holds its name, so the plan goes on"
+  }
+}
+
+# A cohort group carries no ct:owner tag; its change set tells Xshield's cohort groups apart.
+run "another_change_sets_cohort_group_holding_the_name_stops_the_plan" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_snapshot.this
+    values = {
+      published = true
+      version   = "v1"
+      security_groups = {
+        "ct-cohort-0123456789abcdef" = {
+          name        = "ct-cohort-0123456789abcdef"
+          description = "ColorTokens split cohort group"
+          vpc_id      = "vpc-0a1b2c3d4e5f60718"
+          tags        = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:change-set" = "cs-2", "ct:split-group" = "sg-0example", "ct:delivery" = "pipeline" }
+        }
+      }
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
+    }
+  }
+  override_data {
+    target = data.aws_security_groups.named["ct-cohort-0123456789abcdef"]
+    values = { ids = ["sg-0123456789abcdef0"] }
+  }
+  override_data {
+    target = data.aws_security_group.name_holder["ct-cohort-0123456789abcdef sg-0123456789abcdef0"]
+    values = {
+      id   = "sg-0123456789abcdef0", name = "ct-cohort-0123456789abcdef", vpc_id = "vpc-0a1b2c3d4e5f60718"
+      tags = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:change-set" = "cs-1", "ct:split-group" = "sg-0example" }
+    }
+  }
+
+  expect_failures = [data.aws_security_group.name_holder]
+}
+
+run "xshields_own_cohort_group_holding_the_name_is_planned_again" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_snapshot.this
+    values = {
+      published = true
+      version   = "v1"
+      security_groups = {
+        "ct-cohort-0123456789abcdef" = {
+          name        = "ct-cohort-0123456789abcdef"
+          description = "ColorTokens split cohort group"
+          vpc_id      = "vpc-0a1b2c3d4e5f60718"
+          tags        = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:change-set" = "cs-2", "ct:split-group" = "sg-0example", "ct:delivery" = "pipeline" }
+        }
+      }
+      ingress_rules               = {}
+      egress_rules                = {}
+      interface_attachments       = {}
+      directory_entries           = {}
+      assets                      = {}
+      withdrawing_security_groups = []
+    }
+  }
+  override_data {
+    target = data.aws_security_groups.named["ct-cohort-0123456789abcdef"]
+    values = { ids = ["sg-0123456789abcdef0"] }
+  }
+  override_data {
+    target = data.aws_security_group.name_holder["ct-cohort-0123456789abcdef sg-0123456789abcdef0"]
+    values = {
+      id   = "sg-0123456789abcdef0", name = "ct-cohort-0123456789abcdef", vpc_id = "vpc-0a1b2c3d4e5f60718"
+      tags = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:change-set" = "cs-2", "ct:split-group" = "sg-0example" }
+    }
+  }
+
+  assert {
+    condition     = keys(aws_security_group.this) == ["ct-cohort-0123456789abcdef"]
+    error_message = "Xshield's cohort group of this change set holds its name, so the plan goes on"
   }
 }
 
