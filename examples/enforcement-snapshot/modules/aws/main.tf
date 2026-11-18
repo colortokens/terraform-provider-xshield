@@ -237,7 +237,10 @@ resource "aws_network_interface_sg_attachment" "this" {
 
 # One parameter per database, function or service its own workspace attaches;
 # the aws-group-lookup module reads it by handle, and takes only the groups in the
-# resource's VPC, as AWS refuses a group from another.
+# resource's VPC, as AWS refuses a group from another. A parameter is written only
+# once every rule is in place: when AWS refuses a rule, the apply leaves each
+# parameter as it was, so an owner's workspace that runs after the failed apply
+# keeps the groups it carries rather than take a group that is missing a rule.
 resource "aws_ssm_parameter" "directory" {
   for_each = local.snap.directory_entries
 
@@ -250,6 +253,8 @@ resource "aws_ssm_parameter" "directory" {
     slot_limit                = each.value.slot_limit
   })
   tags = merge(var.tags, each.value.tags)
+
+  depends_on = [aws_vpc_security_group_ingress_rule.this, aws_vpc_security_group_egress_rule.this]
 }
 
 # Each address the malicious IP block template blocks is one entry on the network ACL in front of its workloads,
