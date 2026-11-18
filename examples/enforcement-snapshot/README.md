@@ -617,7 +617,7 @@ resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
 }
 ```
 
-In your own CI, make each owner's job depend on the enforcement job: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. [`chain/xshield-enforcement.yml`](chain/xshield-enforcement.yml) runs all three steps as GitHub Actions jobs on one schedule.
+In your own CI, make each owner's job run after the enforcement job: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. Let each job with the lookup module run when the enforcement job fails too (`if: ${{ !cancelled() }}` in GitHub Actions, `when: always` in GitLab CI, `condition: succeededOrFailed()` in Azure Pipelines). An enforcement apply removes a group's directory entry before it deletes the group, and AWS refuses to delete a group a resource still carries, as after pinning `snapshot_version` to a version without it, so only the owner's apply can free the group. Such a job reads only complete entries: the enforcement apply writes a directory entry once every rule of the groups it names is in place, so after a failed apply a lookup returns what the last complete entry lists. Make each job with the rules module wait for the enforcement job to succeed. [`chain/xshield-enforcement.yml`](chain/xshield-enforcement.yml) runs all three steps as GitHub Actions jobs on one schedule.
 
 #### When policy stops using a group
 
