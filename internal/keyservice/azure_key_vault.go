@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/cloudauth"
@@ -51,6 +52,9 @@ func (k *azureKeyVaultKey) publicKey(ctx context.Context) (*rsa.PublicKey, error
 	}
 	if response.Key.Type != "RSA" && response.Key.Type != "RSA-HSM" {
 		return nil, fmt.Errorf("Key Vault key %s is %s, not RSA", k.keyID, response.Key.Type)
+	}
+	if !slices.Contains(response.Key.KeyOps, "sign") {
+		return nil, fmt.Errorf("Key Vault key %s permits %v, not sign: add sign to the key's permitted operations", k.keyID, response.Key.KeyOps)
 	}
 	if !strings.HasPrefix(response.Key.KeyID, versionlessKeyID(k.keyID)+"/") {
 		return nil, fmt.Errorf("Key Vault returned key %q for %s", response.Key.KeyID, k.keyID)

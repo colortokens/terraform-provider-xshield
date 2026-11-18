@@ -157,7 +157,7 @@ var keyServicesUnderTest = map[string]keyServiceUnderTest{
 		},
 		build: func(t *testing.T, client func(*http.Client) *http.Client, retry retryPolicy) remoteKeyClient {
 			var signedAt atomic.Value
-			key := fakeKeyVault(t, "RSA-HSM", &signedAt)
+			key := fakeKeyVault(t, "RSA-HSM", signAndVerify, &signedAt)
 			key.client, key.retry = client(key.client), retry
 			return key
 		},

@@ -12,8 +12,10 @@ import (
 	"testing"
 )
 
+var signAndVerify = []string{"sign", "verify"}
+
 // fakeKeyVault serves one key whose current version is v2. It records the path each signature was asked of.
-func fakeKeyVault(t *testing.T, keyType string, signedAt *atomic.Value) *azureKeyVaultKey {
+func fakeKeyVault(t *testing.T, keyType string, keyOps []string, signedAt *atomic.Value) *azureKeyVaultKey {
 	t.Helper()
 	publicKey := keyServiceKey(t).PublicKey
 	var server *httptest.Server
@@ -26,7 +28,7 @@ func fakeKeyVault(t *testing.T, keyType string, signedAt *atomic.Value) *azureKe
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/keys/api-key":
 			_ = json.NewEncoder(w).Encode(map[string]any{"key": map[string]any{
-				"kid": server.URL + "/keys/api-key/v2", "kty": keyType, "key_ops": []string{"sign", "verify"},
+				"kid": server.URL + "/keys/api-key/v2", "kty": keyType, "key_ops": keyOps,
 				"n": base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
 				"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(publicKey.E)).Bytes()),
 			}})
@@ -53,7 +55,7 @@ func fakeKeyVault(t *testing.T, keyType string, signedAt *atomic.Value) *azureKe
 
 func TestAKeyVaultSignatureVerifiesAsXshieldVerifiesIt(t *testing.T) {
 	var signedAt atomic.Value
-	assertRemoteKeyVerifiesAsXshieldDoes(t, fakeKeyVault(t, "RSA-HSM", &signedAt))
+	assertRemoteKeyVerifiesAsXshieldDoes(t, fakeKeyVault(t, "RSA-HSM", signAndVerify, &signedAt))
 	if got := signedAt.Load(); got != "/keys/api-key/v2/sign" {
 		t.Errorf("signed with %v, want the version whose public key was fingerprinted", got)
 	}
@@ -61,7 +63,7 @@ func TestAKeyVaultSignatureVerifiesAsXshieldVerifiesIt(t *testing.T) {
 
 func TestAKeyVaultKeyThatIsNotRSAIsRefused(t *testing.T) {
 	var signedAt atomic.Value
-	_, err := openKey(context.Background(), fakeKeyVault(t, "EC", &signedAt))
+	_, err := openKey(context.Background(), fakeKeyVault(t, "EC", signAndVerify, &signedAt))
 	if err == nil || !strings.Contains(err.Error(), "not RSA") {
 		t.Errorf("an EC key was opened: %v", err)
 	}
@@ -69,10 +71,22 @@ func TestAKeyVaultKeyThatIsNotRSAIsRefused(t *testing.T) {
 
 func TestAKeyVaultRefusalSaysWhy(t *testing.T) {
 	var signedAt atomic.Value
-	key := fakeKeyVault(t, "RSA", &signedAt)
+	key := fakeKeyVault(t, "RSA", signAndVerify, &signedAt)
 	key.tokens = staticBearerToken("other-token")
 	_, err := openKey(context.Background(), key)
 	if err == nil || !strings.Contains(err.Error(), "Unauthorized no token") {
 		t.Errorf("error = %v, want the Key Vault error code and message", err)
+	}
+}
+
+func TestAKeyVaultKeyThatMayNotSignIsRefused(t *testing.T) {
+	for name, keyOps := range map[string][]string{"verify only": {"verify", "encrypt"}, "no operations": {}} {
+		t.Run(name, func(t *testing.T) {
+			var signedAt atomic.Value
+			_, err := openKey(context.Background(), fakeKeyVault(t, "RSA", keyOps, &signedAt))
+			if err == nil || !strings.Contains(err.Error(), "sign") {
+				t.Errorf("a key whose key_ops are %v was opened: %v", keyOps, err)
+			}
+		})
 	}
 }

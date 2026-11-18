@@ -92,7 +92,7 @@ az keyvault key create --vault-name <vault-name> --name xshield-api-key --kty RS
 az keyvault key download --vault-name <vault-name> --name xshield-api-key --encoding PEM --file xshield-api-key.pub.pem
 ```
 
-**Permissions:** the runner's identity needs the data actions `Microsoft.KeyVault/vaults/keys/read` and `Microsoft.KeyVault/vaults/keys/sign/action` on the key, which the built-in **Key Vault Crypto User** role carries. A vault that uses access policies grants the key permissions `get` and `sign`.
+**Permissions:** the runner's identity needs the data actions `Microsoft.KeyVault/vaults/keys/read` and `Microsoft.KeyVault/vaults/keys/sign/action` on the key, which the built-in **Key Vault Crypto User** role carries. A vault that uses access policies grants the key permissions `get` and `sign`. The key's own permitted operations must include `sign`, as `--ops sign verify` sets: the provider refuses a key that does not permit it when it starts.
 
 {{ tffile "examples/provider-auth/azure-key-vault/provider.tf" }}
 
