@@ -395,8 +395,11 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, account, region st
 		case isAPIRefusal(err, http.StatusConflict, codeHandedOver):
 			diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery",
 				"The cloud connector now keeps the groups, rules and attachments this workspace created, so applying would remove "+
-					"what it enforces. Replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as "+
-					"the provider's enforcement-snapshot/leave example shows, then stop running this workspace.")
+					"what it enforces. Unless it was done before the switch, first stop the runs of each workspace that looks its "+
+					"groups up and add the resource's group attribute to its ignore_changes, as the provider's "+
+					"enforcement-snapshot/leave example says: its lookup would put back the groups the connector takes off. Then "+
+					"replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as that example "+
+					"shows, and stop running this workspace.")
 			return nil, false
 		case err != nil:
 			diags.AddError("Cannot resolve the snapshot Xshield expects for "+account+"/"+region,

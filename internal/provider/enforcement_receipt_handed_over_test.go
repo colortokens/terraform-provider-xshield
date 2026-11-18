@@ -16,7 +16,7 @@ func TestAReceiptRefusedAsHandedOverSaysToStopApplying(t *testing.T) {
 	t.Parallel()
 	_, refusal := sendReceipt(t, http.StatusConflict, handedOverRefusal, receiptWithRules(t, 3))
 	for _, want := range []string{"handed back to the cloud connector", "no longer delivers", "stop applying it",
-		"enforcement-snapshot/leave", "stop running this workspace"} {
+		"enforcement-snapshot/leave", "stop running this workspace", "looks its groups up", "ignore_changes"} {
 		if !strings.Contains(refusal, want) {
 			t.Errorf("the error does not say %q:\n%s", want, refusal)
 		}

@@ -225,8 +225,11 @@ func receiptAdvice(err error) string {
 		if apiErr.Code == codeHandedOver {
 			return "This account and region's delivery has been handed back to the cloud connector, which keeps the groups, rules " +
 				"and attachments this workspace created, so this workspace no longer delivers its policy: stop applying it. Xshield " +
-				"refuses every receipt from it. Replace the module block with removed blocks that keep them (lifecycle { destroy = " +
-				"false }), as the provider's enforcement-snapshot/leave example shows, then stop running this workspace."
+				"refuses every receipt from it. Unless it was done before the switch, first stop the runs of each workspace that " +
+				"looks its groups up and add the resource's group attribute to its ignore_changes, as the provider's " +
+				"enforcement-snapshot/leave example says: its lookup would put back the groups the connector takes off. Then " +
+				"replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as that example " +
+				"shows, and stop running this workspace."
 		}
 	}
 	return "The resources were created; run apply again to send the receipt."

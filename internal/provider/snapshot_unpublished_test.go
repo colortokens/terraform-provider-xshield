@@ -340,6 +340,9 @@ func TestEnforcementPlanStopsOnceTheAccountIsHandedOver(t *testing.T) {
 	if ok || !strings.Contains(errs, "moved 123456789012/us-east-1 to connector delivery") || !strings.Contains(errs, "destroy = false") {
 		t.Errorf("ok=%v %q, want the plan stopped with how to keep the resources", ok, errs)
 	}
+	if !strings.Contains(errs, "looks its groups up") || !strings.Contains(errs, "ignore_changes") {
+		t.Errorf("%q: want the workspaces that look their groups up told to stop setting them first", errs)
+	}
 	if slices.ContainsFunc(*requested, func(p string) bool { return strings.Contains(p, "/versions/") }) {
 		t.Errorf("requested %v: no snapshot is read once the account is handed over", *requested)
 	}
