@@ -43,6 +43,8 @@ type XshieldProviderModel struct {
 	FingerPrint        types.String  `tfsdk:"fingerprint"`
 	PrivateKeyLocation types.String  `tfsdk:"private_key_path"`
 	PrivateKey         types.String  `tfsdk:"private_key"`
+	KMSKey             types.String  `tfsdk:"kms_key"`
+	OIDC               *OIDCModel    `tfsdk:"oidc"`
 	ProxyURL           types.String  `tfsdk:"proxy_url"`
 	ProxyCreds         types.String  `tfsdk:"proxy_creds"`
 	RequestTimeout     types.Int64   `tfsdk:"request_timeout"`
@@ -50,6 +52,15 @@ type XshieldProviderModel struct {
 	MaxInterval        types.Int64   `tfsdk:"max_interval"`
 	MaxElapsedTime     types.Int64   `tfsdk:"max_elapsed_time"`
 	Exponent           types.Float64 `tfsdk:"exponent"`
+}
+
+// OIDCModel is the oidc block: where the workload's OIDC token comes from.
+type OIDCModel struct {
+	Token     types.String `tfsdk:"token"`
+	TokenFile types.String `tfsdk:"token_file"`
+	TokenEnv  types.String `tfsdk:"token_env"`
+	Source    types.String `tfsdk:"source"`
+	Audience  types.String `tfsdk:"audience"`
 }
 
 func (p *XshieldProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -70,12 +81,13 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				Optional:            true,
 			},
 			"user_id": schema.StringAttribute{
-				MarkdownDescription: "User ID of the API key. Can also be set with `XSHIELD_USER_ID`.",
+				MarkdownDescription: "User ID of the API key, or with `oidc` the service account's user ID. Can also be set with `XSHIELD_USER_ID`.",
 				Optional:            true,
 			},
 			"fingerprint": schema.StringAttribute{
-				MarkdownDescription: "Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`.",
-				Optional:            true,
+				MarkdownDescription: "Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`. Optional with `kms_key`, which computes it " +
+					"from the key service's public key and checks it against this value when both are given. Not used with `oidc`.",
+				Optional: true,
 			},
 			"private_key_path": schema.StringAttribute{
 				MarkdownDescription: "Path to the API key's PEM private key. Can also be set with `XSHIELD_PRIVATE_KEY_PATH`. Set this or `private_key`.",
@@ -85,6 +97,48 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				MarkdownDescription: "The API key's PEM private key itself, for runners that hold it as a secret rather than a file. Can also be set with `XSHIELD_PRIVATE_KEY`. Set this or `private_key_path`.",
 				Optional:            true,
 				Sensitive:           true,
+			},
+			"kms_key": schema.StringAttribute{
+				MarkdownDescription: "The API key's private key held in a cloud key service, which signs every request so the key never leaves it: " +
+					"`awskms:///<key ARN or alias ARN>`, `azurekeyvault://<vault>.vault.azure.net/keys/<name>[/<version>]` or " +
+					"`gcpkms://projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>/cryptoKeyVersions/<version>`. " +
+					"Uses the cloud's default credentials. Can also be set with `XSHIELD_KMS_KEY`. Set this instead of `private_key` or `private_key_path`.",
+				Optional: true,
+			},
+			"oidc": schema.SingleNestedAttribute{
+				MarkdownDescription: "Workload identity federation: the provider exchanges an OIDC token from the platform it runs on for a short-lived " +
+					"access token of the service account named by `tenancy_id` and `user_id`, so no key is stored. Set this instead of `private_key`, " +
+					"`private_key_path` or `kms_key`. Any `XSHIELD_OIDC_*` environment variable turns it on without the block.",
+				Optional: true,
+				Attributes: map[string]schema.Attribute{
+					"token": schema.StringAttribute{
+						MarkdownDescription: "The OIDC token itself. Can also be set with `XSHIELD_OIDC_TOKEN`. Set at most one of `token`, `token_file` and `token_env`.",
+						Optional:            true,
+						Sensitive:           true,
+					},
+					"token_file": schema.StringAttribute{
+						MarkdownDescription: "A file holding the OIDC token, read again at every exchange. With `source = \"kubernetes\"` it defaults to " +
+							"`/var/run/secrets/xshield/token`. Can also be set with `XSHIELD_OIDC_TOKEN_FILE`.",
+						Optional: true,
+					},
+					"token_env": schema.StringAttribute{
+						MarkdownDescription: "The name of an environment variable holding the OIDC token. With `source = \"gitlab\"` it defaults to " +
+							"`XSHIELD_ID_TOKEN`. Can also be set with `XSHIELD_OIDC_TOKEN_ENV`.",
+						Optional: true,
+					},
+					"source": schema.StringAttribute{
+						MarkdownDescription: "Where the OIDC token comes from: `auto` (the default), `terraform-cloud`, `github-actions`, `gitlab`, " +
+							"`azure-devops`, `kubernetes`, `aws`, `azure` or `gcp`. `auto` uses `token`, `token_file` or `token_env` when set, then " +
+							"HCP Terraform's workload identity token, then GitHub Actions, then Azure DevOps; it never calls a cloud metadata service. " +
+							"Can also be set with `XSHIELD_OIDC_SOURCE`.",
+						Optional: true,
+					},
+					"audience": schema.StringAttribute{
+						MarkdownDescription: "The audience to request a token for, equal to the audience of the service account's federation trust. " +
+							"Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Can also be set with `XSHIELD_OIDC_AUDIENCE`.",
+						Optional: true,
+					},
+				},
 			},
 			// HTTP request config
 			"request_timeout": schema.Int64Attribute{
@@ -139,12 +193,6 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 		ServerURL = "https://ng.colortokens.com"
 	}
 
-	config := buildConfigProvider(data, resp)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	// Create custom HTTP client with provider configuration
 	httpClient, err := newHTTPClientWithOptions(data)
 	if err != nil {
@@ -155,10 +203,16 @@ func (p *XshieldProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
+	config, apiClient := buildAuthentication(ctx, data, ServerURL, httpClient, resp)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	opts := []sdk.SDKOption{
 		sdk.WithServerURL(ServerURL),
 		sdk.WithConfigProvider(config),
-		sdk.WithClient(httpClient),
+		sdk.WithClient(apiClient),
 	}
 
 	// Add timeout if provided
@@ -253,31 +307,36 @@ func withEnv(v types.String, name string) string {
 // refuseUnknown reports a value the plan does not know yet. The environment does not stand in for it: the
 // configuration says the value comes from elsewhere, so the environment's would be another key's.
 func refuseUnknown(resp *provider.ConfigureResponse, attr, env string, v types.String) bool {
+	return refuseUnknownAt(resp, path.Root(attr), attr, env, v)
+}
+
+func refuseUnknownAt(resp *provider.ConfigureResponse, attributePath path.Path, attr, env string, v types.String) bool {
 	if !v.IsUnknown() {
 		return false
 	}
-	resp.Diagnostics.AddAttributeError(path.Root(attr), "Unknown Xshield "+attr,
+	resp.Diagnostics.AddAttributeError(attributePath, "Unknown Xshield "+attr,
 		"The value of "+attr+" is not known until apply, and the provider needs it to plan. Give it a value that is "+
 			"known when the plan starts, or leave it out of the xshield provider block and set "+env+".")
 	return true
 }
 
-func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {
-	need := func(attr, env string, v types.String, where string) string {
-		if refuseUnknown(resp, attr, env, v) {
-			return ""
-		}
-		value := withEnv(v, env)
-		if value == "" {
-			resp.Diagnostics.AddAttributeError(path.Root(attr), "Missing Xshield "+attr,
-				"Set "+attr+" in the xshield provider block, or the "+env+" environment variable. "+where)
-		}
-		return value
+func requireCredential(resp *provider.ConfigureResponse, attr, env string, v types.String, where string) string {
+	if refuseUnknown(resp, attr, env, v) {
+		return ""
 	}
+	value := withEnv(v, env)
+	if value == "" {
+		resp.Diagnostics.AddAttributeError(path.Root(attr), "Missing Xshield "+attr,
+			"Set "+attr+" in the xshield provider block, or the "+env+" environment variable. "+where)
+	}
+	return value
+}
+
+func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResponse) shared.ConfigurationProvider {
 	const fromKey = "It is shown with the API key in Xshield under Settings > API Keys."
-	tenancy := need("tenancy_id", "XSHIELD_TENANCY_ID", data.TenancyId, fromKey)
-	user := need("user_id", "XSHIELD_USER_ID", data.PrincipalId, fromKey)
-	fingerprint := need("fingerprint", "XSHIELD_FINGERPRINT", data.FingerPrint, fromKey)
+	tenancy := requireCredential(resp, "tenancy_id", "XSHIELD_TENANCY_ID", data.TenancyId, fromKey)
+	user := requireCredential(resp, "user_id", "XSHIELD_USER_ID", data.PrincipalId, fromKey)
+	fingerprint := requireCredential(resp, "fingerprint", "XSHIELD_FINGERPRINT", data.FingerPrint, fromKey)
 	keyPath := withEnv(data.PrivateKeyLocation, "XSHIELD_PRIVATE_KEY_PATH")
 	key := withEnv(data.PrivateKey, "XSHIELD_PRIVATE_KEY")
 	keyUnknown := refuseUnknown(resp, "private_key_path", "XSHIELD_PRIVATE_KEY_PATH", data.PrivateKeyLocation)
@@ -286,7 +345,9 @@ func buildConfigProvider(data XshieldProviderModel, resp *provider.ConfigureResp
 	case keyUnknown:
 	case keyPath == "" && key == "":
 		resp.Diagnostics.AddAttributeError(path.Root("private_key_path"), "Missing Xshield private key",
-			"Set private_key_path (or XSHIELD_PRIVATE_KEY_PATH) to the API key's PEM file, or private_key (or XSHIELD_PRIVATE_KEY) to its contents.")
+			"Set private_key_path (or XSHIELD_PRIVATE_KEY_PATH) to the API key's PEM file, or private_key (or XSHIELD_PRIVATE_KEY) to its contents. "+
+				"To authenticate without a private key on the runner, set kms_key (or XSHIELD_KMS_KEY) to a key held in a cloud key service, "+
+				"or use workload identity federation with oidc.")
 	case keyPath != "" && key != "":
 		resp.Diagnostics.AddAttributeError(path.Root("private_key"), "Two Xshield private keys",
 			"Both a private key and a private key path are set, from the provider block or the environment. Set only one.")

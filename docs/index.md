@@ -24,6 +24,9 @@ terraform {
 # In a pipeline, leave the credentials out of the block and set
 # XSHIELD_SERVER_URL, XSHIELD_TENANCY_ID, XSHIELD_USER_ID, XSHIELD_FINGERPRINT
 # and XSHIELD_PRIVATE_KEY (the key itself) as secret environment variables.
+# To keep no private key on the runner, sign with a key held in a cloud key
+# service (kms_key) or use workload identity federation (oidc): see
+# examples/provider-auth.
 provider "xshield" {
   # Xshield connection config
   tenancy_id       = "xxxxxxxxxx"
@@ -45,16 +48,481 @@ provider "xshield" {
 }
 ```
 
+## Authentication
+
+The provider signs in to Xshield in one of three ways. Configure exactly one: the provider refuses a configuration, from the block or the environment, that sets more than one.
+
+| Method | Where it fits | What the runner holds |
+|--|--|--|
+| [API key](#api-key) | Laptops and any runner | The API key's private key |
+| [Key in a cloud key service](#key-in-a-cloud-key-service) | Runners with AWS, Azure or Google Cloud credentials | Nothing: the key never leaves AWS KMS, Azure Key Vault or Cloud KMS |
+| [Workload identity federation](#workload-identity-federation) | HCP Terraform, GitHub Actions, GitLab CI, Azure DevOps, Kubernetes, AWS, Azure and Google Cloud workloads | Nothing: the platform's own OIDC token is exchanged for a short-lived Xshield access token |
+
+People running Terraform from a laptop keep using an API key. The other two methods are for workloads.
+
+### API key
+
+**Create:** an API key in Xshield under **Settings > API Keys**, and download its private key.
+
+```terraform
+provider "xshield" {
+  server_url       = "https://<tenant>.colortokens.com"
+  tenancy_id       = "<tenancy-id>"
+  user_id          = "<user-id>"
+  fingerprint      = "<api-key-fingerprint>"
+  private_key_path = "/path/to/xshield-api-key.pem"
+}
+```
+
+To hold the key as a secret instead of a file, set `private_key` to its PEM contents.
+
+**In CI**, leave the block empty and set `XSHIELD_SERVER_URL`, `XSHIELD_TENANCY_ID`, `XSHIELD_USER_ID`, `XSHIELD_FINGERPRINT` and either `XSHIELD_PRIVATE_KEY` (the key itself, as a secret) or `XSHIELD_PRIVATE_KEY_PATH`.
+
+### Key in a cloud key service
+
+The API key's private key is created in AWS KMS, Azure Key Vault or Google Cloud KMS and never leaves it: the provider sends each request's digest to the key service to sign. The key service is called with the cloud's default credentials, so the runner needs no Xshield secret.
+
+**Create, once per key:**
+
+1. An RSA signing key of 2048 bits or more in the key service, as below.
+2. A service account in Xshield with the role and scope your Terraform runs need.
+3. Export the key's public key as PEM, and have an Xshield administrator register it as an API key of the service account. The service account API's `apikeys` endpoint, `POST /api/auth/admin/serviceaccounts/{serviceAccountID}/apikeys`, takes the base64 of the PEM file as `publicKey`.
+
+The provider reads the public key when it starts and computes the fingerprint Xshield gave it, so `fingerprint` can be left out. When `fingerprint` is set, it must match.
+
+**In CI**, leave the block empty and set `XSHIELD_SERVER_URL`, `XSHIELD_TENANCY_ID`, `XSHIELD_USER_ID` and `XSHIELD_KMS_KEY`, alongside the cloud's own credentials.
+
+**Caveats:**
+
+- Every Xshield API call makes one call to the key service. The key service charges per request and limits the request rate, and each API call waits for its round trip.
+- Registering the public key is a one-time step per key. A new key, or in Azure Key Vault a new key version, is registered again before the provider uses it.
+
+#### AWS KMS
+
+```sh
+aws kms create-key --key-spec RSA_2048 --key-usage SIGN_VERIFY --description "Xshield API key"
+aws kms create-alias --alias-name alias/xshield-api-key --target-key-id <key-id>
+aws kms get-public-key --key-id alias/xshield-api-key --query PublicKey --output text | base64 --decode > xshield-api-key.der
+openssl pkey -pubin -inform DER -in xshield-api-key.der -out xshield-api-key.pub.pem
+```
+
+**Permissions:** the runner's IAM principal needs `kms:GetPublicKey` and `kms:Sign` on the key and nothing else. To hold it to the provider's use, add conditions:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["kms:GetPublicKey", "kms:Sign"],
+  "Resource": "arn:aws:kms:us-east-1:111122223333:key/<key-id>",
+  "Condition": {
+    "StringEqualsIfExists": {
+      "kms:SigningAlgorithm": "RSASSA_PSS_SHA_256",
+      "kms:MessageType": "DIGEST"
+    }
+  }
+}
+```
+
+```terraform
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+  kms_key    = "awskms:///arn:aws:kms:us-east-1:111122223333:alias/xshield-api-key"
+}
+```
+
+`kms_key` takes `awskms:///` followed by a key ARN or alias ARN, or the bare ARN. The KMS endpoint is the one for the ARN's region.
+
+#### Azure Key Vault
+
+```sh
+az keyvault key create --vault-name <vault-name> --name xshield-api-key --kty RSA --size 2048 --ops sign verify
+az keyvault key download --vault-name <vault-name> --name xshield-api-key --encoding PEM --file xshield-api-key.pub.pem
+```
+
+**Permissions:** the runner's identity needs the data actions `Microsoft.KeyVault/vaults/keys/read` and `Microsoft.KeyVault/vaults/keys/sign/action` on the key, which the built-in **Key Vault Crypto User** role carries. A vault that uses access policies grants the key permissions `get` and `sign`.
+
+```terraform
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+  kms_key    = "azurekeyvault://<vault-name>.vault.azure.net/keys/xshield-api-key"
+}
+```
+
+`kms_key` takes `azurekeyvault://<vault-name>.vault.azure.net/keys/<name>`, optionally followed by `/<version>`, or the `https://` key ID. Without a version, the provider signs with the version that is current when it starts, for the whole run. Credentials come from `DefaultAzureCredential`: environment variables, workload identity, managed identity, then the Azure CLI.
+
+#### Google Cloud KMS
+
+```sh
+gcloud kms keyrings create xshield --location global
+gcloud kms keys create api-key --keyring xshield --location global \
+  --purpose asymmetric-signing --default-algorithm rsa-sign-pss-2048-sha256
+gcloud kms keys versions get-public-key 1 --key api-key --keyring xshield --location global \
+  --output-file xshield-api-key.pub.pem
+```
+
+**Permissions:** the runner's identity needs `cloudkms.cryptoKeyVersions.useToSign` and `cloudkms.cryptoKeyVersions.viewPublicKey` on the key, which the roles `roles/cloudkms.signer` and `roles/cloudkms.publicKeyViewer` carry.
+
+```terraform
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+  kms_key    = "gcpkms://projects/<project>/locations/global/keyRings/xshield/cryptoKeys/api-key/cryptoKeyVersions/1"
+}
+```
+
+`kms_key` takes `gcpkms://` followed by the key version's name, or the bare `projects/...` name. Credentials come from Application Default Credentials.
+
+A key version's algorithm is fixed when it is created, and Xshield verifies RSASSA-PSS with SHA-256 only: the provider refuses a key version whose algorithm is not `RSA_SIGN_PSS_2048_SHA256`, `RSA_SIGN_PSS_3072_SHA256` or `RSA_SIGN_PSS_4096_SHA256`.
+
+### Workload identity federation
+
+The provider takes the OIDC token the platform gives the workload, and exchanges it with Xshield for a short-lived access token of a service account. Nothing secret is stored, and there is no key to rotate.
+
+**Create:**
+
+1. A service account in Xshield with the role and scope your Terraform runs need.
+2. A federation trust on the service account, which an Xshield administrator adds with `POST /api/auth/admin/serviceaccounts/{serviceAccountID}/federations`. The trust names the token's issuer and audience, and binds the workload by its `subject`, by `claims`, or both:
+
+```json
+{
+  "name": "deploy-from-main",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "audience": "xshield",
+  "subject": "repo:<owner>/<repo>:ref:refs/heads/main",
+  "tokenLifetimeSeconds": 900
+}
+```
+
+| Field | Meaning |
+|--|--|
+| `issuer` | The token's `iss`, exactly. |
+| `audience` | A value the token's `aud` must contain. Platforms that issue tokens on request are asked for this audience, so set the provider's `audience` to the same value. |
+| `subject` | The token's `sub`, exactly. |
+| `claims` | Further claims the token must carry, each with exactly this string value. |
+| `jwks` | The issuer's signing keys, for an issuer Xshield cannot reach. Without it, Xshield reads them through the issuer's OIDC discovery document. |
+| `tokenLifetimeSeconds` | How long each Xshield access token lasts, from 300 to 3600. The default is 900. |
+
+Set `tenancy_id` and `user_id` to the tenancy ID and the service account's user ID. `fingerprint` and a private key are not used.
+
+**Caveats:**
+
+- Values are compared exactly: there are no wildcards or patterns. Each workload identity, such as each repository branch or each Kubernetes service account, needs a trust that names it. A service account holds up to 10 trusts.
+- An access token lasts the trust's token lifetime, 15 minutes by default, and never longer than the workload's own token. The provider exchanges again before it expires.
+- Disabling the service account or the trust stops new exchanges at once. An access token already issued stays valid until it expires.
+- The provider exchanges the token when it starts, so a trust that does not match fails the plan before any resource is read.
+
+#### HCP Terraform
+
+**Create:** on the workspace, the environment variable `TFC_WORKLOAD_IDENTITY_AUDIENCE_XSHIELD` set to the trust's audience. Every run then carries the token in `TFC_WORKLOAD_IDENTITY_TOKEN_XSHIELD`. `TFC_WORKLOAD_IDENTITY_AUDIENCE`, which puts the token in `TFC_WORKLOAD_IDENTITY_TOKEN`, works too.
+
+**Trust:** issuer `https://app.terraform.io`, or your Terraform Enterprise address. The token's `sub` names the run phase, as in `organization:<organization>:project:<project>:workspace:<workspace>:run_phase:plan`, so bind the workspace with claims instead, which hold for both plan and apply:
+
+```json
+{
+  "name": "hcp-terraform-network-prod",
+  "issuer": "https://app.terraform.io",
+  "audience": "xshield",
+  "claims": {
+    "terraform_organization_name": "<organization>",
+    "terraform_workspace_name": "<workspace>"
+  }
+}
+```
+
+```terraform
+# The workspace sets TFC_WORKLOAD_IDENTITY_AUDIENCE_XSHIELD, so each run carries
+# TFC_WORKLOAD_IDENTITY_TOKEN_XSHIELD.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source = "terraform-cloud"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=terraform-cloud`, `XSHIELD_SERVER_URL`, `XSHIELD_TENANCY_ID` and `XSHIELD_USER_ID` as workspace environment variables.
+
+#### GitHub Actions
+
+**Create:** give the workflow or job `permissions: id-token: write`. The provider requests a token for its `audience` whenever it exchanges.
+
+**Trust:** issuer `https://token.actions.githubusercontent.com`, audience as in the provider block, and subject `repo:<owner>/<repo>:ref:refs/heads/<branch>`, or `repo:<owner>/<repo>:environment:<environment>` for a job that names a deployment environment.
+
+```terraform
+# The workflow grants permissions: id-token: write.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source   = "github-actions"
+    audience = "xshield"
+  }
+}
+```
+
+**Environment only:** any `XSHIELD_OIDC_*` variable turns federation on, and `auto` finds GitHub Actions, so `XSHIELD_OIDC_AUDIENCE` is enough:
+
+```yaml
+name: xshield
+
+on:
+  push:
+    branches: [main]
+
+# id-token: write lets the job request an OIDC token for the provider.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    env:
+      XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+      XSHIELD_TENANCY_ID: ${{ vars.XSHIELD_TENANCY_ID }}
+      XSHIELD_USER_ID: ${{ vars.XSHIELD_USER_ID }}
+      XSHIELD_OIDC_AUDIENCE: xshield
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init
+      - run: terraform plan
+```
+
+#### GitLab CI
+
+**Create:** declare an ID token for the job under `id_tokens`, with the trust's audience as `aud`. The provider reads `XSHIELD_ID_TOKEN` by default; set `token_env` to read another.
+
+**Trust:** issuer `https://gitlab.com`, or your GitLab address, and subject `project_path:<group>/<project>:ref_type:branch:ref:<branch>`.
+
+```terraform
+# The job declares the XSHIELD_ID_TOKEN ID token under id_tokens.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source = "gitlab"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=gitlab`:
+
+```yaml
+xshield-plan:
+  image:
+    name: hashicorp/terraform
+    entrypoint: [""]
+  # The ID token's aud is the audience of the service account's federation trust.
+  id_tokens:
+    XSHIELD_ID_TOKEN:
+      aud: xshield
+  # Set XSHIELD_TENANCY_ID and XSHIELD_USER_ID as CI/CD variables of the project.
+  variables:
+    XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+    XSHIELD_OIDC_SOURCE: gitlab
+  script:
+    - terraform init
+    - terraform plan
+```
+
+#### Azure DevOps
+
+**Create:** an Azure Resource Manager service connection that uses workload identity federation, and allow the pipeline to use it. In the step that runs Terraform, map `SYSTEM_ACCESSTOKEN` from `$(System.AccessToken)` and set `XSHIELD_ADO_SERVICE_CONNECTION_ID` to the service connection's ID. The provider requests the service connection's token whenever it exchanges.
+
+**Trust:** the issuer and subject identifier shown on the service connection, and audience `api://AzureADTokenExchange`, which Azure DevOps sets on every such token.
+
+```terraform
+# The step maps SYSTEM_ACCESSTOKEN and sets XSHIELD_ADO_SERVICE_CONNECTION_ID.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source = "azure-devops"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=azure-devops`:
+
+```yaml
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+# Define XSHIELD_TENANCY_ID and XSHIELD_USER_ID as pipeline variables.
+steps:
+  - script: |
+      terraform init
+      terraform plan
+    displayName: Terraform plan
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      XSHIELD_ADO_SERVICE_CONNECTION_ID: <service-connection-id>
+      XSHIELD_OIDC_SOURCE: azure-devops
+      XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+      XSHIELD_TENANCY_ID: $(XSHIELD_TENANCY_ID)
+      XSHIELD_USER_ID: $(XSHIELD_USER_ID)
+```
+
+#### Kubernetes
+
+**Create:** a projected service account token volume with the trust's audience, mounted so the token is at `/var/run/secrets/xshield/token`, or set `token_file` to where it is. The provider reads the file again at every exchange, so the kubelet's rotation is picked up.
+
+**Trust:** the cluster's service account issuer, which `kubectl get --raw /.well-known/openid-configuration` shows as `issuer`, and subject `system:serviceaccount:<namespace>:<service-account>`. When Xshield cannot reach the issuer, as with a private cluster, put the output of `kubectl get --raw /openid/v1/jwks` in the trust's `jwks`.
+
+```terraform
+# The pod mounts a projected service account token for the trust's audience at
+# /var/run/secrets/xshield/token.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source = "kubernetes"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=kubernetes`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: terraform
+  namespace: platform
+spec:
+  serviceAccountName: terraform
+  restartPolicy: Never
+  containers:
+    - name: terraform
+      image: <your-terraform-runner-image>
+      env:
+        - name: XSHIELD_SERVER_URL
+          value: https://<tenant>.colortokens.com
+        - name: XSHIELD_TENANCY_ID
+          value: <tenancy-id>
+        - name: XSHIELD_USER_ID
+          value: <service-account-user-id>
+        - name: XSHIELD_OIDC_SOURCE
+          value: kubernetes
+      volumeMounts:
+        - name: xshield-token
+          mountPath: /var/run/secrets/xshield
+          readOnly: true
+  # A token for the trust's audience, which the kubelet rotates in place.
+  volumes:
+    - name: xshield-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: xshield
+```
+
+#### AWS
+
+**Create:** enable outbound identity federation for the account, once, and read the account's issuer:
+
+```sh
+aws iam enable-outbound-web-identity-federation
+aws iam get-outbound-web-identity-federation-info --query IssuerIdentifier --output text
+```
+
+**Permissions:** the workload's IAM role needs `sts:GetWebIdentityToken`. The provider calls it with the default AWS credential chain, in the region from `AWS_REGION` or the instance's own, and requests an RS256 token for its `audience` whenever it exchanges.
+
+**Trust:** the account's issuer, the audience as in the provider block, and subject the workload's IAM role ARN as the token's `sub` carries it, such as `arn:aws:iam::111122223333:role/terraform`.
+
+```terraform
+# Runs with an IAM role allowed sts:GetWebIdentityToken, in an account with
+# outbound identity federation enabled.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source   = "aws"
+    audience = "xshield"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=aws` and `XSHIELD_OIDC_AUDIENCE`. `auto` never calls AWS: the source must be set.
+
+#### Azure
+
+**Create:** an Entra app registration whose application ID URI is the audience, such as `api://xshield`. It needs no secret, certificate or API permission. The workload signs in with `DefaultAzureCredential`, typically a managed identity or AKS workload identity, and the provider requests a token for `<audience>/.default` whenever it exchanges.
+
+**Trust:** issuer `https://sts.windows.net/<entra-tenant-id>/`, audience the application ID URI, and subject the object ID of the workload's managed identity or service principal. If the app registration's manifest sets `accessTokenAcceptedVersion` to 2, the issuer is `https://login.microsoftonline.com/<entra-tenant-id>/v2.0` and the token's audience is the application (client) ID: set both the trust's and the provider's `audience` to it.
+
+```terraform
+# The audience is the application ID URI of an Entra app registration.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source   = "azure"
+    audience = "api://xshield"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=azure` and `XSHIELD_OIDC_AUDIENCE`. `auto` never calls Azure: the source must be set.
+
+#### Google Cloud
+
+**Create:** run the workload with a Google Cloud service account attached, as on Compute Engine or Cloud Run. The provider requests the service account's identity token for its `audience` from the metadata server whenever it exchanges, so no IAM role is needed.
+
+**Trust:** issuer `https://accounts.google.com`, the audience as in the provider block, and subject the service account's unique ID, which `gcloud iam service-accounts describe <email> --format "value(uniqueId)"` shows.
+
+```terraform
+# Runs with a Google Cloud service account attached, read from the metadata server.
+provider "xshield" {
+  server_url = "https://<tenant>.colortokens.com"
+  tenancy_id = "<tenancy-id>"
+  user_id    = "<service-account-user-id>"
+
+  oidc = {
+    source   = "gcp"
+    audience = "xshield"
+  }
+}
+```
+
+**Environment only:** set `XSHIELD_OIDC_SOURCE=gcp` and `XSHIELD_OIDC_AUDIENCE`. `auto` never calls the metadata server: the source must be set.
+
 <!-- schema generated by tfplugindocs -->
 ## Schema
 
 ### Optional
 
 - `exponent` (Number) Exponent for backoff strategy (defaults to 1.5)
-- `fingerprint` (String) Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`.
+- `fingerprint` (String) Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`. Optional with `kms_key`, which computes it from the key service's public key and checks it against this value when both are given. Not used with `oidc`.
 - `initial_interval` (Number) Initial interval for backoff strategy in miliseconds (defaults to 500)
+- `kms_key` (String) The API key's private key held in a cloud key service, which signs every request so the key never leaves it: `awskms:///<key ARN or alias ARN>`, `azurekeyvault://<vault>.vault.azure.net/keys/<name>[/<version>]` or `gcpkms://projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>/cryptoKeyVersions/<version>`. Uses the cloud's default credentials. Can also be set with `XSHIELD_KMS_KEY`. Set this instead of `private_key` or `private_key_path`.
 - `max_elapsed_time` (Number) Maximum elapsed time for backoff strategy in seconds (defaults to 3600000)
 - `max_interval` (Number) Maximum interval for backoff strategy in seconds (defaults to 60)
+- `oidc` (Attributes) Workload identity federation: the provider exchanges an OIDC token from the platform it runs on for a short-lived access token of the service account named by `tenancy_id` and `user_id`, so no key is stored. Set this instead of `private_key`, `private_key_path` or `kms_key`. Any `XSHIELD_OIDC_*` environment variable turns it on without the block. (see [below for nested schema](#nestedatt--oidc))
 - `private_key` (String, Sensitive) The API key's PEM private key itself, for runners that hold it as a secret rather than a file. Can also be set with `XSHIELD_PRIVATE_KEY`. Set this or `private_key_path`.
 - `private_key_path` (String) Path to the API key's PEM private key. Can also be set with `XSHIELD_PRIVATE_KEY_PATH`. Set this or `private_key`.
 - `proxy_creds` (String, Sensitive) Proxy credentials (format: username:password)
@@ -62,4 +530,15 @@ provider "xshield" {
 - `request_timeout` (Number) HTTP request timeout in seconds (defaults to 60)
 - `server_url` (String) Your Xshield URL, such as `https://<tenant>.colortokens.com`. Can also be set with `XSHIELD_SERVER_URL`. Defaults to `https://ng.colortokens.com`.
 - `tenancy_id` (String) Tenancy ID of the API key, shown with the key in Xshield under **Settings > API Keys**. Can also be set with `XSHIELD_TENANCY_ID`.
-- `user_id` (String) User ID of the API key. Can also be set with `XSHIELD_USER_ID`.
+- `user_id` (String) User ID of the API key, or with `oidc` the service account's user ID. Can also be set with `XSHIELD_USER_ID`.
+
+<a id="nestedatt--oidc"></a>
+### Nested Schema for `oidc`
+
+Optional:
+
+- `audience` (String) The audience to request a token for, equal to the audience of the service account's federation trust. Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Can also be set with `XSHIELD_OIDC_AUDIENCE`.
+- `source` (String) Where the OIDC token comes from: `auto` (the default), `terraform-cloud`, `github-actions`, `gitlab`, `azure-devops`, `kubernetes`, `aws`, `azure` or `gcp`. `auto` uses `token`, `token_file` or `token_env` when set, then HCP Terraform's workload identity token, then GitHub Actions, then Azure DevOps; it never calls a cloud metadata service. Can also be set with `XSHIELD_OIDC_SOURCE`.
+- `token` (String, Sensitive) The OIDC token itself. Can also be set with `XSHIELD_OIDC_TOKEN`. Set at most one of `token`, `token_file` and `token_env`.
+- `token_env` (String) The name of an environment variable holding the OIDC token. With `source = "gitlab"` it defaults to `XSHIELD_ID_TOKEN`. Can also be set with `XSHIELD_OIDC_TOKEN_ENV`.
+- `token_file` (String) A file holding the OIDC token, read again at every exchange. With `source = "kubernetes"` it defaults to `/var/run/secrets/xshield/token`. Can also be set with `XSHIELD_OIDC_TOKEN_FILE`.

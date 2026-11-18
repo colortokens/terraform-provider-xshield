@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: terraform
+  namespace: platform
+spec:
+  serviceAccountName: terraform
+  restartPolicy: Never
+  containers:
+    - name: terraform
+      image: <your-terraform-runner-image>
+      env:
+        - name: XSHIELD_SERVER_URL
+          value: https://<tenant>.colortokens.com
+        - name: XSHIELD_TENANCY_ID
+          value: <tenancy-id>
+        - name: XSHIELD_USER_ID
+          value: <service-account-user-id>
+        - name: XSHIELD_OIDC_SOURCE
+          value: kubernetes
+      volumeMounts:
+        - name: xshield-token
+          mountPath: /var/run/secrets/xshield
+          readOnly: true
+  # A token for the trust's audience, which the kubelet rotates in place.
+  volumes:
+    - name: xshield-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: xshield

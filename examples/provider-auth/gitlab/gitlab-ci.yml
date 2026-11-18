@@ -1,0 +1,15 @@
+xshield-plan:
+  image:
+    name: hashicorp/terraform
+    entrypoint: [""]
+  # The ID token's aud is the audience of the service account's federation trust.
+  id_tokens:
+    XSHIELD_ID_TOKEN:
+      aud: xshield
+  # Set XSHIELD_TENANCY_ID and XSHIELD_USER_ID as CI/CD variables of the project.
+  variables:
+    XSHIELD_SERVER_URL: https://<tenant>.colortokens.com
+    XSHIELD_OIDC_SOURCE: gitlab
+  script:
+    - terraform init
+    - terraform plan

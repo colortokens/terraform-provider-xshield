@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -26,6 +27,15 @@ func (ah *AuthenticationHook) BeforeRequest(hookCtx BeforeRequestContext, req *h
 	secSource, err := hookCtx.SecuritySource(hookCtx.Context)
 	if err != nil {
 		return nil, err
+	}
+
+	if federated, ok := secSource.(shared.AccessTokenSource); ok {
+		token, err := federated.AccessToken(req.Context())
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return req, nil
 	}
 
 	pkiSigningMaterial, ok := secSource.(shared.ConfigurationProvider)
@@ -58,7 +68,7 @@ func (ah *AuthenticationHook) signRequest(req *http.Request, signingMaterial sha
 		fmt.Sprintf("host: %s", signedHost(req.Host)),
 		fmt.Sprintf("x-content-sha256: %s", req.Header.Get("x-content-sha256"))}
 
-	signature, err := calculateSignature(signatureMaterial, signingMaterial)
+	signature, err := calculateSignature(req.Context(), signatureMaterial, signingMaterial)
 	if err != nil {
 		return err
 	}
@@ -78,15 +88,23 @@ func signedHost(host string) string {
 	return host
 }
 
-func calculateSignature(signatureMaterial []string, signingMaterial shared.ConfigurationProvider) (string, error) {
+func calculateSignature(ctx context.Context, signatureMaterial []string, signingMaterial shared.ConfigurationProvider) (string, error) {
+	hash := sha256.New()
+	hash.Write([]byte(strings.Join(signatureMaterial, "\n")))
+	hashed := hash.Sum(nil)
+
+	if remote, ok := signingMaterial.(shared.RemoteSigner); ok {
+		unencodedSig, err := remote.SignSHA256Digest(ctx, hashed)
+		if err != nil {
+			return "", fmt.Errorf("signing the request with the key service: %w", err)
+		}
+		return base64.RawStdEncoding.EncodeToString(unencodedSig), nil
+	}
+
 	privateKey, err := signingMaterial.KeyLoader().LoadKey()
 	if err != nil {
 		return "", err
 	}
-
-	hash := sha256.New()
-	hash.Write([]byte(strings.Join(signatureMaterial, "\n")))
-	hashed := hash.Sum(nil)
 
 	var unencodedSig []byte
 	unencodedSig, e := rsa.SignPSS(rand.Reader, privateKey, crypto.SHA256, hashed, nil)
