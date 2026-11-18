@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -249,5 +252,85 @@ func TestOIDCNeedsTheServiceAccountButNoFingerprintOrKey(t *testing.T) {
 	}
 	if !strings.Contains(resp.Diagnostics.Errors()[1].Detail(), "service account") {
 		t.Errorf("the user_id error does not say it is the service account's: %s", resp.Diagnostics.Errors()[1].Detail())
+	}
+}
+
+func warningPaths(resp provider.ConfigureResponse) []string {
+	var paths []string
+	for _, d := range resp.Diagnostics.Warnings() {
+		if withPath, ok := d.(diag.DiagnosticWithPath); ok {
+			paths = append(paths, withPath.Path().String())
+		} else {
+			paths = append(paths, "")
+		}
+	}
+	return paths
+}
+
+// fakeAzureDevOpsOIDCEndpoint issues workload-token to any job that asks.
+func fakeAzureDevOpsOIDCEndpoint(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"oidcToken": "workload-token"})
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// A setting the chosen source cannot use is reported, not refused, so a configuration that works keeps working.
+func TestOIDCWarnsOfSettingsTheSourceDoesNotUse(t *testing.T) {
+	server := fakeTokenEndpoint(t)
+	cases := map[string]struct {
+		set          func(t *testing.T, m *XshieldProviderModel)
+		wantWarnings []string
+	}{
+		"audience with terraform-cloud": {func(t *testing.T, m *XshieldProviderModel) {
+			t.Setenv("TFC_WORKLOAD_IDENTITY_TOKEN_XSHIELD", "workload-token")
+			m.OIDC = &OIDCModel{Source: types.StringValue("terraform-cloud"), Audience: types.StringValue("xshield")}
+		}, []string{"oidc.audience"}},
+		"audience with gitlab": {func(t *testing.T, m *XshieldProviderModel) {
+			t.Setenv("XSHIELD_ID_TOKEN", "workload-token")
+			m.OIDC = &OIDCModel{Source: types.StringValue("gitlab"), Audience: types.StringValue("xshield")}
+		}, []string{"oidc.audience"}},
+		"audience with kubernetes": {func(t *testing.T, m *XshieldProviderModel) {
+			tokenFile := filepath.Join(t.TempDir(), "token")
+			if err := os.WriteFile(tokenFile, []byte("workload-token"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			m.OIDC = &OIDCModel{Source: types.StringValue("kubernetes"), TokenFile: types.StringValue(tokenFile), Audience: types.StringValue("xshield")}
+		}, []string{"oidc.audience"}},
+		"audience with azure-devops": {func(t *testing.T, m *XshieldProviderModel) {
+			t.Setenv("SYSTEM_OIDCREQUESTURI", fakeAzureDevOpsOIDCEndpoint(t).URL+"/oidctoken")
+			t.Setenv("SYSTEM_ACCESSTOKEN", "job-token")
+			t.Setenv("XSHIELD_ADO_SERVICE_CONNECTION_ID", "connection-1")
+			t.Setenv("XSHIELD_OIDC_AUDIENCE", "xshield")
+			m.OIDC = &OIDCModel{Source: types.StringValue("azure-devops")}
+		}, []string{"oidc.audience"}},
+		"audience with a token given as is": {func(t *testing.T, m *XshieldProviderModel) {
+			m.OIDC = &OIDCModel{Token: types.StringValue("workload-token"), Audience: types.StringValue("xshield")}
+		}, []string{"oidc.audience"}},
+		"a fingerprint": {func(t *testing.T, m *XshieldProviderModel) {
+			m.FingerPrint = types.StringValue("aa:bb")
+			m.OIDC = &OIDCModel{Token: types.StringValue("workload-token")}
+		}, []string{"fingerprint"}},
+		"only what the source uses": {func(t *testing.T, m *XshieldProviderModel) {
+			m.OIDC = &OIDCModel{Token: types.StringValue("workload-token")}
+		}, nil},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			serviceAccountInEnvironment(t)
+			m := unsetModel()
+			c.set(t, &m)
+			var resp provider.ConfigureResponse
+			config, _ := buildAuthentication(context.Background(), m, server.URL+"/", server.Client(), &resp)
+			if resp.Diagnostics.HasError() || config == nil {
+				t.Fatalf("a setting the source does not use failed the configuration: %v", resp.Diagnostics)
+			}
+			if got := warningPaths(resp); !slices.Equal(got, c.wantWarnings) {
+				t.Errorf("warnings on %v, want %v: %v", got, c.wantWarnings, resp.Diagnostics)
+			}
+		})
 	}
 }

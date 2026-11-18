@@ -120,6 +120,17 @@ func NewSubjectTokenSource(ctx context.Context, settings Settings, client *http.
 	}
 }
 
+// RequestsAnAudience tells whether source asks its platform for a token for the configured audience. The other
+// sources read a token the platform has already issued, for the audience set where it was issued.
+func RequestsAnAudience(source SubjectTokenSource) bool {
+	switch source.(type) {
+	case gitHubActionsToken, awsWebIdentityToken, azureToken, gcpIdentityToken:
+		return true
+	default:
+		return false
+	}
+}
+
 func explicitSource(settings Settings) (SubjectTokenSource, error) {
 	given := 0
 	for _, value := range []string{settings.Token, settings.TokenFile, settings.TokenEnv} {

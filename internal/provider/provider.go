@@ -86,7 +86,7 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 			},
 			"fingerprint": schema.StringAttribute{
 				MarkdownDescription: "Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`. Optional with `kms_key`, which computes it " +
-					"from the key service's public key and checks it against this value when both are given. Not used with `oidc`.",
+					"from the key service's public key and checks it against this value when both are given. Not used with `oidc`, which warns when it is set.",
 				Optional: true,
 			},
 			"private_key_path": schema.StringAttribute{
@@ -135,7 +135,8 @@ func (p *XshieldProvider) Schema(ctx context.Context, req provider.SchemaRequest
 					},
 					"audience": schema.StringAttribute{
 						MarkdownDescription: "The audience to request a token for, equal to the audience of the service account's federation trust. " +
-							"Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Can also be set with `XSHIELD_OIDC_AUDIENCE`.",
+							"Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Not used by the other sources, which read a token " +
+							"already issued for the audience set on the platform; the provider warns when it is set for them. Can also be set with `XSHIELD_OIDC_AUDIENCE`.",
 						Optional: true,
 					},
 				},

@@ -208,7 +208,7 @@ The provider takes the OIDC token the platform gives the workload, and exchanges
 | `jwks` | The issuer's signing keys, for an issuer Xshield cannot reach. Without it, Xshield reads them through the issuer's OIDC discovery document. |
 | `tokenLifetimeSeconds` | How long each Xshield access token lasts, from 300 to 3600. The default is 900. |
 
-Set `tenancy_id` and `user_id` to the tenancy ID and the service account's user ID. `fingerprint` and a private key are not used.
+Set `tenancy_id` and `user_id` to the tenancy ID and the service account's user ID. `fingerprint` and a private key are not used, and the provider warns when `fingerprint` is set. Only `github-actions`, `aws`, `azure` and `gcp` request a token for the provider's `audience`; with any other source the platform issues the token for the audience set on it, and the provider warns when `audience` is set.
 
 **Caveats:**
 
@@ -519,7 +519,7 @@ provider "xshield" {
 ### Optional
 
 - `exponent` (Number) Exponent for backoff strategy (defaults to 1.5)
-- `fingerprint` (String) Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`. Optional with `kms_key`, which computes it from the key service's public key and checks it against this value when both are given. Not used with `oidc`.
+- `fingerprint` (String) Fingerprint of the API key. Can also be set with `XSHIELD_FINGERPRINT`. Optional with `kms_key`, which computes it from the key service's public key and checks it against this value when both are given. Not used with `oidc`, which warns when it is set.
 - `initial_interval` (Number) Initial interval for backoff strategy in miliseconds (defaults to 500)
 - `kms_key` (String) The API key's private key held in a cloud key service, which signs every request so the key never leaves it: `awskms:///<key ARN or alias ARN>`, `azurekeyvault://<vault>.vault.azure.net/keys/<name>[/<version>]` or `gcpkms://projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>/cryptoKeyVersions/<version>`. Uses the cloud's default credentials. Can also be set with `XSHIELD_KMS_KEY`. Set this instead of `private_key` or `private_key_path`.
 - `max_elapsed_time` (Number) Maximum elapsed time for backoff strategy in seconds (defaults to 3600000)
@@ -539,7 +539,7 @@ provider "xshield" {
 
 Optional:
 
-- `audience` (String) The audience to request a token for, equal to the audience of the service account's federation trust. Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Can also be set with `XSHIELD_OIDC_AUDIENCE`.
+- `audience` (String) The audience to request a token for, equal to the audience of the service account's federation trust. Required for `github-actions`, `aws`, `azure` and `gcp`, which issue tokens on request. Not used by the other sources, which read a token already issued for the audience set on the platform; the provider warns when it is set for them. Can also be set with `XSHIELD_OIDC_AUDIENCE`.
 - `source` (String) Where the OIDC token comes from: `auto` (the default), `terraform-cloud`, `github-actions`, `gitlab`, `azure-devops`, `kubernetes`, `aws`, `azure` or `gcp`. `auto` uses `token`, `token_file` or `token_env` when set, then HCP Terraform's workload identity token, then GitHub Actions, then Azure DevOps; it never calls a cloud metadata service. Can also be set with `XSHIELD_OIDC_SOURCE`.
 - `token` (String, Sensitive) The OIDC token itself. Can also be set with `XSHIELD_OIDC_TOKEN`. Set at most one of `token`, `token_file` and `token_env`.
 - `token_env` (String) The name of an environment variable holding the OIDC token. With `source = "gitlab"` it defaults to `XSHIELD_ID_TOKEN`. Can also be set with `XSHIELD_OIDC_TOKEN_ENV`.

@@ -109,12 +109,28 @@ func buildFederatedConfigProvider(ctx context.Context, data XshieldProviderModel
 		}
 		return nil, nil
 	}
+	warnOfSettingsFederationDoesNotUse(data, settings, subjectTokens, resp)
 	exchanger := federation.NewExchanger(serverURL, tenancy, user, subjectTokens, httpClient)
 	if _, err := exchanger.AccessToken(ctx); err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("oidc"), "Xshield workload identity federation failed", err.Error())
 		return nil, nil
 	}
 	return shared.NewFederatedConfigProvider(tenancy, user, exchanger), federation.NewReauthenticatingClient(httpClient, exchanger)
+}
+
+func warnOfSettingsFederationDoesNotUse(data XshieldProviderModel, settings federation.Settings, subjectTokens federation.SubjectTokenSource,
+	resp *provider.ConfigureResponse) {
+	if settings.Audience != "" && !federation.RequestsAnAudience(subjectTokens) {
+		resp.Diagnostics.AddAttributeWarning(path.Root("oidc").AtName("audience"), "Xshield oidc audience is not used",
+			"The OIDC token is one the platform has already issued, for the audience set where it is issued, so audience (or "+
+				"XSHIELD_OIDC_AUDIENCE) is not used: only sources github-actions, aws, azure and gcp request a token for it. Remove it, "+
+				"and make sure the platform issues the token for the audience of the service account's federation trust.")
+	}
+	if withEnv(data.FingerPrint, "XSHIELD_FINGERPRINT") != "" {
+		resp.Diagnostics.AddAttributeWarning(path.Root("fingerprint"), "Xshield fingerprint is not used with oidc",
+			"Workload identity federation authenticates with an access token, not a signature, so fingerprint (or "+
+				"XSHIELD_FINGERPRINT) is not used. Remove it.")
+	}
 }
 
 func readOIDCSettings(block *OIDCModel, resp *provider.ConfigureResponse) federation.Settings {
