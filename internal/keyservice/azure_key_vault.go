@@ -25,6 +25,7 @@ type azureKeyVaultKey struct {
 	keyID  string
 	tokens cloudauth.BearerTokens
 	client *http.Client
+	retry  retryPolicy
 }
 
 func newAzureKeyVaultKey(keyID string, client *http.Client) (*azureKeyVaultKey, error) {
@@ -86,6 +87,10 @@ func (k *azureKeyVaultKey) call(ctx context.Context, method, url string, request
 			return err
 		}
 	}
+	return k.retry.call(ctx, func() error { return k.callOnce(ctx, method, url, body, response) })
+}
+
+func (k *azureKeyVaultKey) callOnce(ctx context.Context, method, url string, body []byte, response any) error {
 	req, err := http.NewRequestWithContext(ctx, method, url+"?api-version="+azureKeyVaultAPIVersion, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -95,16 +100,16 @@ func (k *azureKeyVaultKey) call(ctx context.Context, method, url string, request
 		return fmt.Errorf("Key Vault key %s: %w", k.keyID, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if request != nil {
+	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	res, err := k.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("Key Vault key %s: %w", k.keyID, err)
+		return transientIfConnectionDropped(fmt.Errorf("Key Vault key %s: %w", k.keyID, err))
 	}
 	responseBody, err := readResponseBody(res)
 	if err != nil {
-		return fmt.Errorf("Key Vault key %s: %w", k.keyID, err)
+		return transientIfConnectionDropped(fmt.Errorf("Key Vault key %s: %w", k.keyID, err))
 	}
 	if res.StatusCode != http.StatusOK {
 		var failure struct {
@@ -114,7 +119,11 @@ func (k *azureKeyVaultKey) call(ctx context.Context, method, url string, request
 			} `json:"error"`
 		}
 		_ = json.Unmarshal(responseBody, &failure)
-		return fmt.Errorf("Key Vault key %s returned %s: %s %s", k.keyID, res.Status, failure.Error.Code, failure.Error.Message)
+		refusal := fmt.Errorf("Key Vault key %s returned %s: %s %s", k.keyID, res.Status, failure.Error.Code, failure.Error.Message)
+		if retryableStatus(res.StatusCode) {
+			return transientRefusal(refusal, res.Header)
+		}
+		return refusal
 	}
 	if err = json.Unmarshal(responseBody, response); err != nil {
 		return fmt.Errorf("Key Vault returned a response for %s that does not parse: %w", k.keyID, err)

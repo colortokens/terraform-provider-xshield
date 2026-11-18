@@ -95,6 +95,8 @@ The provider reads the public key when it starts and computes the fingerprint Xs
 **Caveats:**
 
 - Every Xshield API call makes one call to the key service. The key service charges per request and limits the request rate, and each API call waits for its round trip.
+- When the key service throttles a signature, answers with a server error or drops the connection, the provider asks again, up to five attempts in all. It waits as long as the key service's `Retry-After` asks, or otherwise a random delay that doubles with each attempt, and never past the request's deadline when `request_timeout` is set. It gives up at once when the key service asks it to wait more than 30 seconds. A refusal, such as a missing permission or a disabled, deleted or unsuitable key, is not retried. The error names the key and the key service's last answer.
+- A large plan or apply signs many requests at once. If the key service still throttles after the retries, raise its request quota or lower Terraform's concurrency with `-parallelism`.
 - Registering the public key is a one-time step per key. A new key, or in Azure Key Vault a new key version, is registered again before the provider uses it.
 
 #### AWS KMS

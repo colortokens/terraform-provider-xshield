@@ -26,6 +26,7 @@ type gcpCloudKMSKey struct {
 	baseURL     string
 	tokens      cloudauth.BearerTokens
 	client      *http.Client
+	retry       retryPolicy
 }
 
 func newGCPCloudKMSKey(versionName string, client *http.Client) (*gcpCloudKMSKey, error) {
@@ -85,6 +86,10 @@ func (k *gcpCloudKMSKey) call(ctx context.Context, method, url string, request, 
 			return err
 		}
 	}
+	return k.retry.call(ctx, func() error { return k.callOnce(ctx, method, url, body, response) })
+}
+
+func (k *gcpCloudKMSKey) callOnce(ctx context.Context, method, url string, body []byte, response any) error {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -94,16 +99,16 @@ func (k *gcpCloudKMSKey) call(ctx context.Context, method, url string, request, 
 		return fmt.Errorf("Cloud KMS key version %s: %w", k.versionName, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if request != nil {
+	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	res, err := k.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("Cloud KMS key version %s: %w", k.versionName, err)
+		return transientIfConnectionDropped(fmt.Errorf("Cloud KMS key version %s: %w", k.versionName, err))
 	}
 	responseBody, err := readResponseBody(res)
 	if err != nil {
-		return fmt.Errorf("Cloud KMS key version %s: %w", k.versionName, err)
+		return transientIfConnectionDropped(fmt.Errorf("Cloud KMS key version %s: %w", k.versionName, err))
 	}
 	if res.StatusCode != http.StatusOK {
 		var failure struct {
@@ -113,7 +118,11 @@ func (k *gcpCloudKMSKey) call(ctx context.Context, method, url string, request, 
 			} `json:"error"`
 		}
 		_ = json.Unmarshal(responseBody, &failure)
-		return fmt.Errorf("Cloud KMS key version %s returned %s: %s %s", k.versionName, res.Status, failure.Error.Status, failure.Error.Message)
+		refusal := fmt.Errorf("Cloud KMS key version %s returned %s: %s %s", k.versionName, res.Status, failure.Error.Status, failure.Error.Message)
+		if retryableStatus(res.StatusCode) {
+			return transientRefusal(refusal, res.Header)
+		}
+		return refusal
 	}
 	if err = json.Unmarshal(responseBody, response); err != nil {
 		return fmt.Errorf("Cloud KMS returned a response for %s that does not parse: %w", k.versionName, err)

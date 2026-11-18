@@ -15,7 +15,10 @@ import (
 	"github.com/colortokens/terraform-provider-xshield/internal/cloudauth"
 )
 
-const awsKMSSigningAlgorithm = "RSASSA_PSS_SHA_256"
+const (
+	awsKMSSigningAlgorithm    = "RSASSA_PSS_SHA_256"
+	awsKMSThrottlingErrorType = "ThrottlingException"
+)
 
 type awsKMSKey struct {
 	keyARN      string
@@ -23,6 +26,7 @@ type awsKMSKey struct {
 	endpoint    string
 	credentials aws.CredentialsProvider
 	client      *http.Client
+	retry       retryPolicy
 }
 
 func newAWSKMSKey(ctx context.Context, keyARN string, client *http.Client) (*awsKMSKey, error) {
@@ -85,6 +89,10 @@ func (k *awsKMSKey) call(ctx context.Context, operation string, request, respons
 	if err != nil {
 		return err
 	}
+	return k.retry.call(ctx, func() error { return k.callOnce(ctx, operation, body, response) })
+}
+
+func (k *awsKMSKey) callOnce(ctx context.Context, operation string, body []byte, response any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, k.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -96,11 +104,11 @@ func (k *awsKMSKey) call(ctx context.Context, operation string, request, respons
 	}
 	res, err := k.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("AWS KMS %s: %w", operation, err)
+		return transientIfConnectionDropped(fmt.Errorf("AWS KMS %s on %s: %w", operation, k.keyARN, err))
 	}
 	responseBody, err := readResponseBody(res)
 	if err != nil {
-		return fmt.Errorf("AWS KMS %s: %w", operation, err)
+		return transientIfConnectionDropped(fmt.Errorf("AWS KMS %s on %s: %w", operation, k.keyARN, err))
 	}
 	if res.StatusCode != http.StatusOK {
 		var failure struct {
@@ -113,7 +121,11 @@ func (k *awsKMSKey) call(ctx context.Context, operation string, request, respons
 		if errorType == "" {
 			errorType = failure.Type
 		}
-		return fmt.Errorf("AWS KMS %s on %s returned %s: %s %s%s", operation, k.keyARN, res.Status, errorType, failure.Message, failure.MessageUpper)
+		refusal := fmt.Errorf("AWS KMS %s on %s returned %s: %s %s%s", operation, k.keyARN, res.Status, errorType, failure.Message, failure.MessageUpper)
+		if retryableStatus(res.StatusCode) || errorType == awsKMSThrottlingErrorType {
+			return transientRefusal(refusal, res.Header)
+		}
+		return refusal
 	}
 	if err = json.Unmarshal(responseBody, response); err != nil {
 		return fmt.Errorf("AWS KMS %s returned a response that does not parse: %w", operation, err)
