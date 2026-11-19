@@ -152,6 +152,10 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"A `revertEnded` notice is about a Full control revert that ended without discovery showing your security group holding its moved " +
 					"rules again, because nothing has carried the group for an hour or more. Xshield's groups that kept those rules are withdrawn: its " +
 					"message says whether the workspace that owns the group has put them back, or to plan and apply it before anything carries the group again. " +
+					"A `changeSetServesNoWorkload` notice is about a Full control change none of whose workloads remain: each workload it narrowed " +
+					"your security group for is gone from AWS or no longer carries the group. On pipeline delivery Xshield then reverts the change " +
+					"itself, and the group gets its moved rules back before Xshield's groups that kept them go; while workloads of the change on " +
+					"another group remain, its message says to revert the change in Xshield instead. " +
 					"A `blockRuleNotEnforced` notice names a workload with a block template in Xshield, which AWS does not enforce: a security group " +
 					"can only allow, so the traffic the template blocks passes wherever an allow rule, Xshield's or your own, covers it. There is one " +
 					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template that " +
@@ -171,8 +175,8 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"clears at the first observation after that apply that shows the workload carrying the group. " +
 					"An `observationStale` notice is about the account and region: the cloud connector has not observed them for three " +
 					"observation intervals since the last apply or observation, so a change made in AWS since is not shown as drift. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, `networkAclReach`, `awaitingAttach` or `observationStale`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, `networkAclReach`, `awaitingAttach` or `observationStale`. " +
+					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
 					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +
 					"for `networkAclNotObserved` `NOT_READ`, `NOT_FOUND` or the connector's error, for `networkAclEntryShadowed` the direction " +
 					"and number of the allow rule, such as `in:40`, " +
@@ -180,7 +184,7 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`, `networkAclReach`, `awaitingAttach` and `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
-					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
+					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
 					"its handle for `asgPolicyDiffers`, or the network ACL by its ID for the network ACL notices; null for `prefixListSizeUnknown`, whose message names its groups, and for `observationStale`. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
 					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
