@@ -12,7 +12,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 ## Before you start
 
-- An Xshield administrator has set the subscription to pipeline delivery.
+- An Xshield administrator has set the subscription to pipeline delivery, which needs its cloud connector to be Read-Only. Xshield keeps it Read-Only while the subscription stays on pipeline delivery, so the connector never writes beside your pipeline.
 - An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the subscription.
 - Terraform 1.7 or later, and the azurerm provider 4.81.0 or later.
 
@@ -36,7 +36,7 @@ Give the azurerm provider its credentials through the `ARM_*` environment variab
 
 ## Step 2: Create the enforcement role, once per subscription
 
-Whoever owns access control in the subscription applies [`enforcement-role-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role-azure), with `pipeline_principal_ids` set to the object IDs of the service principal or managed identity your runner uses. The role can write network security groups, network interfaces and subnets, and nothing else.
+Whoever owns access control in the subscription applies [`enforcement-role-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role-azure), with `pipeline_principal_ids` set to the object IDs of the service principal or managed identity your runner uses. Creating the role and its assignments takes Owner or User Access Administrator on the subscription. The role itself can write network security groups, network interfaces and subnets, and holds the join actions Azure checks when they change: no compute, identity or data access.
 
 Azure has no condition that limits these writes to Xshield's own groups. Set `scopes` to the resource groups that hold your workloads' network interfaces and subnets, rather than leaving the role on the whole subscription. Associating a group rewrites the whole network interface or subnet, and Azure checks a join on every resource it links to where that resource is, so `scopes` must also hold the resource groups of linked resources, such as a hub's route tables.
 
@@ -131,5 +131,5 @@ Xshield does not notify your pipeline when it publishes a version, so plan the e
 | You want to stop enforcing a workload | Undeploy its policy in Xshield and keep running the enforcement workspace: the next apply removes the association, then the group. Do not run `terraform destroy`, or remove the module block: both delete the groups while Xshield still expects them. |
 | A plan fails because a network interface or subnet carries a group of yours | Azure removes an association by clearing whatever group its level carries, so the module will not remove Xshield's once yours is there. After the cloud connector's next observation, the `associationHeld` notice names it and the plan keeps it unchanged until the level carries no group of yours. |
 | A rule appears in one of Xshield's groups that it did not publish | The next apply removes it. To keep such rules until a person removes them, set `enable_exclusive_rules = false` on the module, as its README describes. |
-| The subscription moves back to connector delivery | Undeploy its workloads in Xshield and apply the version that withdraws Xshield's groups: Xshield moves the subscription only once the version it expects holds none. Once it has, the plan stops with `Xshield moved <subscription>/<region> to connector delivery`. Remove the module block, apply once, and stop running the workspace. |
+| The subscription moves back to connector delivery | Undeploy its workloads in Xshield and apply the version that withdraws Xshield's groups: Xshield moves the subscription only once the version it expects holds none. Once it has, the plan stops with `Xshield moved <subscription>/<region> to connector delivery`. Remove the module block, apply once, and stop running the workspace. The connector needs Read-Write access to enforce again, which Xshield allows only once the subscription is back on connector delivery; you can then remove the enforcement role's assignments. |
 | The enforcement workspace's state is lost | `xshield_azure_enforcement_status` returns the Azure ID of each group and association the last receipt recorded, in `applied_network_security_groups`, `applied_interface_associations` and `applied_subnet_associations`, keyed as the module keys them. Import each with an `import` block to that address, set `snapshot_version` to `applied_version`, and apply. Remove the pin afterwards. |
