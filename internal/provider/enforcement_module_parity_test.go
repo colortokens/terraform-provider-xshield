@@ -96,7 +96,7 @@ func enforcementModuleDifferencesBetween(aws, azure moduleInterface) []string {
 }
 
 func TestAWSAndAzureModulesDifferOnlyWhereTheCloudsDo(t *testing.T) {
-	modules := filepath.Join("..", "..", "examples", "enforcement-snapshot", "modules")
+	modules := filepath.Join("..", "..", "modules")
 	differences := enforcementModuleDifferencesBetween(readModuleInterface(t, filepath.Join(modules, "aws")), readModuleInterface(t, filepath.Join(modules, "azure")))
 
 	for _, difference := range differences {
