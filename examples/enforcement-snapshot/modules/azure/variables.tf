@@ -21,6 +21,12 @@ variable "snapshot_version" {
   default     = null
 }
 
+variable "workspace" {
+  description = "Name Xshield shows for the workspace that applied a version. Defaults to xshield-enforcement-<subscription>-<region>."
+  type        = string
+  default     = null
+}
+
 variable "enable_exclusive_rules" {
   description = "Whether each network security group this module creates holds only the rules the snapshot declares for it, so the next apply removes a rule added to one of them outside Terraform. Set it to false to leave such a rule in place until a person removes it. Network security groups of your own are never managed this way."
   type        = bool
