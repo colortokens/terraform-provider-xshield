@@ -27,10 +27,10 @@ provider "azurerm" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
-  # ../modules/azure exists only inside the provider's repository. In your copy, use the address at the tag
+  # ../../../modules/azure exists only inside the provider's repository. In your copy, use the address at the tag
   # of the provider release you run, or terraform init cannot find the module:
-  #   source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/azure?ref=vX.Y.Z"
-  source = "../modules/azure"
+  #   source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v0.2.0"
+  source = "../../../modules/azure"
 
   region = var.region
   tags   = { "cost-center" = "platform-security" }

@@ -4,7 +4,7 @@ Applies the Azure resources Xshield rendered for one subscription and region.
 
 ```hcl
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/azure?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v0.2.0"
 
   region = "eastus2"
 }

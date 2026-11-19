@@ -8,7 +8,7 @@ description: |-
 
 Xshield renders the network security groups, and their rules, that an Azure subscription and region need, and the network interface or subnet each one goes on. Your pipeline applies them with the `azure` enforcement module shipped in this provider's repository, and tells Xshield what it applied. You write no rule.
 
-Each step below says who does it, what to run, and how to tell it worked. Take them in order: each relies on the one before it. The module's [README](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/modules/azure) explains where each group goes, and every message the module gives.
+Each step below says who does it, what to run, and how to tell it worked. Take them in order: each relies on the one before it. The module's [README](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) explains where each group goes, and every message the module gives.
 
 ## Before you start
 
@@ -18,7 +18,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 Xshield changes none of your own network security groups. Its group goes only on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network (step 3).
 
-In every `source` below, replace `vX.Y.Z` with the tag of the `colortokens/xshield` provider release you run, so the module and the provider match.
+The module lives in the [`modules/azure`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the module and the provider match.
 
 ## Step 1: Give the runner the API key
 
@@ -72,7 +72,7 @@ resource "azurerm_subnet" "app" {
 
 ## Step 4: Create the enforcement workspace and apply it, once per subscription and region
 
-Start from [`enforcement-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-azure). In your copy, change the module's `source` from `../modules/azure` to the repository address, or `terraform init` fails:
+Start from [`enforcement-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-azure). In your copy, change the module's `source` from `../../../modules/azure` to the repository address, or `terraform init` fails:
 
 ```terraform
 provider "azurerm" {
@@ -84,7 +84,7 @@ provider "azurerm" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/azure?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v0.2.0"
 
   region = var.region
 }

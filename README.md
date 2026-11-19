@@ -115,7 +115,7 @@ Policies for groups under Full control are provided by ColorTokens separately.
 
 When an Azure subscription's policy delivery is Terraform pipeline, your pipeline creates the network security
 groups Xshield renders instead of the cloud connector, through the
-[azure enforcement module](examples/enforcement-snapshot/modules/azure/README.md).
+[azure enforcement module](modules/azure/README.md).
 [enforcement-azure](examples/enforcement-snapshot/enforcement-azure) is a workspace that calls it, ready to copy.
 
 | Resource or data source | Does |

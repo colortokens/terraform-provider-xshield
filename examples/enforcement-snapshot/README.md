@@ -13,7 +13,7 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | [`modules/aws`](../../modules/aws/) | The enforcement module. One block per AWS account and region. |
 | [`modules/aws-group-lookup`](../../modules/aws-group-lookup/) | Gives a database, function or service the group it must attach. Reads only SSM. |
 | [`modules/aws-security-group-rules`](../../modules/aws-security-group-rules/) | Declares one of your own security group's rules under Full control. |
-| [`modules/azure`](modules/azure/) | The enforcement module for Azure. One block per subscription and region. |
+| [`modules/azure`](../../modules/azure/) | The enforcement module for Azure. One block per subscription and region. |
 
 **Workspaces to copy and fill in.**
 
