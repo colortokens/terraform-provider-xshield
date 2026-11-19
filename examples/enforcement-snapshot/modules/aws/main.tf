@@ -273,12 +273,20 @@ check "interfaces_have_room" {
 }
 
 # Adds the group to the interface and leaves the interface's other groups in
-# place, as the cloud connector does.
+# place, as the cloud connector does. A version that moves an interface from
+# one of Xshield's groups to another, as when a new cohort group supersedes an
+# old one, attaches the new group before it detaches the old: an attachment
+# the version drops comes off only once Xshield has accepted the receipt, so a
+# group, rule or attachment AWS refuses leaves the interface as last applied.
 resource "aws_network_interface_sg_attachment" "this" {
   for_each = local.attachments_with_room
 
   security_group_id    = local.security_group_ids[each.value.security_group]
   network_interface_id = each.value.network_interface_id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # One parameter per database, function or service its own workspace attaches;
@@ -334,7 +342,7 @@ locals {
 check "pinned_network_acl_entries_present" {
   assert {
     condition     = length(local.network_acl_entries) == length(local.snap.network_acl_entries)
-    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out until the cloud connector has observed those network ACLs gone, and until then the apply ends with the receipt refused. The attachments and directory parameters this version removes, and with exclusive rules the rules it drops from a group, are removed before the receipt is sent; the security groups, rules and network ACL entries it deletes stay in place until a receipt is accepted. Plan and apply again once the cloud connector has observed them gone."
+    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out until the cloud connector has observed those network ACLs gone, and until then the apply ends with the receipt refused. The directory parameters this version removes, and with exclusive rules the rules it drops from a group, are removed before the receipt is sent; the security groups, rules, attachments and network ACL entries it deletes stay in place until a receipt is accepted. Plan and apply again once the cloud connector has observed them gone."
   }
 }
 
