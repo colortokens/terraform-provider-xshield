@@ -53,9 +53,9 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 
 | Where | What a person does | How often |
 |--|--|--|
-| A new enforcement workspace | Copies `enforcement/`, creates its role from `enforcement-role/`, sets the API key on the runner and runs the workspace on a schedule: step 1. Where the cloud connector enforces the account today, adds `handover/handover.tf` for the first apply, then deletes it. | Once for each account and region |
+| A new enforcement workspace | Copies `enforcement/`, creates its role from `enforcement-role/`, sets the API key on the runner, applies it and checks each workload, then runs it on a schedule: step 1. Where the cloud connector enforces the account today, adds `handover/handover.tf` for the first apply, then deletes it. | Once for each account and region |
 | The workspace that owns a database, function or service | Adds the lookup module and puts its output in the resource's list of groups: step 2. Where the cloud connector enforces the account today, only once the first enforcement apply has succeeded. | Once for each resource |
-| A workspace that declares an instance's or an interface's security groups | Adds `ignore_changes`: step 3. | Once for each such instance or interface |
+| A workspace that declares an instance's or an interface's security groups | Adds `ignore_changes`, before the enforcement workspace's first apply: step 3. | Once for each such instance or interface |
 | Under Full control, the workspace that owns a security group Xshield narrows | Configures the `xshield` provider and moves the group's rules into the rules module: step 4. | Once for each group |
 | A new monitor workspace | Copies `monitor/` and runs it on a schedule: step 5. | Once for each account and region |
 | The pipeline that runs the workspaces | Runs the workspaces from steps 2 and 4 after the enforcement workspace: step 6. | Once |
@@ -280,7 +280,7 @@ In an account the cloud connector enforced, add the lookup only once the first e
 
 ### 3. Instances whose Terraform declares their security groups
 
-Nothing to do for instances no workspace manages one by one, such as Auto Scaling instances. If a workspace sets `vpc_security_group_ids` on an `aws_instance`, or `security_groups` on an `aws_network_interface`, that list is authoritative and removes the group the enforcement workspace attached. Tell Terraform to leave it alone:
+Nothing to do for instances no workspace manages one by one, such as Auto Scaling instances. If a workspace sets `vpc_security_group_ids` on an `aws_instance`, or `security_groups` on an `aws_network_interface`, that list is authoritative and removes the group the enforcement workspace attached. Tell Terraform to leave it alone, before the enforcement workspace's first apply, so no apply of that workspace runs while its instances carry the group:
 
 ```hcl
 resource "aws_instance" "web" {
@@ -297,6 +297,8 @@ resource "aws_network_interface" "web" {
   }
 }
 ```
+
+While the list is ignored, Terraform no longer applies your own edits to it: add or remove your own groups on such an instance with `aws_network_interface_sg_attachment`, which leaves Xshield's group in place. An instance whose group another workspace took off shows in `xshield_aws_enforcement_status` as a `memberUnattached` finding, with `restoration = "pipeline"`, at the cloud connector's first observation after that apply; the next enforcement apply attaches the group again.
 
 ### 4. Full control: declare your own groups' rules through the rules module
 
@@ -586,6 +588,8 @@ Every check only warns, so the monitor never blocks a pipeline unless you ask it
 fail_on = ["drift_high", "never_applied"]
 ```
 
+The monitor cannot show that a first apply worked. Until the cloud connector has observed the account after the apply, `drift_evaluated` is false and there is no finding to report, and `drift_not_evaluated` warns of that only once `max_unobserved_age` has passed. To check a first apply, read `xshield_aws_enforcement_status` once the observation has come: `drift_evaluated` is true, no `memberUnattached` finding or `awaitingAttach` notice names a workload, and each workload reads Synchronized in the portal. The guide's step 6 lists each check and what to do when it fails.
+
 The `problems` output carries the same report by name, for a job that posts it somewhere. The workspace manages no resources, so `-detailed-exitcode` says nothing about it. To learn from an exit code whether approved policy is applied, plan the *enforcement* workspace on a schedule with `-detailed-exitcode`: 2 means it has something to apply, which is approved policy not yet applied or a resource it manages changed in the cloud.
 
 Where policy sets decide what blocks a run, use the example policy in [`policies/`](policies/README.md) in place of `fail_on`. [Exit codes and what stops a pipeline](#exit-codes-and-what-stops-a-pipeline) compares the choices.
@@ -598,7 +602,7 @@ A workspace from step 2 or step 4 changes only when it runs, and it reads what t
 2. Each workspace with the lookup module (step 2). The group must exist, and its directory entry be written, before the lookup returns it.
 3. Under Full control, each workspace with the rules module (step 4). A change takes a rule out of your group only once the enforcement workspace has written the rules each workload keeps into Xshield's groups and each workload carries them; until discovery shows a workload whose own workspace attaches its group carrying it, the change waits and this plan shows nothing to take out.
 
-Run them on a schedule too, not only after an enforcement apply: a new resource gets its directory entry once Xshield has discovered it, and a held change is released at a discovery. A run with nothing to change plans no change and applies nothing. A workload reads Synchronized, and its `awaitingAttach` notice clears, at the cloud connector's first observation after its owner's apply.
+Run the chain by hand first, and check each workload as the guide's step 6 does, before you put it on a schedule. Then run it on a schedule as a whole, not only the enforcement workspace, and not only after an enforcement apply: a new resource gets its directory entry once Xshield has discovered it, and a held change is released at a discovery. A run with nothing to change plans no change and applies nothing. A workload reads Synchronized, and its `awaitingAttach` notice clears, at the cloud connector's first observation after its owner's apply.
 
 In HCP Terraform or Terraform Enterprise, give each owner's workspace a run trigger whose source is the enforcement workspace, so a run is queued in it after each successful apply there. The triggered run waits for someone to confirm its apply unless the workspace sets `auto_apply_run_trigger = true`:
 
