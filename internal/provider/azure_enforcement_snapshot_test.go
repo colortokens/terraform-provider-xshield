@@ -237,3 +237,31 @@ func TestEachCloudsSnapshotIsRenderedOnlyByItsOwnDataSource(t *testing.T) {
 		t.Errorf("a snapshot without an Azure plan was accepted: %v", err)
 	}
 }
+
+func TestAzureSnapshotMapsTheAssociationsItHoldsAndReleases(t *testing.T) {
+	t.Parallel()
+	oldInterface := azureTestResourceID("rg-app", "networkInterfaces/nic-old")
+	oldSubnet := azureTestResourceID("rg-net", "virtualNetworks/vnet-a/subnets/snet-old")
+	oldGroupID := azureTestResourceID("rg-app", "networkSecurityGroups/ct-policy-0123456789ab")
+	body := strings.Replace(readTestdata(t, "azure_snapshot.json"), `"azure": {`, `"azure": {
+    "heldInterfaceAssociations": {"ct-policy-0123456789ab": {"levelId": "`+oldInterface+`", "networkSecurityGroupId": "`+oldGroupID+`"}},
+    "releasedInterfaceAssociations": {"ct-policy-ba9876543210": "`+oldInterface+`"},
+    "releasedSubnetAssociations": {"ct-policy-ffffffffffff": "`+oldSubnet+`"},`, 1)
+	m, ok, errs, _ := readAzureSnapshot(t, publishedAzureSnapshot(t, body))
+	if !ok {
+		t.Fatal(errs)
+	}
+	held := m.HeldInterfaceAssociations["ct-policy-0123456789ab"]
+	if len(m.HeldInterfaceAssociations) != 1 || held.LevelID.ValueString() != oldInterface || held.NetworkSecurityGroupID.ValueString() != oldGroupID {
+		t.Errorf("held interface associations %+v, want the one the server holds on %s", m.HeldInterfaceAssociations, oldInterface)
+	}
+	if m.HeldSubnetAssociations == nil || len(m.HeldSubnetAssociations) != 0 {
+		t.Errorf("held subnet associations %+v, want an empty map", m.HeldSubnetAssociations)
+	}
+	if got := m.ReleasedInterfaceAssociations["ct-policy-ba9876543210"]; len(m.ReleasedInterfaceAssociations) != 1 || got.ValueString() != oldInterface {
+		t.Errorf("released interface associations %+v, want the one on %s", m.ReleasedInterfaceAssociations, oldInterface)
+	}
+	if got := m.ReleasedSubnetAssociations["ct-policy-ffffffffffff"]; len(m.ReleasedSubnetAssociations) != 1 || got.ValueString() != oldSubnet {
+		t.Errorf("released subnet associations %+v, want the one on %s", m.ReleasedSubnetAssociations, oldSubnet)
+	}
+}

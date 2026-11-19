@@ -122,7 +122,7 @@ locals {
 # A workload's network interface can go before discovery tells Xshield, so an association is planned only while its
 # network interface exists: a deleted one never fails the apply.
 data "azurerm_resources" "network_interfaces" {
-  count = length(local.snap.interface_associations) > 0 ? 1 : 0
+  count = length(local.snap.interface_associations) + length(local.snap.held_interface_associations) + length(local.snap.released_interface_associations) > 0 ? 1 : 0
 
   type = "Microsoft.Network/networkInterfaces"
 }
@@ -130,20 +130,80 @@ data "azurerm_resources" "network_interfaces" {
 locals {
   present_interfaces     = { for interface in try(data.azurerm_resources.network_interfaces[0].resources, []) : lower(interface.id) => true }
   interface_associations = { for key, association in local.snap.interface_associations : key => association if lookup(local.present_interfaces, lower(association.network_interface_id), false) }
+
+  leaving_interfaces = merge(
+    { for key, interface_id in local.snap.released_interface_associations : key => interface_id if lookup(local.present_interfaces, lower(interface_id), false) },
+    { for key, held in local.snap.held_interface_associations : key => held.level_id if lookup(local.present_interfaces, lower(held.level_id), false) },
+  )
+  leaving_subnets = merge(
+    local.snap.released_subnet_associations,
+    { for key, held in local.snap.held_subnet_associations : key => held.level_id },
+  )
+}
+
+# Azure removes an association by taking whatever group its network interface or subnet carries off it. So each one
+# this version stops wanting is read first: a removal is refused while the level carries a group other than Xshield's,
+# which Xshield names by its key, and one Xshield holds stays in the state, unchanged, while its level carries such a group.
+data "azurerm_network_interface" "leaving" {
+  for_each = local.leaving_interfaces
+
+  name                = split("/", each.value)[8]
+  resource_group_name = split("/", each.value)[4]
+
+  lifecycle {
+    postcondition {
+      condition     = contains(keys(local.snap.held_interface_associations), each.key) || lower(element(split("/", coalesce(self.network_security_group_id, "/${each.key}")), -1)) == lower(each.key)
+      error_message = "Network interface ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the interface's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
+    }
+  }
+}
+
+data "azurerm_subnet" "leaving" {
+  for_each = local.leaving_subnets
+
+  name                 = split("/", each.value)[10]
+  virtual_network_name = split("/", each.value)[8]
+  resource_group_name  = split("/", each.value)[4]
+
+  lifecycle {
+    postcondition {
+      condition     = contains(keys(local.snap.held_subnet_associations), each.key) || lower(element(split("/", coalesce(self.network_security_group_id, "/${each.key}")), -1)) == lower(each.key)
+      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the subnet's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
+    }
+  }
+}
+
+locals {
+  held_interfaces = {
+    for key, held in local.snap.held_interface_associations : key => { level_id = held.level_id, network_security_group_id = held.network_security_group_id }
+    if contains(keys(local.leaving_interfaces), key) && lower(element(split("/", coalesce(try(data.azurerm_network_interface.leaving[key].network_security_group_id, null), "/${key}")), -1)) != lower(key)
+  }
+  # azurerm reads a subnet association's group back from the subnet, unlike an interface association's, so a held subnet
+  # association is given the group the subnet carries now, which its state then holds.
+  held_subnets = {
+    for key, held in local.snap.held_subnet_associations : key => { level_id = held.level_id, network_security_group_id = data.azurerm_subnet.leaving[key].network_security_group_id }
+    if lower(element(split("/", coalesce(try(data.azurerm_subnet.leaving[key].network_security_group_id, null), "/${key}")), -1)) != lower(key)
+  }
 }
 
 resource "azurerm_network_interface_security_group_association" "this" {
-  for_each = local.interface_associations
+  for_each = merge(
+    { for key, association in local.interface_associations : key => { level_id = association.network_interface_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
+    local.held_interfaces,
+  )
 
-  network_interface_id      = each.value.network_interface_id
-  network_security_group_id = local.network_security_group_ids[each.value.network_security_group]
+  network_interface_id      = each.value.level_id
+  network_security_group_id = each.value.network_security_group_id
 }
 
 resource "azurerm_subnet_network_security_group_association" "this" {
-  for_each = local.snap.subnet_associations
+  for_each = merge(
+    { for key, association in local.snap.subnet_associations : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
+    local.held_subnets,
+  )
 
-  subnet_id                 = each.value.subnet_id
-  network_security_group_id = local.network_security_group_ids[each.value.network_security_group]
+  subnet_id                 = each.value.level_id
+  network_security_group_id = each.value.network_security_group_id
 }
 
 # Azure gives a group or association recreated under the same name its old ID, so an apply that restores one changes
@@ -178,6 +238,6 @@ resource "xshield_azure_enforcement_receipt" "this" {
   resend_trigger   = join(",", [for key in sort(keys(terraform_data.xshield_applied_resources)) : terraform_data.xshield_applied_resources[key].id])
 
   network_security_groups = local.network_security_group_ids
-  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id }
-  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id }
+  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id if !contains(keys(local.held_subnets), key) }
+  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id if !contains(keys(local.held_interfaces), key) }
 }
