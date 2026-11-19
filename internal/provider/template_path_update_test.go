@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -107,5 +108,25 @@ func TestTemplatePathWithNoSelectorStillFailsValidation(t *testing.T) {
 	}}, &diags)
 	if !diags.HasError() {
 		t.Error("an inbound path naming no source passes validation")
+	}
+}
+
+func TestTemplateReadKeepsThePathsAssetPeers(t *testing.T) {
+	var read shared.Template
+	if err := json.Unmarshal([]byte(`{"templateName":"db","templateType":"application-template","templatePaths":[
+		{"channelHash":"p1","direction":"inbound","port":"3306","protocol":"TCP","sourceAsset":{"assetId":"client-asset","assetName":"client"}},
+		{"channelHash":"p2","direction":"outbound","port":"443","protocol":"TCP","destinationAsset":{"assetId":"server-asset","assetName":"server"}}]}`), &read); err != nil {
+		t.Fatal(err)
+	}
+	var model TemplateResourceModel
+	model.RefreshFromSharedTemplate(&read)
+	if len(model.TemplatePaths) != 2 {
+		t.Fatalf("read %d paths, want 2", len(model.TemplatePaths))
+	}
+	if got := model.TemplatePaths[0].SourceAssetID.ValueString(); got != "client-asset" {
+		t.Errorf("source_asset_id read back = %q, want client-asset: the API names a path's asset peer as an asset, not by its id", got)
+	}
+	if got := model.TemplatePaths[1].DestinationAssetID.ValueString(); got != "server-asset" {
+		t.Errorf("destination_asset_id read back = %q, want server-asset", got)
 	}
 }
