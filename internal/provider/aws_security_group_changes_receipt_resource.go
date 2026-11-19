@@ -246,6 +246,8 @@ const (
 func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
 	applying := body.Stage == receiptStageApplying
 	switch {
+	case isAPIRefusal(err, http.StatusConflict, codeHandedOver):
+		return handedOverReceiptAdvice(applying)
 	case isAPIRefusal(err, http.StatusConflict, codeNotNarrowing):
 		return notNarrowingAdvice(body, applying)
 	case isAPIRefusal(err, http.StatusConflict, codeChangeSetsChanged) && applying:
@@ -262,6 +264,22 @@ func groupChangesReceiptAdvice(err error, body wireGroupChangesReceipt) string {
 	return "The rules this receipt waits for are applied, and no rule waiting on it was changed. Apply again to send this " +
 		"receipt once the cause is fixed. Until Xshield has it, a revert of a change it reports keeps the access Xshield moved " +
 		"into ct-cohort- groups."
+}
+
+// handedOverReceiptAdvice answers a receipt Xshield refuses because the account and region moved to connector delivery,
+// which it refuses for every receipt from then on.
+func handedOverReceiptAdvice(applying bool) string {
+	done := "The rules this receipt waits for are applied, and no rule waiting on it was changed."
+	if applying {
+		done = "No rule waiting on this receipt was changed."
+	}
+	return done + " This account and region has been handed over to the cloud connector, which now changes the rules of your " +
+		"groups that a change applies to, so Xshield refuses every receipt from this workspace, and an apply of it would put back " +
+		"a rule the connector took out, or take out one it put back. Stop this workspace's runs, then stop managing these rules " +
+		"as step 6 of the enforcement-snapshot example's Stop enforcing section says " +
+		"(https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#stop-enforcing): " +
+		"replace each rules module block with removed blocks that keep the group's rules (lifecycle { destroy = false }), remove " +
+		"xshield_aws_security_group_changes and what reads it, and apply once."
 }
 
 // notNarrowingAdvice names what the receipt listed narrowing; Xshield's refusal names which of those it no longer publishes.

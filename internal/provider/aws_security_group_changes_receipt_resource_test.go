@@ -443,7 +443,7 @@ func TestACreatedReceiptStaysInStateOnlyWhenXshieldMayHoldIt(t *testing.T) {
 		}, false},
 		"unauthorized": {func(t *testing.T) cloudSnapshotAPI { return apiAnswering(t, http.StatusUnauthorized, gatewayRefusal) }, false},
 		"a conflict not about narrowing": {func(t *testing.T) cloudSnapshotAPI {
-			return apiAnswering(t, http.StatusConflict, `{"code":"handedOver","message":"handed over"}`)
+			return apiAnswering(t, http.StatusConflict, `{"code":"versionSuperseded","message":"conflict"}`)
 		}, false},
 		"failed in Xshield": {func(t *testing.T) cloudSnapshotAPI {
 			return apiAnswering(t, http.StatusInternalServerError, `{"message":"internal error"}`)
@@ -621,7 +621,7 @@ func TestARefusedApplyingReceiptSaysNoRuleChanged(t *testing.T) {
 		body   string
 		want   string
 	}{
-		"a conflict of another kind": {http.StatusConflict, `{"code":"handedOver","message":"handed over"}`,
+		"a conflict of another kind": {http.StatusConflict, `{"code":"versionSuperseded","message":"conflict"}`,
 			"No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
 		"refused":           {http.StatusBadRequest, `{"message":"malformed"}`, "No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
 		"failed in Xshield": {http.StatusInternalServerError, `{"message":"internal error"}`, "No rule waiting on this receipt was changed. Apply again once the cause is fixed."},
@@ -1060,4 +1060,34 @@ func TestAccAPlanMadeBeforeARevertIsRefusedBeforeItsRulesChange(t *testing.T) {
 			},
 		},
 	})
+}
+
+// Once the account is handed over to the cloud connector, Xshield refuses every receipt of this workspace, so applying
+// again can never succeed: the error points to the step that stops managing the group's rules instead.
+func TestAReceiptRefusedAsHandedOverSaysToStopManagingTheRules(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"applying", "applied"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			r, objectType, absent := receiptResourceSchema(t)
+			r.api = apiAnswering(t, http.StatusConflict, handedOverRefusal)
+			planned := narrowingWeb()
+			planned.stage = stage
+			resp := resource.CreateResponse{State: absent}
+			r.Create(context.Background(), resource.CreateRequest{Plan: tfsdk.Plan{Schema: absent.Schema, Raw: receiptValue(objectType, planned)}}, &resp)
+			if !resp.Diagnostics.HasError() || !resp.State.Raw.IsNull() {
+				t.Fatalf("error %v and state %v, want an error and no receipt in state", resp.Diagnostics, resp.State.Raw)
+			}
+			detail := resp.Diagnostics.Errors()[0].Detail()
+			for _, want := range []string{"handed over to the cloud connector", "Stop this workspace's runs", "#stop-enforcing",
+				"removed blocks", "destroy = false", "xshield_aws_security_group_changes"} {
+				if !strings.Contains(detail, want) {
+					t.Errorf("the error does not say %q:\n%s", want, detail)
+				}
+			}
+			if strings.Contains(strings.ToLower(detail), "apply again") {
+				t.Errorf("the error says to apply again, which Xshield refuses the same way:\n%s", detail)
+			}
+		})
+	}
 }
