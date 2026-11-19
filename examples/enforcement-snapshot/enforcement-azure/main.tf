@@ -17,9 +17,11 @@ terraform {
   }
 }
 
+# The enforcement role grants no resource provider registration, which azurerm otherwise attempts at every plan.
 provider "azurerm" {
   features {}
-  subscription_id = var.subscription_id
+  subscription_id                 = var.subscription_id
+  resource_provider_registrations = "none"
 }
 
 provider "xshield" {}

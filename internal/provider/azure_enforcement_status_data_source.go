@@ -111,7 +111,9 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 				MarkdownDescription: "What Xshield could not enforce in the expected version, and why. A refused workload gets no " +
 					"network security group of Xshield's and keeps the groups it has, until the cause is fixed. " +
 					"`reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network " +
-					"security group of yours, which its message names, `DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
+					"security group of yours, which its message names, `INTERFACES_IN_SEVERAL_SUBNETS` when its network interfaces " +
+					"are in more than one subnet and one carries a group of yours, so no one subnet would cover them all, " +
+					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or " +
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. " +
 					"An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three " +
