@@ -24,13 +24,19 @@ type azureEnforcementStatusDataSource struct {
 }
 
 type azureEnforcementStatusDataSourceModel struct {
-	CloudAccountID  types.String  `tfsdk:"cloud_account_id"`
-	Region          types.String  `tfsdk:"region"`
-	Published       types.Bool    `tfsdk:"published"`
-	State           types.String  `tfsdk:"state"`
-	ExpectedVersion types.String  `tfsdk:"expected_version"`
-	LastCheckedAt   types.String  `tfsdk:"last_checked_at"`
-	Notices         []noticeModel `tfsdk:"notices"`
+	CloudAccountID        types.String  `tfsdk:"cloud_account_id"`
+	Region                types.String  `tfsdk:"region"`
+	Published             types.Bool    `tfsdk:"published"`
+	State                 types.String  `tfsdk:"state"`
+	ExpectedVersion       types.String  `tfsdk:"expected_version"`
+	AppliedVersion        types.String  `tfsdk:"applied_version"`
+	AppliedAt             types.String  `tfsdk:"applied_at"`
+	LastCheckedAt         types.String  `tfsdk:"last_checked_at"`
+	PendingSince          types.String  `tfsdk:"pending_since"`
+	Notices               []noticeModel `tfsdk:"notices"`
+	AppliedGroups         types.Map     `tfsdk:"applied_network_security_groups"`
+	AppliedSubnetAssocs   types.Map     `tfsdk:"applied_subnet_associations"`
+	AppliedInterfaceAssoc types.Map     `tfsdk:"applied_interface_associations"`
 }
 
 func (d *azureEnforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -52,13 +58,20 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 			"region":           schema.StringAttribute{Required: true, Description: "Azure region to report on, such as `eastus2`."},
 			"published": schema.BoolAttribute{Computed: true, Description: "False while Xshield has published nothing for this " +
 				"subscription and region. `state` is then `unpublished`, `expected_version` is null and `notices` is empty, so checks stay quiet."},
-			"state": str("`unapplied` while Xshield has published a snapshot, `unpublished` when it has published nothing to apply, " +
-				"and `handedOver` when the subscription moved to connector delivery. Xshield does not yet record applies of an " +
-				"Azure snapshot, so a published one reports `unapplied` after an apply too: compare the workspace's " +
-				"`xshield_azure_enforcement_snapshot` version with `expected_version` to see whether it is current."),
+			"state": str("`converged` when the latest receipt is for the expected version, `pending` when Xshield expects newer " +
+				"policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published " +
+				"nothing to apply, and `handedOver` when the subscription moved to connector delivery."),
 			"expected_version": str("Version Xshield expects to be enforced, the hash of everything it asks for."),
+			"applied_version":  str("Version in the latest apply receipt. Null when nothing has been applied."),
+			"applied_at":       str("When the latest receipt was recorded."),
 			"last_checked_at": str("When an enforcement plan last resolved the expected version. A stale value means " +
-				"the pipeline has stopped running."),
+				"the pipeline has stopped running, whatever `state` says."),
+			"pending_since":                   str("When the oldest policy change not yet applied was published."),
+			"applied_network_security_groups": appliedIDs("network security group ID", "`azurerm_network_security_group.this`"),
+			"applied_subnet_associations": appliedIDs("subnet association import ID, the subnet's ID",
+				"`azurerm_subnet_network_security_group_association.this`"),
+			"applied_interface_associations": appliedIDs("interface association import ID, `<network interface ID>|<network security group ID>`",
+				"`azurerm_network_interface_security_group_association.this`"),
 			"notices": schema.ListAttribute{
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
@@ -107,15 +120,23 @@ func (d *azureEnforcementStatusDataSource) Read(ctx context.Context, req datasou
 	err := d.api.get(ctx, d.api.endpoint(cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status"), &st)
 	switch {
 	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished):
-		data.Published, data.State, data.ExpectedVersion = types.BoolValue(false), types.StringValue("unpublished"), types.StringNull()
-		data.LastCheckedAt, data.Notices = types.StringNull(), []noticeModel{}
+		st = wireStatus{State: "unpublished"}
+		data.Published, data.ExpectedVersion = types.BoolValue(false), types.StringNull()
 	case err != nil:
 		resp.Diagnostics.AddError("failed to read enforcement status", err.Error())
 		return
 	default:
-		data.Published, data.State, data.ExpectedVersion = types.BoolValue(true), types.StringValue(st.State), types.StringValue(st.Expected.Version)
-		data.LastCheckedAt, data.Notices = optionalString(st.LastCheckedAt), noticesOf(st.Notices)
+		data.Published, data.ExpectedVersion = types.BoolValue(true), types.StringValue(st.Expected.Version)
 	}
+	data.State, data.LastCheckedAt, data.PendingSince = types.StringValue(st.State), optionalString(st.LastCheckedAt), optionalString(st.PendingSince)
+	data.Notices = noticesOf(st.Notices)
+	data.AppliedVersion, data.AppliedAt = types.StringNull(), types.StringNull()
+	applied := wireRenderedResources{}
+	if st.Applied != nil {
+		data.AppliedVersion, data.AppliedAt, applied = types.StringValue(st.Applied.Version), appliedAtValue(st.Applied.AppliedAt), st.Applied.Resources
+	}
+	data.AppliedGroups, data.AppliedSubnetAssocs = stringMap(applied.NetworkSecurityGroups), stringMap(applied.SubnetAssociations)
+	data.AppliedInterfaceAssoc = stringMap(applied.InterfaceAssociations)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

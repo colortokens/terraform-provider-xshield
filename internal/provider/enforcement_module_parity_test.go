@@ -15,7 +15,6 @@ import (
 var enforcementModuleDifferences = map[string]string{
 	"variable region default":  "The aws module defaults to the AWS provider's region. The azurerm provider has no region, so the azure module needs one.",
 	"variable region nullable": "The azure module's region has no default, and null would name no region.",
-	"variable workspace":       "Names the workspace in the receipt the aws module sends. The azure module sends no receipt.",
 	"output security_group_ids": "The aws module's map from asset to its one security group. The azure module's network_security_group_ids " +
 		"lists a group for each of an asset's network interfaces.",
 	"output network_security_group_ids": "See security_group_ids: Azure calls the group a network security group, and an asset can have several.",
