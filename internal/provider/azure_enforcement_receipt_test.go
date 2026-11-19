@@ -38,6 +38,7 @@ func azureReceiptObject(t *testing.T, s schema.Schema, overrides map[string]tfty
 		"subnet_associations":     tftypes.NewValue(ids, map[string]tftypes.Value{"ct-policy-api/snet": str("/snet")}),
 		"interface_associations":  tftypes.NewValue(ids, map[string]tftypes.Value{"ct-policy-web/nic": str("/nic|/nsg/web")}),
 		"exclusive_rules":         tftypes.NewValue(tftypes.Bool, true),
+		"resend_trigger":          tftypes.NewValue(tftypes.String, nil),
 		"run_id":                  str(""), "applied_at": str("2026-11-18T22:40:00Z"),
 	}
 	for name, value := range overrides {
@@ -139,5 +140,30 @@ func TestAzureReceiptImportAdoptsTheReceiptXshieldHolds(t *testing.T) {
 	}
 	if !plansHeldAzureReceipt(ctx, *status.Applied, want) {
 		t.Error("the held receipt is not recognised as the one a plan of the same resources sends")
+	}
+}
+
+// resend_trigger only makes Terraform send the receipt again; Xshield's receipt has no place for it.
+func TestAzureReceiptDoesNotSendItsResendTrigger(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := azureReceiptSchema(ctx)
+	bodyOf := func(overrides map[string]tftypes.Value) string {
+		var m azureEnforcementReceiptResourceModel
+		if diags := (tfsdk.Plan{Schema: s, Raw: azureReceiptObject(t, s, overrides)}).Get(ctx, &m); diags.HasError() {
+			t.Fatal(diags)
+		}
+		body, diags := azureReceiptRequest(ctx, &m, "")
+		if diags.HasError() {
+			t.Fatal(diags)
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	if with, without := bodyOf(map[string]tftypes.Value{"resend_trigger": tftypes.NewValue(tftypes.String, "run-2")}), bodyOf(nil); with != without {
+		t.Errorf("resend_trigger changed the body:\n%s\nwant\n%s", with, without)
 	}
 }

@@ -44,6 +44,7 @@ type azureEnforcementReceiptResourceModel struct {
 	SubnetAssociations    types.Map    `tfsdk:"subnet_associations"`
 	InterfaceAssociations types.Map    `tfsdk:"interface_associations"`
 	ExclusiveRules        types.Bool   `tfsdk:"exclusive_rules"`
+	ResendTrigger         types.String `tfsdk:"resend_trigger"`
 	RunID                 types.String `tfsdk:"run_id"`
 	AppliedAt             types.String `tfsdk:"applied_at"`
 }
@@ -78,7 +79,10 @@ func (r *azureEnforcementReceiptResource) Schema(ctx context.Context, req resour
 			"they all exist. Xshield rejects a receipt whose version it did not publish, or whose resources omit or add to the " +
 			"snapshot's, so a partial or altered apply is never recorded as converged. An interface association may be left " +
 			"out once its network interface is gone.\n\n" +
-			"A new receipt is sent only when the applied version, a resource ID or `exclusive_rules` changes. If Xshield's latest " +
+			"A new receipt is sent only when the applied version, a resource ID, `exclusive_rules` or `resend_trigger` changes. " +
+			"Azure gives a network security group or association recreated under the same name its old ID, so an apply that " +
+			"restores one changes no ID: `resend_trigger` is how such an apply still sends the receipt, so Xshield observes the " +
+			"subscription and region at once rather than at its next drift interval. If Xshield's latest " +
 			"receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan " +
 			"that creates the receipt while Xshield already holds one warns.\n\n" +
 			"Destroying it removes it from state and leaves the receipt history in Xshield.",
@@ -100,6 +104,10 @@ func (r *azureEnforcementReceiptResource) Schema(ctx context.Context, req resour
 				Description: "Whether each network security group in `network_security_groups` holds only the rules the snapshot " +
 					"declares, so the next apply removes a rule added to it outside Terraform. The `azure` enforcement module sets " +
 					"it from `enable_exclusive_rules`. Changing it sends the receipt again; it does not replace it."},
+			"resend_trigger": schema.StringAttribute{Optional: true,
+				Description: "Any value that changes whenever the apply creates, replaces or updates a network security group or " +
+					"association the receipt names; a change sends the receipt again and is not itself sent. The `azure` " +
+					"enforcement module sets it from a `terraform_data` record replaced on each such change."},
 			"run_id": schema.StringAttribute{Computed: true,
 				Description: "Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise."},
 			"applied_at": schema.StringAttribute{Computed: true, Description: "When Xshield recorded the receipt."},
