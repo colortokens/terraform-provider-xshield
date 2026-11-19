@@ -702,7 +702,27 @@ When the account moves to connector delivery, nothing is destroyed either. The c
 3. Switch the account to connector delivery in Xshield.
 4. In the enforcement workspace, follow `leave/`: its `removed` block makes Terraform stop managing the groups, rules, attachments, network ACL entries and directory parameters, and leaves them in the account. The cloud connector keeps the groups. The network ACL entries stay in place, and Xshield no longer tracks them, so the monitor no longer reports on them; a cloud connector that blocks addresses on network ACLs itself may change or delete an entry at a rule number it uses. List the entries and the directory parameters from the state before you apply, and once an address is no longer to be blocked, check that the entry at its number still denies it before you delete the entry, as `leave/leave.tf` says. Remove the outputs that read the module in the same change, or the configuration no longer validates. Then stop running the workspace.
 5. In each workspace with a group lookup, remove the lookup module and the outputs that read it, give the resource only its own groups where it took the lookup's, and apply: in `database/`, `function/` and `apprunner/`, delete `xshield.tf` and make the line marked `Changed for Xshield` list the team's group alone. The plan shows no change. These workspaces no longer need to run after the enforcement workspace.
-6. Delete each directory parameter once no workspace uses a lookup with its handle.
+6. Under Full control, in each workspace that declares a group's rules through the rules module, stop managing those rules: the cloud connector now changes the rules of your groups that a change applies to, and an apply of the module would put back a rule the connector took out, or take out one it put back. Stop that workspace's runs from the switch until this step is applied. Replace each module block with `removed` blocks that keep the group's rules, remove `xshield_aws_security_group_changes` and what reads it, and apply. The plan shows the rules as no longer managed, and destroys any receipts the module holds, so Xshield forgets them, and the record the module keeps in state; nothing changes in AWS.
+
+   ```hcl
+   removed {
+     from = module.web_rules.aws_vpc_security_group_ingress_rule.this
+
+     lifecycle {
+       destroy = false
+     }
+   }
+
+   removed {
+     from = module.web_rules.aws_vpc_security_group_egress_rule.this
+
+     lifecycle {
+       destroy = false
+     }
+   }
+   ```
+
+7. Delete each directory parameter once no workspace uses a lookup with its handle.
 
 Without `ignore_changes`, removing a lookup, or deleting its parameter while a lookup still reads it, takes the group off the resource. If the account is switched before step 2, as when the enforcement plan stops with `Xshield moved <account>/<region> to connector delivery`, first stop the runs of the workspaces with a group lookup (in `chain/`, disable the workflow), do step 2 in each before it runs again, do step 1, then go on from step 4.
 
