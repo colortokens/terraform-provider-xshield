@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Reports to Xshield that an Azure enforcement snapshot has been applied, and which Azure resource was created for each key in it. The azure enforcement module sends it for you.
   Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose version it did not publish, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged. An interface association may be left out once its network interface is gone.
-  A new receipt is sent only when the applied version, a resource ID or exclusive_rules changes. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
+  A new receipt is sent only when the applied version, a resource ID, exclusive_rules or resend_trigger changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: resend_trigger is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
   Destroying it removes it from state and leaves the receipt history in Xshield.
 ---
 
@@ -15,7 +15,7 @@ Reports to Xshield that an Azure enforcement snapshot has been applied, and whic
 
 Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose version it did not publish, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged. An interface association may be left out once its network interface is gone.
 
-A new receipt is sent only when the applied version, a resource ID or `exclusive_rules` changes. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
+A new receipt is sent only when the applied version, a resource ID, `exclusive_rules` or `resend_trigger` changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: `resend_trigger` is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
 
 Destroying it removes it from state and leaves the receipt history in Xshield.
 
@@ -36,6 +36,7 @@ Destroying it removes it from state and leaves the receipt history in Xshield.
 
 - `exclusive_rules` (Boolean) Whether each network security group in `network_security_groups` holds only the rules the snapshot declares, so the next apply removes a rule added to it outside Terraform. The `azure` enforcement module sets it from `enable_exclusive_rules`. Changing it sends the receipt again; it does not replace it.
 - `interface_associations` (Map of String) The import ID of the association created for each key in the snapshot's `interface_associations`, `<network interface ID>|<network security group ID>`.
+- `resend_trigger` (String) Any value that changes whenever the apply creates, replaces or updates a network security group or association the receipt names; a change sends the receipt again and is not itself sent. The `azure` enforcement module sets it from a `terraform_data` record replaced on each such change.
 - `subnet_associations` (Map of String) The import ID of the association created for each key in the snapshot's `subnet_associations`, the subnet's ID.
 
 ### Read-Only

@@ -220,6 +220,22 @@ run "each_group_goes_on_its_network_interface_or_subnet" {
     xshield_azure_enforcement_receipt.this[0].interface_associations == tomap({ "ct-policy-d2dd5b7ea0d5" = azurerm_network_interface_security_group_association.this["ct-policy-d2dd5b7ea0d5"].id }))
     error_message = "The receipt must name the applied version, and the ID of every group and association created, by its key."
   }
+  assert {
+    condition = xshield_azure_enforcement_receipt.this[0].resend_trigger == join(",", [
+      terraform_data.xshield_applied_resources["ct-policy-8d612d812776"].id,
+      terraform_data.xshield_applied_resources["ct-policy-d2dd5b7ea0d5"].id,
+    ])
+    error_message = "The receipt must be sent again whenever any group's record of its applied resources is replaced."
+  }
+  assert {
+    condition = (terraform_data.xshield_applied_resources["ct-policy-8d612d812776"].triggers_replace == [
+      azurerm_network_security_group.this["ct-policy-8d612d812776"].id,
+      azurerm_subnet_network_security_group_association.this["ct-policy-8d612d812776"].id, null] &&
+      terraform_data.xshield_applied_resources["ct-policy-d2dd5b7ea0d5"].triggers_replace == [
+        azurerm_network_security_group.this["ct-policy-d2dd5b7ea0d5"].id, null,
+    azurerm_network_interface_security_group_association.this["ct-policy-d2dd5b7ea0d5"].id])
+    error_message = "Each group's record must be replaced when the group or its association is created again, as their IDs are unknown until then."
+  }
 }
 
 run "an_association_whose_network_interface_is_gone_is_left_out" {
