@@ -51,9 +51,13 @@ output "where_each_asset_is_enforced" {
 ### Read-Only
 
 - `assets` (Map of Object) Where each Xshield asset is enforced, keyed by Xshield asset ID. `level`: `networkInterface` or `subnet`. Null when the asset was refused, when its policy writes no rule, or when Xshield enforces it nowhere. `network_security_groups`: keys, in `network_security_groups`, of the groups that carry the asset's rules. Empty when `level` is null. (see [below for nested schema](#nestedatt--assets))
+- `held_interface_associations` (Map of Object) Associations an earlier apply made whose network interface now carries a network security group of yours in place of Xshield's, keyed by Xshield's group name. Azure removes an association by taking whatever group its network interface carries off it, so removing one of these would remove your group. The `azure` enforcement module keeps each in its state unchanged while the network interface carries a group other than Xshield's, and Xshield drops it once the interface carries none. `level_id`: resource ID of the network interface. `network_security_group_id`: resource ID of the group the apply associated, as the state holds it. (see [below for nested schema](#nestedatt--held_interface_associations))
+- `held_subnet_associations` (Map of Object) As `held_interface_associations`, for a subnet. `level_id`: resource ID of the subnet. `network_security_group_id`: resource ID of the group the apply associated. azurerm reads a subnet association's group back from the subnet, so the module gives a held one the group the subnet carries now. (see [below for nested schema](#nestedatt--held_subnet_associations))
 - `interface_associations` (Map of Object) Each network interface a group goes on, keyed by the group's name. `network_security_group`: key, in `network_security_groups`, of the group to associate. `network_interface_id`: resource ID of the network interface to associate it with. (see [below for nested schema](#nestedatt--interface_associations))
 - `network_security_groups` (Map of Object) One network security group per network interface or subnet Xshield enforces at, keyed by its name. `name`: `ct-policy-` and a hash of the network interface or subnet, fixed for the group's life. `resource_group_name`: resource group the group is created in, that of its network interface or subnet. `location`: region the group is created in. `tags`: `ct:delivery` and `ct:level`, which let the cloud connector recognise the group as Xshield's, never as one of yours. `security_rules`: the group's whole rule set, which replaces any rule the group holds that it does not list. Each rule has Azure's fields: `name`, `priority`, `direction`, `access` and `protocol`, and the source and destination as `source_address_prefix` or `source_address_prefixes`, `destination_address_prefix` or `destination_address_prefixes`, `source_port_range` or `source_port_ranges`, and `destination_port_range` or `destination_port_ranges`. A single value, which is how Azure takes `*` and a service tag, is in the singular field with the plural one empty; two or more are in the plural field with the singular one empty. Every rule set ends with an allow of all traffic in each direction at priority 4096, so traffic no Xshield rule decides passes as it did before the group, and lets the load balancer's health probes in at priority 100. (see [below for nested schema](#nestedatt--network_security_groups))
 - `published` (Boolean) False while Xshield has published nothing for this subscription and region, such as before the subscription is onboarded with policy delivery set to Terraform pipeline: every map is empty and `version` is null, so a configuration built on it plans no change. Only Xshield's own answer that nothing is published counts; any other failure to read the snapshot fails the plan.
+- `released_interface_associations` (Map of String) Associations an earlier apply made that this version removes, keyed by Xshield's group name, each with its network interface's resource ID. The `azure` enforcement module reads each network interface before it plans the removal, and fails the plan when the interface carries a group other than Xshield's, so a group of yours put there since Xshield last observed the subscription is never removed.
+- `released_subnet_associations` (Map of String) As `released_interface_associations`, for a subnet, with the subnet's resource ID.
 - `subnet_associations` (Map of Object) Each subnet a group goes on, keyed by the group's name. `network_security_group`: key, in `network_security_groups`, of the group to associate. `subnet_id`: resource ID of the subnet to associate it with. (see [below for nested schema](#nestedatt--subnet_associations))
 
 <a id="nestedatt--assets"></a>
@@ -63,6 +67,24 @@ Read-Only:
 
 - `level` (String)
 - `network_security_groups` (List of String)
+
+
+<a id="nestedatt--held_interface_associations"></a>
+### Nested Schema for `held_interface_associations`
+
+Read-Only:
+
+- `level_id` (String)
+- `network_security_group_id` (String)
+
+
+<a id="nestedatt--held_subnet_associations"></a>
+### Nested Schema for `held_subnet_associations`
+
+Read-Only:
+
+- `level_id` (String)
+- `network_security_group_id` (String)
 
 
 <a id="nestedatt--interface_associations"></a>

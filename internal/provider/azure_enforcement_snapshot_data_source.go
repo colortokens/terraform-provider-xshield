@@ -56,6 +56,11 @@ type azInterfaceAssociationModel struct {
 	NetworkInterfaceID   types.String `tfsdk:"network_interface_id"`
 }
 
+type azHeldAssociationModel struct {
+	LevelID                types.String `tfsdk:"level_id"`
+	NetworkSecurityGroupID types.String `tfsdk:"network_security_group_id"`
+}
+
 type azAssetModel struct {
 	Level                 types.String   `tfsdk:"level"`
 	NetworkSecurityGroups []types.String `tfsdk:"network_security_groups"`
@@ -71,6 +76,16 @@ type azureEnforcementSnapshotDataSourceModel struct {
 	SubnetAssociations    map[string]azSubnetAssociationModel    `tfsdk:"subnet_associations"`
 	InterfaceAssociations map[string]azInterfaceAssociationModel `tfsdk:"interface_associations"`
 	Assets                map[string]azAssetModel                `tfsdk:"assets"`
+
+	HeldInterfaceAssociations     map[string]azHeldAssociationModel `tfsdk:"held_interface_associations"`
+	HeldSubnetAssociations        map[string]azHeldAssociationModel `tfsdk:"held_subnet_associations"`
+	ReleasedInterfaceAssociations map[string]types.String           `tfsdk:"released_interface_associations"`
+	ReleasedSubnetAssociations    map[string]types.String           `tfsdk:"released_subnet_associations"`
+}
+
+type wireAzureHeldAssociation struct {
+	LevelID                string `json:"levelId"`
+	NetworkSecurityGroupID string `json:"networkSecurityGroupId"`
 }
 
 type wireAzureSecurityRule struct {
@@ -105,6 +120,10 @@ type wireAzurePlan struct {
 		Level                 string   `json:"level"`
 		NetworkSecurityGroups []string `json:"networkSecurityGroups"`
 	} `json:"assets"`
+	HeldInterfaceAssociations     map[string]wireAzureHeldAssociation `json:"heldInterfaceAssociations"`
+	HeldSubnetAssociations        map[string]wireAzureHeldAssociation `json:"heldSubnetAssociations"`
+	ReleasedInterfaceAssociations map[string]string                   `json:"releasedInterfaceAssociations"`
+	ReleasedSubnetAssociations    map[string]string                   `json:"releasedSubnetAssociations"`
 }
 
 func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -112,8 +131,9 @@ func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req d
 }
 
 var (
-	azStringsType      = types.ListType{ElemType: types.StringType}
-	azSecurityRuleType = types.ObjectType{AttrTypes: map[string]attr.Type{
+	azStringsType         = types.ListType{ElemType: types.StringType}
+	azHeldAssociationType = types.ObjectType{AttrTypes: map[string]attr.Type{"level_id": types.StringType, "network_security_group_id": types.StringType}}
+	azSecurityRuleType    = types.ObjectType{AttrTypes: map[string]attr.Type{
 		"name": types.StringType, "priority": types.Int64Type, "direction": types.StringType, "access": types.StringType,
 		"protocol": types.StringType, "source_address_prefix": types.StringType, "source_address_prefixes": azStringsType,
 		"destination_address_prefix": types.StringType, "destination_address_prefixes": azStringsType,
@@ -189,6 +209,24 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"`level`: `networkInterface` or `subnet`. Null when the asset was refused, when its policy writes no rule, or when Xshield enforces it nowhere. "+
 				"`network_security_groups`: keys, in `network_security_groups`, of the groups that carry the asset's rules. "+
 				"Empty when `level` is null."),
+			"held_interface_associations": objects(azHeldAssociationType, "Associations an earlier apply made whose network "+
+				"interface now carries a network security group of yours in place of Xshield's, keyed by Xshield's group name. "+
+				"Azure removes an association by taking whatever group its network interface carries off it, so removing one of "+
+				"these would remove your group. The `azure` enforcement module keeps each in its state unchanged while the "+
+				"network interface carries a group other than Xshield's, and Xshield drops it once the interface carries none. "+
+				"`level_id`: resource ID of the network interface. "+
+				"`network_security_group_id`: resource ID of the group the apply associated, as the state holds it."),
+			"held_subnet_associations": objects(azHeldAssociationType, "As `held_interface_associations`, for a subnet. "+
+				"`level_id`: resource ID of the subnet. "+
+				"`network_security_group_id`: resource ID of the group the apply associated. azurerm reads a subnet "+
+				"association's group back from the subnet, so the module gives a held one the group the subnet carries now."),
+			"released_interface_associations": schema.MapAttribute{Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "Associations an earlier apply made that this version removes, keyed by Xshield's group " +
+					"name, each with its network interface's resource ID. The `azure` enforcement module reads each network " +
+					"interface before it plans the removal, and fails the plan when the interface carries a group other than " +
+					"Xshield's, so a group of yours put there since Xshield last observed the subscription is never removed."},
+			"released_subnet_associations": schema.MapAttribute{Computed: true, ElementType: types.StringType,
+				MarkdownDescription: "As `released_interface_associations`, for a subnet, with the subnet's resource ID."},
 		},
 	}
 }
@@ -234,6 +272,11 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		SubnetAssociations:    map[string]azSubnetAssociationModel{},
 		InterfaceAssociations: map[string]azInterfaceAssociationModel{},
 		Assets:                map[string]azAssetModel{},
+
+		HeldInterfaceAssociations:     map[string]azHeldAssociationModel{},
+		HeldSubnetAssociations:        map[string]azHeldAssociationModel{},
+		ReleasedInterfaceAssociations: map[string]types.String{},
+		ReleasedSubnetAssociations:    map[string]types.String{},
 	}
 	if snap == nil {
 		return m
@@ -257,6 +300,18 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 	}
 	for id, a := range plan.Assets {
 		m.Assets[id] = azAssetModel{Level: optionalString(a.Level), NetworkSecurityGroups: toStrList(a.NetworkSecurityGroups)}
+	}
+	for key, h := range plan.HeldInterfaceAssociations {
+		m.HeldInterfaceAssociations[key] = azHeldAssociationModel{LevelID: types.StringValue(h.LevelID), NetworkSecurityGroupID: types.StringValue(h.NetworkSecurityGroupID)}
+	}
+	for key, h := range plan.HeldSubnetAssociations {
+		m.HeldSubnetAssociations[key] = azHeldAssociationModel{LevelID: types.StringValue(h.LevelID), NetworkSecurityGroupID: types.StringValue(h.NetworkSecurityGroupID)}
+	}
+	for key, levelID := range plan.ReleasedInterfaceAssociations {
+		m.ReleasedInterfaceAssociations[key] = types.StringValue(levelID)
+	}
+	for key, levelID := range plan.ReleasedSubnetAssociations {
+		m.ReleasedSubnetAssociations[key] = types.StringValue(levelID)
 	}
 	return m
 }
