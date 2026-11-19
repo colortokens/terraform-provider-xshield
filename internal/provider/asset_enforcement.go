@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -30,16 +31,27 @@ var deploymentRetryDelays = []time.Duration{
 	2 * time.Second, 5 * time.Second, 10 * time.Second, 20 * time.Second, 30 * time.Second,
 }
 
+// errAwsProtectionLevelChanged is the asset switch's LEVEL_CHANGED refusal: the
+// tenant's AWS protection level changed while the request ran, nothing was
+// written, and the platform asks for the same request to be sent again.
+var errAwsProtectionLevelChanged = errors.New("the AWS protection level changed while the request ran")
+
+func isRetryableDeploymentError(err error) bool {
+	return errors.Is(err, errDeploymentInProgress) || errors.Is(err, errAwsProtectionLevelChanged)
+}
+
 // retryWhileDeploymentInProgress runs an API call, waiting and retrying while
-// the tenant is busy with another deployment.
+// the tenant is busy with another deployment or its AWS protection level
+// changed under the request.
 func retryWhileDeploymentInProgress(ctx context.Context, what string, call func() error) error {
 	err := call()
 	for attempt, delay := range deploymentRetryDelays {
-		if !errors.Is(err, errDeploymentInProgress) {
+		if !isRetryableDeploymentError(err) {
 			return err
 		}
-		tflog.Info(ctx, "another deployment is running; waiting before retrying", map[string]any{
+		tflog.Info(ctx, "the platform asked for the request to be sent again; waiting before retrying", map[string]any{
 			"operation": what,
+			"reason":    err.Error(),
 			"attempt":   attempt + 1,
 			"delay":     delay.String(),
 		})
@@ -50,10 +62,16 @@ func retryWhileDeploymentInProgress(ctx context.Context, what string, call func(
 		}
 		err = call()
 	}
-	if errors.Is(err, errDeploymentInProgress) {
+	switch {
+	case errors.Is(err, errDeploymentInProgress):
 		return fmt.Errorf(
 			"%s: another deployment for this tenant was still running after %d attempts. "+
 				"Deployments are serialised per tenant, so re-run the apply once it finishes",
+			what, len(deploymentRetryDelays)+1)
+	case errors.Is(err, errAwsProtectionLevelChanged):
+		return fmt.Errorf(
+			"%s: the tenant's AWS protection level was still changing after %d attempts; nothing was written. "+
+				"Re-run the apply once the level change in Xshield has finished",
 			what, len(deploymentRetryDelays)+1)
 	}
 	return err
@@ -92,6 +110,56 @@ func classifyDeploymentError(status int, detail string) error {
 			"the platform is upgrading and is not accepting deployments. Re-run the apply afterwards. (%s)", detail)
 	default:
 		return fmt.Errorf("the API answered %d: %s", status, detail)
+	}
+}
+
+// AWS refusals of the asset switch, answered as 409 with the code in details.code.
+const (
+	awsRefusalLevelChanged     = "LEVEL_CHANGED"
+	awsRefusalPartialUndeploy  = "PARTIAL_UNDEPLOY"
+	awsRefusalUndeployTooLarge = "UNDEPLOY_TOO_LARGE"
+	awsRefusalNoConnector      = "NO_CONNECTOR"
+)
+
+func deploymentRefusalCode(errResp *shared.ErrorResponse) string {
+	if errResp == nil {
+		return ""
+	}
+	code, _ := errResp.Details["code"].(string)
+	return code
+}
+
+// classifyAssetSwitchError classifies a refusal of the asset switch, which this
+// resource sends for one asset per request. The platform's own refusal text is
+// kept because it names the assets, ports and customer groups involved.
+func classifyAssetSwitchError(status int, errResp *shared.ErrorResponse, raw *http.Response) error {
+	detail := apiErrorDetail(errResp, raw)
+	if errResp != nil && errResp.Message != nil {
+		detail = *errResp.Message
+	}
+	switch deploymentRefusalCode(errResp) {
+	case awsRefusalLevelChanged:
+		return fmt.Errorf("%w: %s", errAwsProtectionLevelChanged, detail)
+	case awsRefusalPartialUndeploy:
+		return fmt.Errorf(
+			"switching enforcement off for this asset would leave customer security group rules narrowed for other "+
+				"assets, or for a direction this same change switches on, and the platform cannot plan that change again. "+
+				"This resource switches one asset per request, so it cannot switch the other assets named below off with it. "+
+				"If the refusal names only this asset, switch the direction being turned off on its own first: change only that "+
+				"enforcement attribute, apply, then change the other. If it names other assets, use Rollback on them in Xshield, "+
+				"which puts the customer group rules back for every asset of the groups, then apply again. (%s)", detail)
+	case awsRefusalUndeployTooLarge:
+		return fmt.Errorf(
+			"switching enforcement off for this asset releases customer group rules that more assets rely on than one "+
+				"request may change. Use Rollback on those assets in Xshield, which puts the rules back for every asset of the "+
+				"groups, then apply again. (%s)", detail)
+	case awsRefusalNoConnector:
+		return fmt.Errorf(
+			"switching enforcement off needs the moved customer group rules put back, and the AWS account has no active "+
+				"AWS connector to send that change to; nothing was written. Restore the account's AWS connector in Xshield "+
+				"so it is active, then apply again. (%s)", detail)
+	default:
+		return classifyDeploymentError(status, detail)
 	}
 }
 
@@ -143,7 +211,7 @@ func applyAssetEnforcement(
 			// 202 accepted the change; 304 means it was already in this state.
 			return nil
 		default:
-			return classifyDeploymentError(res.StatusCode, apiErrorDetail(res.ErrorResponse, res.RawResponse))
+			return classifyAssetSwitchError(res.StatusCode, res.ErrorResponse, res.RawResponse)
 		}
 	})
 	if err != nil {
