@@ -269,14 +269,20 @@ locals {
 
   # An interface the version takes one of Xshield's groups off: the last receipt holds the attachment, and the version
   # no longer lists it. Its import ID is <network interface ID>_<security group ID>.
-  interfaces_losing_a_group      = { for key, import_id in try(data.xshield_aws_enforcement_status.this[0].applied_attachments, {}) : split("_", import_id)[0] => key... if !can(local.snap.interface_attachments[key]) }
-  full_interfaces_losing_a_group = { for id, instance in local.full_interfaces : id => instance if can(local.interfaces_losing_a_group[id]) }
+  interfaces_losing_a_group = { for key, import_id in try(data.xshield_aws_enforcement_status.this[0].applied_attachments, {}) : split("_", import_id)[0] => key... if !can(local.snap.interface_attachments[key]) }
+  full_interfaces_adding_a_cohort_beside_a_loss = {
+    for id, instance in local.full_interfaces : id => instance
+    if can(local.interfaces_losing_a_group[id]) && anytrue([for group in local.groups_to_add[id] : lookup(local.snap.security_groups[group].tags, "ct:kind", "") == "cohort"])
+  }
+  # Xshield holds a new cohort group back from an interface that also loses one of its groups while discovery shows the
+  # interface full, so the next discovery settles a full interface it has not seen yet. A pinned version never does.
+  pinned_full_interfaces_adding_a_cohort_beside_a_loss = var.snapshot_version == null ? {} : local.full_interfaces_adding_a_cohort_beside_a_loss
 }
 
 check "interfaces_have_room" {
   assert {
     condition     = length(local.full_interfaces) == 0
-    error_message = "These network interfaces carry as many security groups as the account allows, so Xshield's new group was left off them this run, as AWS would refuse it: ${join(", ", [for id, instance in local.full_interfaces : "${id} (${instance})"])}. Xshield refuses these workloads once discovery shows the interfaces full. To enforce them, remove a group from each interface or raise the account's security groups per network interface quota."
+    error_message = "These network interfaces carry as many security groups as the account allows, so Xshield's new group was left off them this run, as AWS would refuse it: ${join(", ", [for id, instance in local.full_interfaces : "${id} (${instance})"])}. Xshield refuses these workloads once discovery shows the interfaces full. To enforce them, remove a group from each interface or raise the account's security groups per network interface quota.${length(local.full_interfaces_adding_a_cohort_beside_a_loss) == 0 ? "" : " On ${join(", ", keys(local.full_interfaces_adding_a_cohort_beside_a_loss))} the version also takes another of Xshield's groups off, and it still comes off. Once discovery shows the interface full, Xshield publishes a version that takes that group off and holds the new cohort group back, and puts the cohort group on in the version after."}"
   }
 }
 
@@ -405,12 +411,12 @@ resource "xshield_aws_enforcement_receipt" "this" {
 
   depends_on = [aws_ssm_parameter.directory, aws_vpc_security_group_rules_exclusive.this]
 
-  # A new group goes on before the group it replaces comes off, so an interface without room for both would have the
-  # new one left off and the old one taken off, leaving the workload without either. That stops the plan instead.
+  # A pinned version that swaps cohort groups on an interface that filled up since would leave the new one off and take
+  # the old one off, and the pin keeps it so. That stops the plan instead.
   lifecycle {
     precondition {
-      condition     = length(local.full_interfaces_losing_a_group) == 0
-      error_message = "These network interfaces have no room for the group this version gives them beside the group it takes off them: ${join(", ", [for id, instance in local.full_interfaces_losing_a_group : "${id} (${instance})"])}. The new group goes on before the old one comes off, so that the workload always carries one of them, and AWS refuses a group past the account's security groups per network interface quota. Xshield does not publish such a version for a full interface: it takes the old group off in one version and puts the new one on in the next. So this snapshot is out of date for these interfaces, as a version pinned with snapshot_version can be after an interface filled up. Applied, it would leave the new group off and take the old one off, so the plan stopped and nothing was applied: every interface keeps the groups it has. Plan again once Xshield publishes its next version, or free a slot on each interface by removing a group of your own, or raise the quota, then plan again."
+      condition     = length(local.pinned_full_interfaces_adding_a_cohort_beside_a_loss) == 0
+      error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} puts a cohort group on these network interfaces while it takes another of Xshield's groups off them, and they now have no room for the new one beside the old: ${join(", ", [for id, instance in local.pinned_full_interfaces_adding_a_cohort_beside_a_loss : "${id} (${instance})"])}. The new group goes on before the old one comes off, and AWS refuses a group past the account's security groups per network interface quota, so the apply would leave the new group off and take the old one off. The plan stopped and nothing was applied: every interface keeps the groups it has. Remove the pin, so that the version Xshield publishes for the full interface applies, or free a slot on each interface by removing a group of your own, or raise the quota, then plan again."
     }
   }
 }

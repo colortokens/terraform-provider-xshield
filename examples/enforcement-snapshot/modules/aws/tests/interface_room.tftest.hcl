@@ -191,8 +191,9 @@ run "a_full_interface_keeps_the_group_already_applied_and_leaves_only_the_new_on
 
 # The last receipt holds the workload's group and an old cohort group on the interface, and the version replaces the old
 # cohort group with a new one. The new one goes on before the old one comes off, so the interface needs room for both
-# at once; with none, the plan stops rather than leave the new one off and take the old one off.
-run "a_superseding_group_with_no_room_beside_the_one_it_replaces_stops_the_plan" {
+# at once. Xshield publishes such a version only while discovery showed room, and holds the new cohort group back once
+# it shows the interface full, so the latest version is left to that: the new cohort group is left off with a warning.
+run "a_superseding_cohort_with_no_room_beside_the_group_it_replaces_is_left_off_with_a_warning" {
   command = plan
 
   override_data {
@@ -204,7 +205,56 @@ run "a_superseding_group_with_no_room_beside_the_one_it_replaces_stops_the_plan"
     values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ours", "sg-0old"], attachment = [] }
   }
 
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1"]) && keys(local.full_interfaces_adding_a_cohort_beside_a_loss) == ["eni-0a1"]
+    error_message = "the new cohort group is left off, and the warning names the interface"
+  }
+}
+
+# A pinned version is never replaced by the one that holds the cohort group back, so it stops the plan instead.
+run "a_pinned_superseding_cohort_with_no_room_beside_the_group_it_replaces_stops_the_plan" {
+  command = plan
+
+  variables {
+    snapshot_version = "v7"
+  }
+  override_data {
+    target = data.xshield_aws_enforcement_status.this[0]
+    values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0ours", "ct-cohort-0old/eni-0a1" = "eni-0a1_sg-0old" }, handover_attachments = {} }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ours", "sg-0old"], attachment = [] }
+  }
+
   expect_failures = [check.interfaces_have_room, xshield_aws_enforcement_receipt.this]
+}
+
+# Xshield holds back only a cohort group. A workload's own new group on a full interface that loses an unrelated cohort
+# group is left off with the usual warning, and the rest of the account is applied.
+run "a_pinned_new_workload_group_beside_an_unrelated_loss_is_left_off_with_a_warning" {
+  command = plan
+
+  variables {
+    snapshot_version = "v7"
+  }
+  override_data {
+    target = data.xshield_aws_enforcement_status.this[0]
+    values = { applied_attachments = { "ct-cohort-0example/eni-0a1" = "eni-0a1_sg-0ex", "ct-cohort-0old/eni-0a1" = "eni-0a1_sg-0old" }, handover_attachments = {} }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ex", "sg-0old"], attachment = [] }
+  }
+
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = toset(keys(aws_network_interface_sg_attachment.this)) == toset(["ct-cohort-0example/eni-0a1"]) && length(local.full_interfaces_adding_a_cohort_beside_a_loss) == 0
+    error_message = "the workload's own group is left off, and the plan goes on"
+  }
 }
 
 run "a_superseding_group_with_room_beside_the_one_it_replaces_goes_on" {
