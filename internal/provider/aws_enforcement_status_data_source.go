@@ -219,8 +219,14 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"`kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. " +
 					"`severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. " +
 					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` when Terraform cannot see it " +
-					"and it must be removed by hand, `workload` when the owning workspace's attachment must change. A rule added " +
+					"and it must be removed by hand, `workload` when the owning workspace's attachment must change, `approval` when a " +
+					"change must be approved in Xshield. A rule added " +
 					"to an Xshield group outside Terraform is `pipeline` when the latest receipt set `exclusive_rules`, otherwise `manual`. " +
+					"A `memberWrongGroup` finding, a workload carrying another workload's Xshield group, is `workload`, or `manual` for " +
+					"a workload whose group the enforcement workspace attaches: that workspace never detaches a group, so detach it " +
+					"from each of the workload's network interfaces by hand. A `memberCustomerAccessWidens` finding, under Full " +
+					"control, is `approval`: a rule of one of your own security groups on the workload opens a port its policy does " +
+					"not allow, no approved change moves it out, and its detail says how to preview and approve the change that does. " +
 					"`resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. " +
 					"`resource_name`: for an attachment finding, the workload as AWS names it, its instance ID or its handle. " +
 					"`key`: snapshot key involved, when there is one. " +

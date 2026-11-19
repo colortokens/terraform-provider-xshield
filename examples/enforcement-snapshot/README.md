@@ -555,7 +555,7 @@ Xshield also raises a `Cloud Policy Drifted` alert in the portal for each drift 
 |---|---|
 | `drift_high` | The cloud differs from what was applied and access may be wider than approved. |
 | `drift_medium` | The cloud differs in a way the next enforcement apply restores. |
-| `drift_unrestored` | Drift Xshield recorded more than `max_apply_age` (24h) ago is still there: no enforcement run has restored it, or it must be removed by hand. One line for each finding, with when it was detected. |
+| `drift_unrestored` | Drift Xshield recorded more than `max_apply_age` (24h) ago is still there: no enforcement run has restored it, it must be removed by hand, or, for a finding whose `restoration` is `approval`, a change must be approved in Xshield, as the finding says. One line for each finding, with when it was detected. |
 | `workload_not_enforced` | Xshield could not write a group for a workload. The message names it and the reason. |
 | `awaiting_attach` | A workload whose own workspace attaches Xshield's group, such as a database, a function or an Auto Scaling group, has not been shown carrying it since the last apply, so its policy is not enforced. One line for each workload, which says which workspace to apply: see step 6. |
 | `prefix_list_size_unknown` | A group's rules name a prefix list Xshield has not sized, or the cloud connector cannot read the region's prefix lists, so Xshield's count of the group's rules is a guess and AWS may refuse them as over the quota of rules per security group. One line for each cause, unsized lists or a failed read, which names the groups and, for a failed read, ends with the connector's reason. |
