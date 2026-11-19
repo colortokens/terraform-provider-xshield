@@ -24,19 +24,22 @@ type azureEnforcementStatusDataSource struct {
 }
 
 type azureEnforcementStatusDataSourceModel struct {
-	CloudAccountID        types.String  `tfsdk:"cloud_account_id"`
-	Region                types.String  `tfsdk:"region"`
-	Published             types.Bool    `tfsdk:"published"`
-	State                 types.String  `tfsdk:"state"`
-	ExpectedVersion       types.String  `tfsdk:"expected_version"`
-	AppliedVersion        types.String  `tfsdk:"applied_version"`
-	AppliedAt             types.String  `tfsdk:"applied_at"`
-	LastCheckedAt         types.String  `tfsdk:"last_checked_at"`
-	PendingSince          types.String  `tfsdk:"pending_since"`
-	Notices               []noticeModel `tfsdk:"notices"`
-	AppliedGroups         types.Map     `tfsdk:"applied_network_security_groups"`
-	AppliedSubnetAssocs   types.Map     `tfsdk:"applied_subnet_associations"`
-	AppliedInterfaceAssoc types.Map     `tfsdk:"applied_interface_associations"`
+	CloudAccountID        types.String        `tfsdk:"cloud_account_id"`
+	Region                types.String        `tfsdk:"region"`
+	Published             types.Bool          `tfsdk:"published"`
+	State                 types.String        `tfsdk:"state"`
+	ExpectedVersion       types.String        `tfsdk:"expected_version"`
+	AppliedVersion        types.String        `tfsdk:"applied_version"`
+	AppliedAt             types.String        `tfsdk:"applied_at"`
+	LastCheckedAt         types.String        `tfsdk:"last_checked_at"`
+	PendingSince          types.String        `tfsdk:"pending_since"`
+	Notices               []noticeModel       `tfsdk:"notices"`
+	AppliedGroups         types.Map           `tfsdk:"applied_network_security_groups"`
+	AppliedSubnetAssocs   types.Map           `tfsdk:"applied_subnet_associations"`
+	AppliedInterfaceAssoc types.Map           `tfsdk:"applied_interface_associations"`
+	DriftEvaluated        types.Bool          `tfsdk:"drift_evaluated"`
+	DriftObservedAt       types.String        `tfsdk:"drift_observed_at"`
+	DriftFindings         []driftFindingModel `tfsdk:"drift_findings"`
 }
 
 func (d *azureEnforcementStatusDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -72,6 +75,33 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 				"`azurerm_subnet_network_security_group_association.this`"),
 			"applied_interface_associations": appliedIDs("interface association import ID, `<network interface ID>|<network security group ID>`",
 				"`azurerm_network_interface_security_group_association.this`"),
+			"drift_evaluated": schema.BoolAttribute{Computed: true, Description: "Whether drift could be evaluated: it " +
+				"needs an applied receipt and a cloud connector observation taken after it. An observation older than the " +
+				"latest apply describes resources that apply replaced, so it is not evaluated."},
+			"drift_observed_at": str("When the cloud connector's latest observation was taken."),
+			"drift_findings": schema.ListAttribute{
+				Computed: true,
+				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
+					"kind": types.StringType, "severity": types.StringType, "restoration": types.StringType,
+					"resource": types.StringType, "resource_name": types.StringType, "key": types.StringType, "detail": types.StringType,
+					"detected_at": types.StringType,
+				}},
+				MarkdownDescription: "Differences between the subscription as observed and the snapshot as applied. " +
+					"`kind`: `groupMissing` when a network security group of Xshield's is gone, `ruleMissing` or `ruleModified` when " +
+					"one of its rules is gone or no longer matches, `ruleUnmanaged` when a group holds a rule named as Xshield names " +
+					"its rules, or any rule once the latest receipt set `exclusive_rules`, that the snapshot does not hold, " +
+					"`memberUnattached` when a workload's network interface or subnet no longer carries its group, and " +
+					"`groupUnmanaged` when a network security group carries the pipeline's tags but the applied state does not hold it. " +
+					"`severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. " +
+					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` for `groupUnmanaged`, " +
+					"which Terraform cannot see and must be removed by hand. " +
+					"`resource`: Azure resource ID of the affected group or rule, or the Xshield asset ID for `memberUnattached`. " +
+					"`resource_name`: the group's key for `groupMissing`, the rule's name for a rule finding, the group's name for `groupUnmanaged`. " +
+					"`key`: snapshot key involved: the group's key in `xshield_azure_enforcement_snapshot`, or `<group key>/<rule name>` for a missing or changed rule. " +
+					"`detail`: human-readable explanation. " +
+					"`detected_at`: when Xshield recorded the finding, which stays recorded until an observation shows it gone; null " +
+					"for a state the next enforcement apply clears or makes, which Xshield does not record as drift.",
+			},
 			"notices": schema.ListAttribute{
 				Computed: true,
 				ElementType: types.ObjectType{AttrTypes: map[string]attr.Type{
@@ -80,14 +110,17 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the expected version, and why. A refused workload gets no " +
 					"network security group of Xshield's and keeps the groups it has, until the cause is fixed. " +
-					"`code`: `assetRefused`. " +
 					"`reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network " +
 					"security group of yours, which its message names, `DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or " +
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. " +
-					"`asset_id`: the Xshield asset the notice is about. " +
+					"An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three " +
+					"observation intervals since the last apply or observation, so a change made in Azure since is not shown as drift. " +
+					"`code`: `assetRefused` or `observationStale`. " +
+					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group` and `since`: null on Azure. " +
+					"`group`: null on Azure. " +
+					"`since`: for `observationStale`, the last apply or observation it counts from; null for `assetRefused`. " +
 					"`message`: what happened and what to do about it.",
 			},
 		},
@@ -137,6 +170,11 @@ func (d *azureEnforcementStatusDataSource) Read(ctx context.Context, req datasou
 	}
 	data.AppliedGroups, data.AppliedSubnetAssocs = stringMap(applied.NetworkSecurityGroups), stringMap(applied.SubnetAssociations)
 	data.AppliedInterfaceAssoc = stringMap(applied.InterfaceAssociations)
+	data.DriftEvaluated, data.DriftObservedAt, data.DriftFindings = types.BoolValue(false), types.StringNull(), []driftFindingModel{}
+	if st.Drift != nil {
+		data.DriftEvaluated, data.DriftObservedAt = types.BoolValue(!st.Drift.ObservationStale), optionalString(st.Drift.ObservedAt)
+		data.DriftFindings = driftFindingsOf(*st.Drift)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
