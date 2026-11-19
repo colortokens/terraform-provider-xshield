@@ -10,7 +10,7 @@ module "xshield_enforcement" {
 
 It creates, from `xshield_aws_enforcement_snapshot`:
 
-- one `aws_security_group` per workload, named and tagged as the Xshield cloud connector names its own, so the connector recognises it;
+- one `aws_security_group` per workload, named as [Group names](#group-names) describes and tagged as the Xshield cloud connector tags its own;
 - one `aws_vpc_security_group_ingress_rule` or `_egress_rule` per rule;
 - one `aws_vpc_security_group_rules_exclusive` per group, naming exactly that group's rules, so the next apply removes a rule added to the group outside Terraform;
 - one `aws_network_interface_sg_attachment` per instance interface, which adds the group and keeps the interface's other groups;
@@ -31,6 +31,26 @@ Each group holds only the rules the snapshot declares for it. A rule added to it
 Xshield numbers each network ACL entry in front of every allow on the network ACL that covers its address, from the even numbers 50 to 98 where those are in front, and keeps the number until an allow is put in front of the entry. The allow lets the address through until the next apply after the cloud connector observes it, which writes the deny at its new number before it deletes the old entry. It adds an entry only where the network ACL has room in the account's quota of rules per network ACL, beside the network ACL's other rules, and names any address it leaves out in a `networkAclEntryRefused` notice of `xshield_aws_enforcement_status`. It counts the room from the cloud connector's last observation, so rules added to the network ACL since can leave none: AWS then refuses the entry with `NetworkAclEntryLimitExceeded`, and a deny that was moving stays at its old number, which no longer blocks its address. Terraform reads and deletes an entry by its number alone, so an entry changed outside Terraform, or another entry written at its number, would be taken into state and deleted when the deny moves or is removed. While the version holds the deny at that number, the plan stops instead, before anything is applied, and names it: run `terraform state rm` on the entry it names, and Xshield gives the deny another number once the cloud connector observes the change. Nothing else checks what AWS holds at a number the apply deletes: once the cloud connector has observed the change, the plan that moves the deny to its new number deletes whatever AWS holds at the old one, and when the version no longer holds a deny, the apply deletes whatever AWS holds at its number. Before you apply a plan that deletes or replaces an entry, check that the entry at its number is still the deny, and run `terraform state rm` on any that is not. When the plan shows that entry as a deposed object, `terraform state rm` also takes any deny at its new number out of state: see [Malicious IP block on network ACLs](../../README.md#malicious-ip-block-on-network-acls). Entries are read with `ec2:DescribeNetworkAcls`, and written with `ec2:CreateNetworkAclEntry` and `ec2:DeleteNetworkAclEntry`. See [Malicious IP block on network ACLs](../../README.md#malicious-ip-block-on-network-acls).
 
 Resource keys are instance IDs and handles, and `<network ACL ID>/<in|out>/<address>` for a network ACL entry, so a plan names the workload or the address each change is for.
+
+## Group names
+
+A group takes the name the snapshot gives it. When the account has no security group name template in Xshield, that is the name the Xshield cloud connector gives its own: `ct-policy-` and twelve hexadecimal characters for a workload's group, `ct-cohort-` and sixteen for a cohort group. When the account has a template, Xshield names each new group from it:
+
+| Token | Value |
+|--|--|
+| `{id}` | The digest that tells Xshield's groups apart: twelve hexadecimal characters for a workload's group, sixteen for a cohort group. Required, exactly once. |
+| `{kind}` | `policy` for a workload's group, `cohort` for a cohort group. |
+| `{region}` | The AWS region. |
+| `{asset}` | The workload's name in Xshield; for the group of an Auto Scaling group or an Aurora cluster, that group's or cluster's own name; for a cohort group, the name of the customer group whose access it keeps. |
+| `{tag:<key>}` | The value of the workload's AWS tag `<key>`; empty for a cohort group. |
+
+Text outside the tokens may use only the characters a security group name can hold, and the template must start with text or with `{id}`, `{kind}` or `{region}`, never with `sg-`, and come to at most 255 characters with every token at its longest, so Xshield refuses a template that could give a name AWS refuses. A character a security group name cannot hold becomes `-` in a token's value, which is cut at 64 characters. With a template, a group's `Name` tag is its name. For example, `xs-{kind}-{asset}-{id}` names the group of a database named `orders-db` `xs-policy-orders-db-` followed by its digest.
+
+A group keeps its name for as long as it exists, since AWS replaces a group to rename it: a group the account already holds, under any name, keeps it, and setting, changing or removing the template names only groups created after the change. The cloud connector recognises only its own names, so Xshield refuses to move an account to connector delivery while it has a template, or while any group it last applied has another name.
+
+A VPC holds one security group per name. Before this module creates a group the last receipt does not hold, it looks the group's name up in the group's VPC, one `ec2:DescribeSecurityGroups` call per such group, and reads each group the lookup finds, one more call per group: the name filter reads `*` and `?` as wildcards, so a lookup can find groups under other names. If a group already has the name and is not Xshield's group for that key, told apart by its `ct:owner` tag, or by its `ct:change-set` tag for a cohort group, the plan stops before anything is applied and names that group and its VPC: rename or delete it, or change the template, and plan again. Once discovery shows such a group, Xshield refuses the workload with `NAME_COLLISION` and says so in a notice of `xshield_aws_enforcement_status`, and it refuses the later of two workloads the template would give the same name in one VPC the same way.
+
+The template names groups only. Add tags of your own through the `tags` input or the AWS provider's `default_tags`; the snapshot's own tags, `Name` among them, take precedence over both.
 
 ## Reading a change in words
 

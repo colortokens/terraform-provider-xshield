@@ -243,7 +243,7 @@ run "sends_no_network_acl_entry_without_one" {
     error_message = "the review's count reads as before for a version without network ACL entries"
   }
   assert {
-    condition     = length(data.aws_network_acls.present) == 0 && length(data.xshield_aws_enforcement_status.this) == 0
-    error_message = "a version without network ACL entries or attachments reads neither the network ACLs nor the status"
+    condition     = length(data.aws_network_acls.present) == 0 && length(data.xshield_aws_enforcement_status.this) == 1
+    error_message = "a version without network ACL entries reads no network ACL, and reads the status only for the groups the last receipt holds"
   }
 }

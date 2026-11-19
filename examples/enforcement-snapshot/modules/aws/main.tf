@@ -58,6 +58,51 @@ check "xshield_published" {
   }
 }
 
+# A group's name comes from the account's security group name template in Xshield, or is the cloud connector's when the
+# account has none, and a VPC holds one group per name. So the name of each group the last receipt does not hold is looked
+# up in its VPC, and a group already holding it stops the plan unless it is Xshield's group for that key: one an apply
+# created before it failed without a receipt, or the cloud connector's. A workload's group is told apart by its ct:owner tag,
+# a cohort group, which has none, by its ct:change-set tag. Groups the last receipt holds are not looked up.
+# The filter treats * and ? in a name as wildcards, so a group found under another name is no holder.
+locals {
+  applied_security_groups = try(data.xshield_aws_enforcement_status.this[0].applied_security_groups, {})
+  new_security_groups     = { for key, group in local.snap.security_groups : key => group if lookup(local.applied_security_groups, key, null) == null }
+  new_group_identity_tags = { for key, group in local.new_security_groups : key => lookup(group.tags, "ct:kind", "") == "cohort" ? "ct:change-set" : "ct:owner" }
+}
+
+data "aws_security_groups" "named" {
+  for_each = local.new_security_groups
+
+  filter {
+    name   = "group-name"
+    values = [each.value.name]
+  }
+  filter {
+    name   = "vpc-id"
+    values = [each.value.vpc_id]
+  }
+}
+
+locals {
+  name_holders = { for found in flatten([for key, named in data.aws_security_groups.named : [for id in named.ids : { key = key, id = id }]]) : "${found.key} ${found.id}" => found }
+}
+
+data "aws_security_group" "name_holder" {
+  for_each = local.name_holders
+
+  id = each.value.id
+
+  lifecycle {
+    postcondition {
+      condition = self.name != local.new_security_groups[each.value.key].name || (
+        lookup(self.tags, "ManagedBy", "") == "ColorTokens" &&
+        lookup(self.tags, local.new_group_identity_tags[each.value.key], "") == lookup(local.new_security_groups[each.value.key].tags, local.new_group_identity_tags[each.value.key], "")
+      )
+      error_message = "Security group ${self.id} in ${self.vpc_id} already has the name ${self.name}, which Xshield gives the group ${each.value.key} this run would create, and it is not Xshield's group for ${each.value.key}. A VPC holds one security group per name, so the plan stopped and nothing was applied. Rename or delete ${self.id}, or change the account's security group name template in Xshield, which names only groups created after the change, then plan again."
+    }
+  }
+}
+
 resource "aws_security_group" "this" {
   for_each = local.snap.security_groups
 
@@ -163,9 +208,10 @@ locals {
 # new group: the others are left out with a warning, the receipt leaves them out, and
 # Xshield refuses the workload once discovery shows the interface full. Only those
 # interfaces, and the groups new to them, are read. A version with network ACL entries
-# reads the status too, for the review's account of how far each network ACL reaches.
+# reads the status too, for the review's account of how far each network ACL reaches,
+# and a version with groups reads it for the groups the last receipt holds.
 data "xshield_aws_enforcement_status" "this" {
-  count = length(local.attachments) > 0 || length(local.snap.network_acl_entries) > 0 ? 1 : 0
+  count = length(local.attachments) > 0 || length(local.snap.network_acl_entries) > 0 || length(local.snap.security_groups) > 0 ? 1 : 0
 
   cloud_account_id = local.account_id
   region           = local.region
