@@ -832,6 +832,15 @@ The plan shows each as an import and creates the rest. Other resources take the 
 
 Deleting such a resource in AWS also clears the error, but only while nothing relies on it: AWS does not delete a group an interface carries, and a rule the interrupted apply created may be the one that now carries a workload's traffic.
 
+A group the interrupted apply created can also be left behind by a version that no longer lists it, as when the change set a `ct-cohort-` group was for is reverted before the next run. That run neither creates the group nor knows of it, so nothing deletes it, and it counts against the account's security groups per VPC. In an account a pipeline delivers, after an apply of the enforcement workspace that succeeded, list the groups Xshield rendered for a pipeline in the region, and the groups the workspace's state holds:
+
+```bash
+aws ec2 describe-security-groups --filters Name=tag:ManagedBy,Values=ColorTokens Name=tag:ct:delivery,Values=pipeline --query 'SecurityGroups[].[GroupId,GroupName]' --output text
+terraform show -json | jq -r '.values.root_module | .. | objects | select(.mode? == "managed" and .type? == "aws_security_group") | .values.id'
+```
+
+A group the first command lists and the second does not is no longer Xshield's. Delete it once no interface carries it: `aws ec2 describe-network-interfaces --filters Name=group-id,Values=<group ID> --query 'NetworkInterfaces[].NetworkInterfaceId'` lists none, then `aws ec2 delete-security-group --group-id <group ID>`. While the version still lists the group, import it instead, as above.
+
 ## When something goes wrong
 
 | You see | It means | Do |
