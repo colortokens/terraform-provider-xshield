@@ -17,7 +17,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 - Terraform 1.7 or later, and the AWS provider 6.29.0 or later.
 - A list of the workspaces that manage resources in the account and region. Three kinds change: one that declares an instance's or a network interface's security groups (step 3), one that owns a database, function, service or Auto Scaling group (step 5), and, under Full control only, one that owns a security group Xshield narrows (step 9). No other workspace changes.
 
-Outside Full control, Xshield changes none of your own security groups: its groups sit beside each workload's own, and AWS allows what any of them allows. Complete steps 1 to 8 without Full control first, and add step 9 only once they pass.
+Outside Full control, Xshield changes none of your own security groups: its groups sit beside each workload's own, and AWS allows what any of them allows.
 
 In every `source` below, replace `vX.Y.Z` with the tag of the `colortokens/xshield` provider release you run, so the modules and the provider match.
 
@@ -245,17 +245,6 @@ In an account and region with many workloads, give each run room:
 ## Step 9: Full control only: declare your own groups' rules through the rules module
 
 Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own. The workspace that owns the group makes that change, through `modules/aws-security-group-rules`. Do this once for each group, before a change that narrows it is approved, and add the workspace to the chain of step 7, after the workspaces with the lookup module.
-
-**Workloads Full control supports.** In this release, approve a Full control change only for workloads whose asset policy is **Zero Trust** and deployed in **Enforce** mode in each direction the change narrows, with the ports it narrows in Enforce mode. Full control is not yet supported for:
-
-- a workload whose asset policy is **Default Allow**, including one whose ports are deployed one by one: Xshield narrows your group as it would for Zero Trust, so traffic the policy leaves open is blocked;
-- a port in **Test** mode: a security group can only allow, so once your group's rule is narrowed, traffic on that port that Test mode would only report is blocked.
-
-Also check before a change narrows a rule of yours:
-
-- A rule that allows all protocols keeps TCP, UDP, ICMP and, for an IPv6 peer, ICMPv6 outside the narrowed ports. Other IP protocols, such as GRE or ESP, are not kept: declare them in a rule of their own first.
-- Outbound DNS to a resolver outside the VPC passes only where a rule allows it. Security groups do not filter traffic to the Amazon-provided resolver.
-- Outbound, a change narrows the ports Xshield has observed the workload use. A port the workload has not used stays as your group allows it.
 
 1. Configure the `xshield` provider as in step 1.
 2. Read `xshield_aws_security_group_changes` once in the root module.
