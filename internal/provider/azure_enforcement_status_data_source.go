@@ -116,11 +116,15 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. " +
 					"An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three " +
 					"observation intervals since the last apply or observation, so a change made in Azure since is not shown as drift. " +
-					"`code`: `assetRefused` or `observationStale`. " +
+					"An `associationHeld` notice names a group of Xshield's that this version no longer places, whose network " +
+					"interface or subnet the cloud connector has shown carrying a network security group of yours since the last " +
+					"apply. Azure removes an association by clearing its level's group, so removing Xshield's would remove yours: " +
+					"the `azure` enforcement module keeps it in its state, unchanged, until the level carries no group of yours. " +
+					"`code`: `assetRefused`, `associationHeld` or `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group`: null on Azure. " +
-					"`since`: for `observationStale`, the last apply or observation it counts from; null for `assetRefused`. " +
+					"`group`: for `associationHeld`, the group by its key in the snapshot; null for every other code. " +
+					"`since`: for `observationStale`, the last apply or observation it counts from; null for every other code. " +
 					"`message`: what happened and what to do about it.",
 			},
 		},
