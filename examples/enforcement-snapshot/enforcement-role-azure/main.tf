@@ -10,10 +10,14 @@
 # of Xshield's groups in the resource group of the interface or subnet it
 # protects.
 #
-# Azure checks a join action on each resource an interface or subnet links to
-# when the module updates it. The role covers a subnet's route table. If an
-# apply stops with LinkedAuthorizationFailed, the error names the action a
-# linked resource needs, such as a NAT gateway's: add it to the list below.
+# Associating a group rewrites the whole network interface or subnet, and Azure
+# checks a join action on every resource it links to, changed or not. The role
+# names the join for each link the network interface and subnet APIs carry, so
+# it holds whatever your interfaces and subnets link to: a VM, a scale set
+# instance in flexible mode, a database's or a Function App's subnet alike.
+# A join is checked where the linked resource is, so a scope list must also
+# hold the resource groups of linked resources, such as a hub's route tables
+# or shared public IP addresses.
 
 terraform {
   required_version = ">= 1.7.0"
@@ -82,15 +86,30 @@ resource "azurerm_role_definition" "enforcement" {
       "Microsoft.Network/networkSecurityGroups/delete",
       "Microsoft.Network/networkSecurityGroups/join/action",
 
-      # Associating a group updates the network interface or subnet, which Azure also checks the interface's subnet and
-      # the subnet's route table against.
       "Microsoft.Network/networkInterfaces/read",
       "Microsoft.Network/networkInterfaces/write",
       "Microsoft.Network/virtualNetworks/read",
       "Microsoft.Network/virtualNetworks/subnets/read",
       "Microsoft.Network/virtualNetworks/subnets/write",
+
+      # What a network interface's IP configurations can link to.
       "Microsoft.Network/virtualNetworks/subnets/join/action",
+      "Microsoft.Network/publicIPAddresses/join/action",
+      "Microsoft.Network/applicationSecurityGroups/joinIpConfiguration/action",
+      "Microsoft.Network/loadBalancers/backendAddressPools/join/action",
+      "Microsoft.Network/loadBalancers/inboundNatRules/join/action",
+      "Microsoft.Network/loadBalancers/frontendIPConfigurations/join/action",
+      "Microsoft.Network/applicationGateways/backendAddressPools/join/action",
+      "Microsoft.Network/virtualNetworkTaps/join/action",
+
+      # What a subnet can link to.
       "Microsoft.Network/routeTables/join/action",
+      "Microsoft.Network/natGateways/join/action",
+      "Microsoft.Network/serviceEndpointPolicies/join/action",
+      "Microsoft.Network/serviceEndpointPolicies/joinSubnet/action",
+      "Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action",
+      "Microsoft.Network/publicIPAddresses/joinServiceEndpointNetworkIdentifier/action",
+      "Microsoft.Network/networkManagers/ipamPools/associateResourcesToPool/action",
     ]
   }
 }
