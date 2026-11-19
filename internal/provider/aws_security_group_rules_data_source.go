@@ -147,8 +147,9 @@ func (d *awsSecurityGroupRulesDataSource) Schema(ctx context.Context, req dataso
 					"naming a security group or prefix list is compared only with moved rules naming the same one."},
 			"undeclared_restoring_rules": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,
 				MarkdownDescription: "The rules a revert puts back that the group no longer declares, each with the `change_set` being " +
-					"reverted. The revert waits until the group holds them again, keeping the access every workload has now; declare them " +
-					"to end it. " +
+					"reverted. This apply does not put them back: once every workspace that took the change set's rules out has applied " +
+					"without it, the revert ends without them on the next discovery and the workloads lose the access they kept until then; " +
+					"declare them to keep it. " +
 					"`direction`: `ingress` or `egress`. `ip_protocol`, `from_port`, `to_port`: the rule's protocol and ports. " +
 					"`cidr_ipv4`, `cidr_ipv6`, `prefix_list_id`, `referenced_security_group_id`: the rule's source or destination."},
 			"undeclared_pending_rules": schema.ListAttribute{Computed: true, ElementType: sgrMoveType,

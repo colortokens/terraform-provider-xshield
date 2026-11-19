@@ -214,7 +214,7 @@ run "rules_a_change_set_needs_say_which_change_set" {
     condition = output.review == tolist([
       "Group web: rule ingress/tcp_internal (all TCP from 10.0.0.0/8) gives workloads in the group traffic that change set cs-1 takes from them.",
       "Group web: TCP 3389 from 0.0.0.0/0 is no longer declared, and change set cs-2 is waiting to take it out. Declare it again, or the workloads that keep it lose it early. Xshield leaves it out once it is safe.",
-      "Group web: all traffic to 0.0.0.0/0 is no longer declared, and the revert of change set cs-3 puts it back. Declare it again: the revert waits until the group holds it.",
+      "Group web: all traffic to 0.0.0.0/0 is no longer declared, and the revert of change set cs-3 puts it back. Declare it again to keep its access: the revert does not wait for a rule no workspace declares, and ends without it.",
     ])
     error_message = "a rule that gives traffic back, a rule waiting that the group dropped, and a rule a revert puts back each say their change set"
   }
