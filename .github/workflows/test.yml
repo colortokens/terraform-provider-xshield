@@ -59,6 +59,32 @@ jobs:
       - name: Check provider pins and module refs
         run: scripts/release-version.sh check
 
+  terraform-tests:
+    name: Terraform module tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # full-control-adopt's test needs Terraform 1.11 or later.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "^1.11.0"
+          terraform_wrapper: false
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ hashFiles('modules/**/*.tf', 'examples/enforcement-snapshot/**/*.tf') }}
+          restore-keys: terraform-plugins-${{ runner.os }}-
+
+      - name: terraform test in every module and example
+        run: scripts/terraform-tests.sh
+
   unit-test:
     name: Unit tests
     runs-on: ubuntu-latest

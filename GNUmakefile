@@ -14,6 +14,11 @@ vet:
 test:
 	go test -v -race -cover ./...
 
+# terraform test in every module and example, against a provider built from
+# this checkout. Needs Terraform 1.11 or later; no credentials.
+tftest:
+	scripts/terraform-tests.sh
+
 # Acceptance tests. These create and destroy real objects in the tenant named
 # by the XSHIELD_* environment variables, so point them at a test tenant.
 testacc:
@@ -33,4 +38,4 @@ release-version:
 check-version:
 	scripts/release-version.sh check $(VERSION)
 
-.PHONY: default build fmt vet test testacc docs release-version check-version
+.PHONY: default build fmt vet test tftest testacc docs release-version check-version
