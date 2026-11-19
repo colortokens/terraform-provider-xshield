@@ -99,6 +99,10 @@ run "a_superseding_cohort_is_attached_before_the_old_one_comes_off" {
     error_message = "eni-1 carries the workload's group and the superseding cohort group"
   }
   assert {
+    condition     = toset(keys(xshield_aws_enforcement_receipt.this[0].attachments)) == toset(["i-1/eni-1", "ct-cohort-00000000c2/eni-1"])
+    error_message = "the receipt lists the attachments that remain, not the one the apply takes off after it"
+  }
+  assert {
     condition = alltrue([for created in [
       "create aws_security_group ${aws_security_group.this["ct-cohort-00000000c2"].name}",
       "create aws_vpc_security_group_ingress_rule ct-cohort-00000000c2/in/tcp/22/10.0.0.0/8",
