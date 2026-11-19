@@ -14,7 +14,9 @@
 # checks a join action on every resource it links to, changed or not. The role
 # names the join for each link the network interface and subnet APIs carry, so
 # it holds whatever your interfaces and subnets link to: a VM, a scale set
-# instance in flexible mode, a database's or a Function App's subnet alike.
+# instance in flexible mode, a database's or a Function App's subnet alike. A
+# subnet's service endpoints are not links of this kind: Azure does not check
+# them while they stay as they are, and the module never changes them.
 # A join is checked where the linked resource is, so a scope list must also
 # hold the resource groups of linked resources, such as a hub's route tables
 # or shared public IP addresses.
@@ -106,8 +108,6 @@ resource "azurerm_role_definition" "enforcement" {
       "Microsoft.Network/routeTables/join/action",
       "Microsoft.Network/natGateways/join/action",
       "Microsoft.Network/serviceEndpointPolicies/join/action",
-      "Microsoft.Network/serviceEndpointPolicies/joinSubnet/action",
-      "Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action",
       "Microsoft.Network/publicIPAddresses/joinServiceEndpointNetworkIdentifier/action",
       "Microsoft.Network/networkManagers/ipamPools/associateResourcesToPool/action",
     ]
