@@ -680,8 +680,9 @@ func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, dia
 				badSourceFields = append(badSourceFields, "source_tag_based_policy")
 			}
 
-			// Report selector-field rule violations
-			if count == 0 || count > 1 {
+			// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
+			pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown()
+			if (count == 0 && !pendingSelector) || count > 1 {
 				detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
 				if count > 1 {
 					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
@@ -750,8 +751,8 @@ func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, dia
 				badDestFields = append(badDestFields, "destination_tag_based_policy")
 			}
 
-			// Report selector-field rule violations
-			if count == 0 || count > 1 {
+			pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown()
+			if (count == 0 && !pendingSelector) || count > 1 {
 				detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
 				if count > 1 {
 					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
@@ -1425,111 +1426,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				})
 			}
 
-			sharedPaths := make([]shared.MetadataPath, 0, len(pathsToAdd))
-			for _, path := range pathsToAdd {
-				// Create the base path
-				metadataPath := shared.MetadataPath{
-					Direction: path.Direction.ValueStringPointer(),
-					Port:      path.Port.ValueStringPointer(),
-					Protocol:  path.Protocol.ValueStringPointer(),
-					// Other fields will be filled by the API
-				}
-
-				// Add SrcIP if present
-				if !path.SrcIP.IsNull() && !path.SrcIP.IsUnknown() {
-					srcIP := path.SrcIP.ValueString()
-					metadataPath.SrcIP = &srcIP
-				}
-
-				// Add DstIP if present
-				if !path.DstIP.IsNull() && !path.DstIP.IsUnknown() {
-					dstIP := path.DstIP.ValueString()
-					metadataPath.DstIP = &dstIP
-				}
-
-				// Add source_named_network if present
-				if path.SourceNamedNetwork != nil {
-					if !path.SourceNamedNetwork.NamedNetworkID.IsNull() && !path.SourceNamedNetwork.NamedNetworkID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.SourceNamedNetwork.NamedNetworkID.ValueString()
-						metadataPath.SourceNamedNetwork = &shared.MetadataNamedNetworkReference{
-							NamedNetworkID: &id,
-						}
-
-						// If we also have the name, include it
-						if !path.SourceNamedNetwork.NamedNetworkName.IsNull() && !path.SourceNamedNetwork.NamedNetworkName.IsUnknown() {
-							name := path.SourceNamedNetwork.NamedNetworkName.ValueString()
-							metadataPath.SourceNamedNetwork.NamedNetworkName = &name
-						}
-					}
-				}
-
-				// Add destination_named_network if present
-				if path.DestinationNamedNetwork != nil {
-					if !path.DestinationNamedNetwork.NamedNetworkID.IsNull() && !path.DestinationNamedNetwork.NamedNetworkID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.DestinationNamedNetwork.NamedNetworkID.ValueString()
-						metadataPath.DestinationNamedNetwork = &shared.MetadataNamedNetworkReference{
-							NamedNetworkID: &id,
-						}
-
-						// If we also have the name, include it
-						if !path.DestinationNamedNetwork.NamedNetworkName.IsNull() && !path.DestinationNamedNetwork.NamedNetworkName.IsUnknown() {
-							name := path.DestinationNamedNetwork.NamedNetworkName.ValueString()
-							metadataPath.DestinationNamedNetwork.NamedNetworkName = &name
-						}
-					}
-				}
-
-				// Add source_tag_based_policy if present
-				if path.SourceTagBasedPolicy != nil {
-					if !path.SourceTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.SourceTagBasedPolicy.TagBasedPolicyID.ValueString()
-						metadataPath.SourceTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
-							TagBasedPolicyID: &id,
-						}
-
-						// If we also have the criteria, include it
-						if !path.SourceTagBasedPolicy.Criteria.IsNull() && !path.SourceTagBasedPolicy.Criteria.IsUnknown() {
-							criteria := path.SourceTagBasedPolicy.Criteria.ValueString()
-							metadataPath.SourceTagBasedPolicy.Criteria = &criteria
-						}
-
-						// If we also have the name, include it
-						if !path.SourceTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
-							name := path.SourceTagBasedPolicy.TagBasedPolicyName.ValueString()
-							metadataPath.SourceTagBasedPolicy.TagBasedPolicyName = &name
-						}
-					}
-				}
-
-				// Add destination_tag_based_policy if present
-				if path.DestinationTagBasedPolicy != nil {
-					if !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.DestinationTagBasedPolicy.TagBasedPolicyID.ValueString()
-						metadataPath.DestinationTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
-							TagBasedPolicyID: &id,
-						}
-
-						// If we also have the criteria, include it
-						if !path.DestinationTagBasedPolicy.Criteria.IsNull() && !path.DestinationTagBasedPolicy.Criteria.IsUnknown() {
-							criteria := path.DestinationTagBasedPolicy.Criteria.ValueString()
-							metadataPath.DestinationTagBasedPolicy.Criteria = &criteria
-						}
-
-						// If we also have the name, include it
-						if !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
-							name := path.DestinationTagBasedPolicy.TagBasedPolicyName.ValueString()
-							metadataPath.DestinationTagBasedPolicy.TagBasedPolicyName = &name
-						}
-					}
-				}
-
-				// Add the path to the list
-				sharedPaths = append(sharedPaths, metadataPath)
-			}
+			sharedPaths := appendedTemplatePaths(pathsToAdd)
 
 			// Create the append request
 			appendRequest := operations.AppendToTemplateRequest{
@@ -1825,4 +1722,14 @@ func (r *TemplateResource) ImportState(ctx context.Context, req resource.ImportS
 		id = found
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
+}
+
+// appendedTemplatePaths are the paths an update re-adds after deleting the ones it changed, built as create builds them so no
+// peer or attribute of the path is lost; the API gives each re-added path a new id.
+func appendedTemplatePaths(pathsToAdd []tfTypes.MetadataPath) []shared.MetadataPath {
+	sharedPaths := (&TemplateResourceModel{TemplatePaths: pathsToAdd}).ToSharedTemplate().TemplatePaths
+	for i := range sharedPaths {
+		sharedPaths[i].ID = nil
+	}
+	return sharedPaths
 }
