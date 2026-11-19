@@ -34,8 +34,8 @@ resource "xshield_segment" "payroll_db" {
 
   # A segment criteria takes a strict subset of the search grammar: only =, !=,
   # IN, NOT IN, AND and parentheses, over core tag fields. The backend also
-  # appends a managedby clause, which the provider applies during plan so the
-  # stored value matches.
+  # appends a managedby clause; the provider treats the stored form as equal to
+  # what you wrote, so it never shows up as a diff.
 
   target_breach_impact_score = 40
   timeline                   = 90
@@ -70,7 +70,7 @@ resource "xshield_segment" "payroll_db" {
 
 ### Optional
 
-- `criteria` (String) Criteria for the segment. Required for creation, computed for import. A criteria that does not mention managedby is stored as `(<criteria>) AND 'managedby' in ('colortokens')`; the provider applies that form during plan so the value matches what the API returns.
+- `criteria` (String) Criteria for the segment. Required for creation, computed for import. A criteria that does not mention managedby is stored as `(<criteria>) AND 'managedby' in ('colortokens')`; state keeps the criteria as written, and only a stored criteria that differs by more than that clause is reported as a change.
 - `description` (String) Description of the segment. Maximum length is 1000 characters.
 - `inbound_auto_sync_deployment_mode` (String) Inbound auto-sync deployment mode. Options: test, enforce, disable.
 - `inbound_auto_sync_include_violations` (Boolean) Whether to include violations in inbound auto-sync.

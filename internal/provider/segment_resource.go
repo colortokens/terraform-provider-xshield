@@ -46,7 +46,7 @@ type SegmentResource struct {
 // SegmentResourceModel describes the resource data model.
 type SegmentResourceModel struct {
 	CreatedAt                              types.String                            `tfsdk:"created_at"`
-	Criteria                               types.String                            `tfsdk:"criteria"`
+	Criteria                               SegmentCriteriaValue                    `tfsdk:"criteria"`
 	Description                            types.String                            `tfsdk:"description"`
 	ID                                     types.String                            `tfsdk:"id"`
 	InboundAutoSyncDeploymentMode          types.String                            `tfsdk:"inbound_auto_sync_deployment_mode"`
@@ -90,14 +90,15 @@ func (r *SegmentResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Description: `Creation timestamp of the segment.`,
 			},
 			"criteria": schema.StringAttribute{
-				Computed: true,
-				Optional: true,
+				CustomType: SegmentCriteriaType{},
+				Computed:   true,
+				Optional:   true,
 				Description: `Criteria for the segment. Required for creation, computed for import. ` +
 					`A criteria that does not mention managedby is stored as ` +
 					"`(<criteria>) AND 'managedby' in ('colortokens')`" +
-					`; the provider applies that form during plan so the value matches what the API returns.`,
+					`; state keeps the criteria as written, and only a stored criteria that differs ` +
+					`by more than that clause is reported as a change.`,
 				PlanModifiers: []planmodifier.String{
-					CanonicalCriteriaModifier(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
