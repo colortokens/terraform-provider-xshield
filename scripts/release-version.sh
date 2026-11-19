@@ -59,7 +59,8 @@ check)
     exit 1
   fi
   unstampable=$(grep -nE 'terraform-provider-xshield//|[vV]?[xX]\.[yY]\.[zZ]' -- "${files[@]}" |
-    grep -vE 'terraform-provider-xshield//modules/[A-Za-z0-9_-]+\?ref=v[0-9]' || true)
+    perl -ne '($rest = $_) =~ s{terraform-provider-xshield//modules/[A-Za-z0-9_-]+\?ref=v\d+\.\d+\.\d+}{}g;
+      print if $rest =~ m{terraform-provider-xshield//|[vV]?[xX]\.[yY]\.[zZ]}' || true)
   if [ -n "$unstampable" ]; then
     echo "these references are not in a form 'set' rewrites; write them as" >&2
     echo "  github.com/colortokens/terraform-provider-xshield//modules/<name>?ref=v<released version>" >&2
