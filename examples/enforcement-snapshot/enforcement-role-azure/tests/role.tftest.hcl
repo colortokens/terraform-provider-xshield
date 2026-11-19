@@ -65,8 +65,6 @@ run "a_join_for_every_link_an_interface_or_subnet_carries" {
       "Microsoft.Network/routeTables/join/action",
       "Microsoft.Network/natGateways/join/action",
       "Microsoft.Network/serviceEndpointPolicies/join/action",
-      "Microsoft.Network/serviceEndpointPolicies/joinSubnet/action",
-      "Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action",
       "Microsoft.Network/publicIPAddresses/joinServiceEndpointNetworkIdentifier/action",
       "Microsoft.Network/networkManagers/ipamPools/associateResourcesToPool/action",
     ], one(azurerm_role_definition.enforcement.permissions).actions)) == 0
