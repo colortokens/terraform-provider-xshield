@@ -163,7 +163,7 @@ The [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/
 | Check | Success | When it is not |
 |--|--|--|
 | The observation | `state = "converged"` and `drift_evaluated = true` | `drift_evaluated = false`: no observation has followed the apply yet. Run the check again later. If it stays false, check that the cloud connector is running and can reach the account. |
-| Each instance | AWS shows a `ct-policy-` group on its interfaces beside its own, and no finding or notice names it | `memberUnattached`: a workspace took the group off. Do step 3 for that workspace, then apply the enforcement workspace, which attaches it again. No attachment in the step 4 plan: an `assetRefused` notice names the instance and the cause; with no notice, Xshield has not yet discovered the instance or generated its policy. |
+| Each instance | AWS shows Xshield's group on its interfaces beside its own, and no finding or notice names it. Xshield's group is tagged `ManagedBy = ColorTokens` and `ct:delivery = pipeline`, and is named as the account's security group name template in Xshield names it, or `ct-policy-` and twelve hexadecimal characters where the account has none; the enforcement workspace's plan gives its name | `memberUnattached`: a workspace took the group off. Do step 3 for that workspace, then apply the enforcement workspace, which attaches it again. No attachment in the step 4 plan: an `assetRefused` notice names the instance and the cause; with no notice, Xshield has not yet discovered the instance or generated its policy. |
 | Each database, function, service and Auto Scaling group | The resource lists Xshield's group, and no `awaitingAttach` notice names it | `awaitingAttach`: its message names the workspace to apply and the group it attaches. A lookup that returns no group: the handle is misspelt, or the resource is not yet discovered or is refused. Set `warn_when_unlisted = true` on the lookup to have its plan say so. |
 | Every workload | Its **Policy status** in the Xshield portal reads **Synchronized** | Any other notice, such as `assetRefused` or `groupRefused`, says what keeps the workload from its policy and what to change. `assetPolicyInTest` is not a failure: the workload's asset policy is in test in that direction, which writes no rule on AWS, so its own groups keep deciding that traffic. |
 
@@ -174,7 +174,7 @@ aws ec2 describe-instances --instance-ids i-0a1b2c3d \
   --query 'Reservations[].Instances[].NetworkInterfaces[].[NetworkInterfaceId, join(`,`, Groups[].GroupName)]' --output text
 ```
 
-**Done when** `drift_evaluated` is `true`, `findings` is empty, `notices` holds nothing but `assetPolicyInTest` and the notices you have decided to accept, and every workload reads **Synchronized**.
+**Done when** `state` is `converged`, `drift_evaluated` is `true`, `findings` is empty, `notices` holds nothing but `assetPolicyInTest` and the notices you have decided to accept, and every workload reads **Synchronized**.
 
 ## Step 7: Run the owners' workspaces after the enforcement workspace
 
@@ -219,7 +219,7 @@ An Auto Scaling group's running instances keep the group they launched with, and
 
 AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as above, and the group that kept them for the workload then leaves in the same way.
 
-**Done when** one run of the chain, started by hand, runs every workspace in this order, and a second run plans no change in any of them.
+**Done when** one run of the chain, started by hand, runs every workspace in this order, and a second run plans no change in any of them except what Xshield published after the first: a later discovery can release a held Full control change or give a resource its directory entry, and Xshield then publishes a new version, which `version` in the enforcement workspace's `summary` output, or the `version` of `xshield_aws_security_group_changes`, shows. Run the chain again after such a change, until a run plans no change.
 
 ## Step 8: Run the chain on a schedule
 
@@ -282,7 +282,7 @@ moved {
 
 Rules declared inline, as `aws_security_group_rule` resources, or outside Terraform move with `import` and `removed` blocks instead: see the reference's [table of starting points](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#a-group-whose-rules-are-declared-another-way-or-not-in-terraform).
 
-**Done when** the first plan shows each rule as moved or imported, adds only `terraform_data.xshield_routed`, and destroys nothing. Apply it.
+**Done when** the first plan shows each rule as moved or imported and adds `terraform_data.xshield_routed`. It destroys no rule and adds nothing else, unless a change that narrows the group was approved before this step: the plan then also adds that change's two receipts and takes out the rule it narrows, as the table below says. Apply it.
 
 Then, for each Full control change:
 
