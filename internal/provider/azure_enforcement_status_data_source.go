@@ -114,8 +114,13 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"security group of yours, which its message names, `INTERFACES_IN_SEVERAL_SUBNETS` when its network interfaces " +
 					"are in more than one subnet and one carries a group of yours, so no one subnet would cover them all, " +
 					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
-					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or " +
-					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. " +
+					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, " +
+					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds, " +
+					"`ENDPOINT_NETWORK_POLICIES_OFF` when it is reached through a private endpoint whose subnet's private endpoint " +
+					"network policies are neither `Enabled` nor `NetworkSecurityGroupEnabled`, so a group there would not filter its " +
+					"traffic, `NO_PRIVATE_INBOUND` when a Function App with inbound policy has no private endpoint, " +
+					"`INTEGRATION_SUBNET_SHARED` when a Function App with outbound policy shares its VNet integration subnet with " +
+					"other apps, or `DISCOVER_FAILED:NO_INTEGRATION_SUBNET_RANGE` when discovery gives no address range of that subnet. " +
 					"An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three " +
 					"observation intervals since the last apply or observation, so a change made in Azure since is not shown as drift. " +
 					"An `associationHeld` notice names a group of Xshield's that this version no longer places, whose network " +
