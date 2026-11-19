@@ -14,7 +14,7 @@ Applies Full control to one of your own security groups when a Terraform pipelin
 
 ```terraform
 # Route a group you own through Xshield's Full control. The aws-security-group-rules module in
-# examples/enforcement-snapshot/modules wires all of this for you; written by hand, keep every part below.
+# The modules under modules/ wire all of this for you; written by hand, keep every part below.
 # Read the account's changes once; a group they do not list keeps the rules its code declares without reading
 # them from Xshield, so its VPC and rules may be values the plan learns only at apply, as in a configuration
 # that creates them.

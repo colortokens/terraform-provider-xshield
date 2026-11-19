@@ -32,6 +32,26 @@ workflow.
 `templates/guides/` by `make docs`. Change the schema, example or guide template,
 then regenerate; do not edit a page by hand.
 
+The Terraform modules the AWS pipeline guide (`docs/guides`) calls live in `modules/`. The
+workspaces under `examples/enforcement-snapshot` call them by a relative path,
+and the docs call them by a GitHub `source` pinned with `?ref=`.
+
+## Releasing
+
+Run the `Release` workflow from the Actions tab with the version, such as
+`0.3.0`. It sets the `colortokens/xshield` pin in `README.md` and
+`examples/provider/provider.tf`, and the `?ref=` of every module source under
+`modules/`, to that version, regenerates
+`docs/`, commits to `main`, tags `v0.3.0` and publishes. The Registry renders
+the docs at the tag, so each release's docs name that release. The workflow
+pushes to `main` with `GITHUB_TOKEN`, so branch protection on `main` must let
+GitHub Actions push.
+
+Write a new pin or module source with any released version; the release
+rewrites it. `make release-version VERSION=0.3.0` does the same locally, and
+the `Test` workflow fails a pull request whose references do not all name the
+latest release tag.
+
 ## Tests
 
 Unit tests live alongside the code and run without credentials. They cover the
@@ -65,7 +85,7 @@ placeholder AWS IDs, so use an account that no real pipeline applies. Without a
 tenant, the unit tests in `internal/provider` cover each snapshot, status,
 receipt and customer group change request against a local stand-in, and the
 module tests under
-`examples/enforcement-snapshot/modules/aws/tests` mock both providers.
+`modules/aws/tests` mock both providers.
 
 The full acceptance suite runs nightly against a matrix of Terraform versions in
 the `Nightly acceptance tests` workflow.

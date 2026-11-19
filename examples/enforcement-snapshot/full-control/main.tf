@@ -33,7 +33,7 @@ resource "aws_security_group" "web" {
 # decides every rule. Xshield decides only whether a declared rule is created,
 # and the team keeps a rule's entry after Xshield has taken the rule out.
 module "web_rules" {
-  source = "../modules/aws-security-group-rules"
+  source = "../../../modules/aws-security-group-rules"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = var.vpc_id

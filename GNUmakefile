@@ -23,4 +23,14 @@ testacc:
 docs:
 	go generate ./...
 
-.PHONY: default build fmt vet test testacc docs
+# Points every version a reader copies from the docs at VERSION, such as 0.3.0,
+# and regenerates docs/. The release workflow runs it; see CONTRIBUTING.
+release-version:
+	scripts/release-version.sh set $(VERSION)
+	go generate ./...
+
+# Fails unless those references all read VERSION, or the latest release tag.
+check-version:
+	scripts/release-version.sh check $(VERSION)
+
+.PHONY: default build fmt vet test testacc docs release-version check-version

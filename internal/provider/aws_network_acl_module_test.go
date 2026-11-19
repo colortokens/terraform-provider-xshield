@@ -151,7 +151,7 @@ func (e *networkACLEndpoint) held() map[string]networkACLEntry {
 // the last step of each test takes the entry out.
 func networkACLModuleConfig(t *testing.T, aws *networkACLEndpoint, ruleNumber int, extra ...string) func(config.TestStepConfigRequest) string {
 	t.Helper()
-	module, err := os.ReadFile("../../examples/enforcement-snapshot/modules/aws/main.tf")
+	module, err := os.ReadFile("../../modules/aws/main.tf")
 	if err != nil {
 		t.Fatal(err)
 	}

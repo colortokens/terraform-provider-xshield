@@ -19,7 +19,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 Outside Full control, Xshield changes none of your own security groups: its groups sit beside each workload's own, and AWS allows what any of them allows.
 
-In every `source` below, replace `vX.Y.Z` with the tag of the `colortokens/xshield` provider release you run, so the modules and the provider match.
+The modules live in the [`modules/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the modules and the provider match.
 
 ## Step 1: Give the runner the API key
 
@@ -65,7 +65,7 @@ Do this before the enforcement workspace's first apply in step 4, so no apply of
 
 ## Step 4: Create the enforcement workspace and apply it, once per account and region
 
-Start from [`enforcement/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement). In your copy, change the module's `source` from `../modules/aws` to the repository address, or `terraform init` fails:
+Start from [`enforcement/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement). In your copy, change the module's `source` from `../../../modules/aws` to the repository address, or `terraform init` fails:
 
 ```terraform
 provider "aws" {
@@ -79,7 +79,7 @@ provider "aws" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v0.2.0"
 }
 ```
 
@@ -103,7 +103,7 @@ Skip this step if Xshield enforces only on EC2 instances. Terraform has no separ
 
 ```terraform
 module "orders_db_xshield" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
 
   handle                 = "rds/orders-db"
   vpc_id                 = aws_security_group.orders_db.vpc_id
@@ -262,7 +262,7 @@ data "xshield_aws_security_group_changes" "this" {
 }
 
 module "web_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id

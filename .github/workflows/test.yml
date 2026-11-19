@@ -48,6 +48,17 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
+  version-references:
+    name: Docs name the latest release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check provider pins and module refs
+        run: scripts/release-version.sh check
+
   unit-test:
     name: Unit tests
     runs-on: ubuntu-latest

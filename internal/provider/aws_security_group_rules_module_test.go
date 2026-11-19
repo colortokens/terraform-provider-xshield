@@ -147,7 +147,7 @@ func (e *awsEndpoint) called() []string {
 // file, since a step's init installs the modules of a configuration file but not those of a configuration string.
 func rulesModuleConfig(t *testing.T, g *gatewayServer, aws *awsEndpoint, withModule bool) func(config.TestStepConfigRequest) string {
 	t.Helper()
-	module, err := filepath.Abs("../../examples/enforcement-snapshot/modules/aws-security-group-rules")
+	module, err := filepath.Abs("../../modules/aws-security-group-rules")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ const staleNarrowingRefusal = "Xshield no longer publishes change set cs-1 as na
 // changes name the group web, so the module reads its rules from Xshield whatever change sets are served.
 func rulesModuleAtRoot(t *testing.T, g *gatewayServer, aws *awsEndpoint) func(config.TestStepConfigRequest) string {
 	t.Helper()
-	module, err := filepath.Abs("../../examples/enforcement-snapshot/modules/aws-security-group-rules")
+	module, err := filepath.Abs("../../modules/aws-security-group-rules")
 	if err != nil {
 		t.Fatal(err)
 	}

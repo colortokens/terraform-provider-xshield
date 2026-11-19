@@ -4,7 +4,7 @@ Returns the Xshield security group a database, function or service must attach, 
 
 ```hcl
 module "orders_db_xshield" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
   handle = "rds/orders-db"
   vpc_id = aws_security_group.orders_db.vpc_id
 }
@@ -15,7 +15,7 @@ resource "aws_db_instance" "orders" {
 }
 ```
 
-`aws_security_group.orders_db` is the database's own group, with the rules its workspace declares for it; Xshield's group goes beside it. [`database/`](../../database/) and [`apprunner/`](../../apprunner/) are whole workspaces that use the module. In each, `xshield.tf` holds what the workspace adds for Xshield.
+`aws_security_group.orders_db` is the database's own group, with the rules its workspace declares for it; Xshield's group goes beside it. [`database/`](../../examples/enforcement-snapshot/database/) and [`apprunner/`](../../examples/enforcement-snapshot/apprunner/) are whole workspaces that use the module. In each, `xshield.tf` holds what the workspace adds for Xshield.
 
 `handle` is the resource's kind and name: `rds/<DB instance identifier>`, `rds-cluster/<cluster identifier>`, `lambda/<function name>`, `flink/<application name>`, `apprunner/<service name>` or `asg/<Auto Scaling group name>`. The name is the one you already give the resource, so the lookup works before the resource exists.
 
@@ -27,7 +27,7 @@ Pass the resource's own groups as `own_security_group_ids` and the plan fails, n
 
 ```hcl
 module "orders_db_xshield" {
-  source                 = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
+  source                 = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
   handle                 = "rds/orders-db"
   vpc_id                 = aws_security_group.orders_db.vpc_id
   own_security_group_ids = [aws_security_group.orders_db.id]

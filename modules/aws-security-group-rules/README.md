@@ -1,6 +1,6 @@
 # aws-security-group-rules module
 
-Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables in `variables.tf` and the outputs in `outputs.tf` describe themselves. [`full-control/`](../../full-control/) is a whole workspace that uses the module. This page covers the `review` output, the record the module keeps in state, and the receipts it sends.
+Declares the rules of one of your own security groups through Xshield Full control. The comment at the top of `main.tf` says how it works, and the variables in `variables.tf` and the outputs in `outputs.tf` describe themselves. [`full-control/`](../../examples/enforcement-snapshot/full-control/) is a whole workspace that uses the module. This page covers the `review` output, the record the module keeps in state, and the receipts it sends.
 
 ## Reading what Xshield changed, in words
 
@@ -33,12 +33,12 @@ A plan shows only a root module's outputs. In each root module that calls this m
 
 ```hcl
 module "web_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
   # ...
 }
 
 module "db_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
   # ...
 }
 
@@ -118,10 +118,10 @@ While an approved change applies to the group, the module declares two `xshield_
 
 - `applying`, with `stage = "applying"`, is sent before any rule is created or updated: the group's ingress and egress rules `depends_on` it. Xshield refuses it when the plan was made before a revert, and the apply then stops with no rule changed.
 - `applied`, with `stage = "applied"` and `receipt_id` set to the `applying` receipt's ID, `depends_on` the rules, so it is sent once they are created or updated.
-- The rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed only after `applied`. Without it, Terraform destroys such a rule before it sends `applying`, and a refused `applying` receipt would no longer stop it. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of this module version on: see [How a revert waits for this workspace](../../README.md#how-a-revert-waits-for-this-workspace).
+- The rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed only after `applied`. Without it, Terraform destroys such a rule before it sends `applying`, and a refused `applying` receipt would no longer stop it. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of this module version on: see [How a revert waits for this workspace](../../examples/enforcement-snapshot/README.md#how-a-revert-waits-for-this-workspace).
 
 Terraform applies `create_before_destroy` to your group as well, since the rules depend on it. A change AWS cannot make in place, to the group's name, description or VPC, replaces the group, and Terraform creates the new group before it destroys the old one. AWS refuses two groups of one name in a VPC, so while the group has a fixed `name` that change fails with `InvalidGroup.Duplicate`. Undo the change, or give the group `name_prefix` instead of `name` in the same change.
 
-A revert of a change waits for these receipts: see [How a revert waits for this workspace](../../README.md#how-a-revert-waits-for-this-workspace).
+A revert of a change waits for these receipts: see [How a revert waits for this workspace](../../examples/enforcement-snapshot/README.md#how-a-revert-waits-for-this-workspace).
 
 Xshield's notices name the receipts by `receipt_label` and their shared ID. The label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. The API key's user must be able to create enforcement receipts as well as read cloud snapshots, as the built-in ADMIN and USER roles can.
