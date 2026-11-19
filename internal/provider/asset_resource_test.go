@@ -175,7 +175,7 @@ func TestAccAssetDataSourceRequiresAnIdentifier(t *testing.T) {
 data "xshield_asset" "no_identifier" {
 }
 `),
-				ExpectError: regexp.MustCompile(`Either id or asset_name must be provided`),
+				ExpectError: regexp.MustCompile(`An asset must be identified`),
 			},
 		},
 	})

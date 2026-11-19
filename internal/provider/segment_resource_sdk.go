@@ -101,9 +101,9 @@ func (r *SegmentResourceModel) ToSharedTagBasedPolicy() *shared.TagBasedPolicy {
 func (r *SegmentResourceModel) RefreshFromSharedTagBasedPolicyResponse(resp *shared.TagBasedPolicyResponse) {
 	if resp != nil {
 		if resp.Criteria != nil {
-			r.Criteria = types.StringValue(*resp.Criteria)
+			r.Criteria = NewSegmentCriteriaValue(*resp.Criteria)
 		} else {
-			r.Criteria = types.StringNull()
+			r.Criteria = NewSegmentCriteriaNull()
 		}
 		r.Description = types.StringPointerValue(resp.Description)
 		r.ID = types.StringPointerValue(resp.ID)

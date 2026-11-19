@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -66,6 +67,84 @@ func TestCanonicalSegmentCriteriaIsIdempotent(t *testing.T) {
 	once := canonicalSegmentCriteria("environment = 'prod'")
 	if twice := canonicalSegmentCriteria(once); twice != once {
 		t.Errorf("second pass changed the criteria\n once: %q\ntwice: %q", once, twice)
+	}
+}
+
+func TestSegmentCriteriaSemanticEquality(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		prior, new   string
+		want         bool
+		whyItMatters string
+	}{
+		{
+			name:         "written criteria equals the stored rewrite",
+			prior:        "application = 'payroll'",
+			new:          "(application = 'payroll') AND 'managedby' in ('colortokens')",
+			want:         true,
+			whyItMatters: "otherwise every apply ends in an inconsistent result and every plan shows a diff",
+		},
+		{
+			name:  "stored rewrite equals the written criteria",
+			prior: "(application = 'payroll') AND 'managedby' in ('colortokens')",
+			new:   "application = 'payroll'",
+			want:  true,
+		},
+		{
+			name:         "a portal edit is not equal",
+			prior:        "application = 'payroll'",
+			new:          "(application = 'hr') AND 'managedby' in ('colortokens')",
+			want:         false,
+			whyItMatters: "drift in the criteria itself must still surface",
+		},
+		{
+			name:  "a different managedby owner is not equal",
+			prior: "application = 'payroll'",
+			new:   "application = 'payroll' AND managedby in ('crowdstrike')",
+			want:  false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, diags := NewSegmentCriteriaValue(tc.prior).StringSemanticEquals(context.Background(), NewSegmentCriteriaValue(tc.new))
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", diags)
+			}
+			if got != tc.want {
+				t.Errorf("StringSemanticEquals(%q, %q) = %v, want %v\n%s", tc.prior, tc.new, got, tc.want, tc.whyItMatters)
+			}
+		})
+	}
+}
+
+func TestSegmentCriteriaHasNoPlanTimeRewrite(t *testing.T) {
+	t.Parallel()
+	schemaResp := &resource.SchemaResponse{}
+	NewSegmentResource().Schema(context.Background(), resource.SchemaRequest{}, schemaResp)
+
+	attr, ok := schemaResp.Schema.Attributes["criteria"].(schema.StringAttribute)
+	if !ok {
+		t.Fatal("criteria is not a StringAttribute")
+	}
+	if _, ok := attr.CustomType.(SegmentCriteriaType); !ok {
+		t.Errorf("criteria custom type = %T, want SegmentCriteriaType", attr.CustomType)
+	}
+
+	// Terraform rejects any planned value that differs from a configured one, so
+	// every plan modifier on criteria must leave a configured value untouched.
+	configured := NewSegmentCriteriaValue("application = 'payroll'").StringValue
+	for _, m := range attr.PlanModifiers {
+		resp := &planmodifier.StringResponse{PlanValue: configured}
+		m.PlanModifyString(context.Background(), planmodifier.StringRequest{
+			Path:        path.Root("criteria"),
+			ConfigValue: configured,
+			PlanValue:   configured,
+			StateValue:  types.StringNull(),
+		}, resp)
+		if !resp.PlanValue.Equal(configured) {
+			t.Errorf("%s rewrote a configured criteria to %q", m.Description(context.Background()), resp.PlanValue.ValueString())
+		}
 	}
 }
 

@@ -13,8 +13,8 @@ resource "xshield_segment" "payroll_db" {
 
   # A segment criteria takes a strict subset of the search grammar: only =, !=,
   # IN, NOT IN, AND and parentheses, over core tag fields. The backend also
-  # appends a managedby clause, which the provider applies during plan so the
-  # stored value matches.
+  # appends a managedby clause; the provider treats the stored form as equal to
+  # what you wrote, so it never shows up as a diff.
 
   target_breach_impact_score = 40
   timeline                   = 90

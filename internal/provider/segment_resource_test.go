@@ -136,6 +136,23 @@ resource "xshield_segment" "test" {
 	}
 }
 
+// TestAccSegmentPlanKeepsCriteriaAsWritten plans a create without reaching the
+// API. Terraform rejects a plan whose value differs from the configured one, so
+// a provider that rewrites criteria at plan time fails here.
+func TestAccSegmentPlanKeepsCriteriaAsWritten(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             testAccSegmentConfig(acctest.RandomWithPrefix("tf-acc-segment"), "plan only", "'osName' in ('plan-only')", 10),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 func TestAccSegmentDataSource(t *testing.T) {
 	name := acctest.RandomWithPrefix("tf-acc-segment-ds")
 	criteria := fmt.Sprintf("'osName' in ('%s')", name)
