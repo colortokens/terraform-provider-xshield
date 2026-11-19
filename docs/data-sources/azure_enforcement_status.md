@@ -17,17 +17,21 @@ A workload Xshield refuses is left out of `xshield_azure_enforcement_snapshot` a
 
 ```terraform
 # The snapshot leaves out a workload Xshield refuses, so a plan that changes nothing for it does not mean its
-# policy is enforced. These checks report each refusal, and a pipeline that has stopped resolving the expected version.
+# policy is enforced. These checks report each refusal, high-severity drift the cloud connector observes, and a
+# pipeline that has stopped resolving the expected version.
 data "xshield_azure_enforcement_status" "this" {
   cloud_account_id = "00000000-0000-0000-0000-000000000000"
   region           = "eastus2"
 }
 
 locals {
-  status         = data.xshield_azure_enforcement_status.this
-  where          = "${local.status.cloud_account_id}/${local.status.region}"
-  max_check_age  = "24h"
-  refused        = [for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id)}: ${n.reason}: ${n.message}" if n.code == "assetRefused"]
+  status        = data.xshield_azure_enforcement_status.this
+  where         = "${local.status.cloud_account_id}/${local.status.region}"
+  max_check_age = "24h"
+  refused       = [for n in local.status.notices : "  ${coalesce(n.asset_name, n.asset_id)}: ${n.reason}: ${n.message}" if n.code == "assetRefused"]
+  drift_high = [
+    for f in local.status.drift_findings : "  ${f.kind} ${coalesce(f.resource_name, f.resource)}: ${f.detail} (fixed by: ${f.restoration})" if f.severity == "high"
+  ]
   pipeline_stale = local.status.published && timecmp(timeadd(coalesce(local.status.last_checked_at, "1970-01-01T00:00:00Z"), local.max_check_age), plantimestamp()) < 0
 }
 
@@ -35,6 +39,13 @@ check "xshield_workloads_refused" {
   assert {
     condition     = length(local.refused) == 0
     error_message = join("\n", concat(["Xshield cannot enforce policy on these workloads in ${local.where}:"], local.refused))
+  }
+}
+
+check "xshield_drift_high" {
+  assert {
+    condition     = length(local.drift_high) == 0
+    error_message = join("\n", concat(["Xshield sees high-severity drift in ${local.where}:"], local.drift_high))
   }
 }
 
@@ -61,12 +72,30 @@ check "xshield_pipeline_stale" {
 - `applied_network_security_groups` (Map of String) From the last receipt: the network security group ID of each resource the enforcement module created, keyed as the module keys `azurerm_network_security_group.this`. Empty before the first receipt.
 - `applied_subnet_associations` (Map of String) From the last receipt: the subnet association import ID, the subnet's ID of each resource the enforcement module created, keyed as the module keys `azurerm_subnet_network_security_group_association.this`. Empty before the first receipt.
 - `applied_version` (String) Version in the latest apply receipt. Null when nothing has been applied.
+- `drift_evaluated` (Boolean) Whether drift could be evaluated: it needs an applied receipt and a cloud connector observation taken after it. An observation older than the latest apply describes resources that apply replaced, so it is not evaluated.
+- `drift_findings` (List of Object) Differences between the subscription as observed and the snapshot as applied. `kind`: `groupMissing` when a network security group of Xshield's is gone, `ruleMissing` or `ruleModified` when one of its rules is gone or no longer matches, `ruleUnmanaged` when a group holds a rule named as Xshield names its rules, or any rule once the latest receipt set `exclusive_rules`, that the snapshot does not hold, `memberUnattached` when a workload's network interface or subnet no longer carries its group, and `groupUnmanaged` when a network security group carries the pipeline's tags but the applied state does not hold it. `severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. `restoration`: `pipeline` when the next enforcement apply restores it, `manual` for `groupUnmanaged`, which Terraform cannot see and must be removed by hand. `resource`: Azure resource ID of the affected group or rule, or the Xshield asset ID for `memberUnattached`. `resource_name`: the group's key for `groupMissing`, the rule's name for a rule finding, the group's name for `groupUnmanaged`. `key`: snapshot key involved: the group's key in `xshield_azure_enforcement_snapshot`, or `<group key>/<rule name>` for a missing or changed rule. `detail`: human-readable explanation. `detected_at`: when Xshield recorded the finding, which stays recorded until an observation shows it gone; null for a state the next enforcement apply clears or makes, which Xshield does not record as drift. (see [below for nested schema](#nestedatt--drift_findings))
+- `drift_observed_at` (String) When the cloud connector's latest observation was taken.
 - `expected_version` (String) Version Xshield expects to be enforced, the hash of everything it asks for.
 - `last_checked_at` (String) When an enforcement plan last resolved the expected version. A stale value means the pipeline has stopped running, whatever `state` says.
-- `notices` (List of Object) What Xshield could not enforce in the expected version, and why. A refused workload gets no network security group of Xshield's and keeps the groups it has, until the cause is fixed. `code`: `assetRefused`. `reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network security group of yours, which its message names, `DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, `NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or `RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. `asset_id`: the Xshield asset the notice is about. `asset_name`: the workload as Azure names it, when Xshield knows it. `group` and `since`: null on Azure. `message`: what happened and what to do about it. (see [below for nested schema](#nestedatt--notices))
+- `notices` (List of Object) What Xshield could not enforce in the expected version, and why. A refused workload gets no network security group of Xshield's and keeps the groups it has, until the cause is fixed. `reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network security group of yours, which its message names, `DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, `NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or `RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three observation intervals since the last apply or observation, so a change made in Azure since is not shown as drift. `code`: `assetRefused` or `observationStale`. `asset_id`: the Xshield asset the notice is about, when there is one. `asset_name`: the workload as Azure names it, when Xshield knows it. `group`: null on Azure. `since`: for `observationStale`, the last apply or observation it counts from; null for `assetRefused`. `message`: what happened and what to do about it. (see [below for nested schema](#nestedatt--notices))
 - `pending_since` (String) When the oldest policy change not yet applied was published.
 - `published` (Boolean) False while Xshield has published nothing for this subscription and region. `state` is then `unpublished`, `expected_version` is null and `notices` is empty, so checks stay quiet.
 - `state` (String) `converged` when the latest receipt is for the expected version, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published nothing to apply, and `handedOver` when the subscription moved to connector delivery.
+
+<a id="nestedatt--drift_findings"></a>
+### Nested Schema for `drift_findings`
+
+Read-Only:
+
+- `detail` (String)
+- `detected_at` (String)
+- `key` (String)
+- `kind` (String)
+- `resource` (String)
+- `resource_name` (String)
+- `restoration` (String)
+- `severity` (String)
+
 
 <a id="nestedatt--notices"></a>
 ### Nested Schema for `notices`
