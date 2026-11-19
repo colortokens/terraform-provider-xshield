@@ -15,12 +15,14 @@ Xshield decides everything that is enforced: which groups exist, every rule in t
 | [`modules/aws`](../../modules/aws/) | The enforcement module. One block per AWS account and region. |
 | [`modules/aws-group-lookup`](../../modules/aws-group-lookup/) | Gives a database, function or service the group it must attach. Reads only SSM. |
 | [`modules/aws-security-group-rules`](../../modules/aws-security-group-rules/) | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
+| [`modules/azure`](../../modules/azure/) | The enforcement module for Azure. One block per subscription and region. Its [README](../../modules/azure/README.md) says what it creates. |
 
 **To copy and fill in.** New code in your repository, complete but for its inputs.
 
 | Directory | What it is |
 |--|--|
 | `enforcement/` | An enforcement workspace, ready to copy. |
+| `enforcement-azure/` | An enforcement workspace for an Azure subscription and region, ready to copy. |
 | `enforcement-role/` | The role the enforcement workspace assumes, with only the permissions below. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and stops a plan on the ones you choose. |
 | `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order, on a schedule. The same order adds a group and, once policy stops using it, removes it. |
@@ -756,7 +758,7 @@ export TF_CLI_CONFIG_FILE="$PWD/.dev.tfrc"
 (cd ../../modules/aws && terraform init -backend=false && terraform test)
 ```
 
-`../../modules/aws-group-lookup`, `../../modules/aws-security-group-rules`, `enforcement-role/`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` have tests too. Run them the same way from their own directories. The test of `full-control-adopt/` needs Terraform 1.11 or later. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how. `../../modules/aws/apply-order/` checks the order in which an apply creates and removes groups, rules and attachments, in a copy of `modules/aws` that logs each: its test file says how.
+`../../modules/aws-group-lookup`, `../../modules/aws-security-group-rules`, `../../modules/azure`, `enforcement-role/`, `enforcement-role-azure/`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` have tests too. Run them the same way from their own directories. The test of `full-control-adopt/` needs Terraform 1.11 or later. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how. `../../modules/aws/apply-order/` checks the order in which an apply creates and removes groups, rules and attachments, in a copy of `modules/aws` that logs each: its test file says how.
 
 ## What happens if
 

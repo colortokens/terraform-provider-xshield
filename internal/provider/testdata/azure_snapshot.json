@@ -1,0 +1,254 @@
+{
+  "schemaVersion": "1",
+  "version": "9b9c7fc46190dc3624f4e79040ec8716af4dadb353e1b7a823d75fae307489c3f4404693b7603e7e61735b505ff7acd5f7d17c656c8ff09659d4cc5855729322",
+  "cloudProvider": "azure",
+  "cloudAccountId": "11111111-2222-3333-4444-555555555555",
+  "region": "eastus2",
+  "aws": null,
+  "azure": {
+    "networkSecurityGroups": {
+      "ct-policy-8d612d812776": {
+        "name": "ct-policy-8d612d812776",
+        "resourceGroupName": "rg-net",
+        "location": "eastus2",
+        "tags": {
+          "ct:delivery": "pipeline",
+          "ct:level": "subnet"
+        },
+        "securityRules": [
+          {
+            "name": "CT-Rule-Allow-AzureLoadBalancer",
+            "priority": 100,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "AzureLoadBalancer"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-049ab4a026fc",
+            "priority": 501,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "Tcp",
+            "sourceAddressPrefixes": [
+              "10.0.0.0/8"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.5/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "8000-8080"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-Any-Inbound",
+            "priority": 4096,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "*"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-Any-Outbound",
+            "priority": 4096,
+            "direction": "Outbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "*"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          }
+        ]
+      },
+      "ct-policy-d2dd5b7ea0d5": {
+        "name": "ct-policy-d2dd5b7ea0d5",
+        "resourceGroupName": "rg-app",
+        "location": "eastus2",
+        "tags": {
+          "ct:delivery": "pipeline",
+          "ct:level": "networkInterface"
+        },
+        "securityRules": [
+          {
+            "name": "CT-Rule-Allow-AzureLoadBalancer",
+            "priority": 100,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "AzureLoadBalancer"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-faf81b0d4310",
+            "priority": 501,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "Tcp",
+            "sourceAddressPrefixes": [
+              "10.20.0.0/16",
+              "10.21.0.0/16"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "443"
+            ]
+          },
+          {
+            "name": "CT-Rule-Deny-7afbbb662c01",
+            "priority": 3001,
+            "direction": "Inbound",
+            "access": "Deny",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "0.0.0.0/0"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-Any-Inbound",
+            "priority": 4096,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "*"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-096c9d78174c",
+            "priority": 501,
+            "direction": "Outbound",
+            "access": "Allow",
+            "protocol": "Tcp",
+            "sourceAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "destinationAddressPrefixes": [
+              "Storage.EastUS2"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "443"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-Any-Outbound",
+            "priority": 4096,
+            "direction": "Outbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "*"
+            ],
+            "destinationAddressPrefixes": [
+              "*"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          }
+        ]
+      }
+    },
+    "subnetAssociations": {
+      "ct-policy-8d612d812776": {
+        "networkSecurityGroup": "ct-policy-8d612d812776",
+        "subnetId": "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a/subnets/snet-app"
+      }
+    },
+    "interfaceAssociations": {
+      "ct-policy-d2dd5b7ea0d5": {
+        "networkSecurityGroup": "ct-policy-d2dd5b7ea0d5",
+        "networkInterfaceId": "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-web"
+      }
+    },
+    "assets": {
+      "api": {
+        "level": "subnet",
+        "networkSecurityGroups": [
+          "ct-policy-8d612d812776"
+        ]
+      },
+      "db": {
+        "networkSecurityGroups": []
+      },
+      "web": {
+        "level": "networkInterface",
+        "networkSecurityGroups": [
+          "ct-policy-d2dd5b7ea0d5"
+        ]
+      }
+    }
+  }
+}

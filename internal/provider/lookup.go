@@ -40,6 +40,14 @@ func criteriaNameEquals(field, name string) (string, error) {
 	}
 }
 
+type noMatchError struct {
+	kind, name string
+}
+
+func (e noMatchError) Error() string {
+	return fmt.Sprintf("no %s named %q", e.kind, e.name)
+}
+
 // uniqueMatch returns the single id whose name matches exactly.
 //
 // The list endpoints match loosely, so the caller has to filter, and names are
@@ -50,7 +58,7 @@ func uniqueMatch(kind, name string, ids []string) (string, error) {
 	case 1:
 		return ids[0], nil
 	case 0:
-		return "", fmt.Errorf("no %s named %q", kind, name)
+		return "", noMatchError{kind: kind, name: name}
 	default:
 		return "", fmt.Errorf("%d %ss are named %q; use the id instead of the name", len(ids), kind, name)
 	}

@@ -339,6 +339,7 @@ func (p *XshieldProvider) Resources(ctx context.Context) []func() resource.Resou
 		NewAssetResource,
 		newAWSSecurityGroupChangesReceiptResource,
 		newAWSEnforcementReceiptResource,
+		newAzureEnforcementReceiptResource,
 		NewNamedNetworkResource,
 		NewPolicyDeploymentResource,
 		NewSegmentResource,
@@ -376,6 +377,8 @@ func (p *XshieldProvider) DataSources(ctx context.Context) []func() datasource.D
 
 		newAWSEnforcementSnapshotDataSource,
 		newAWSEnforcementStatusDataSource,
+		newAzureEnforcementSnapshotDataSource,
+		newAzureEnforcementStatusDataSource,
 		newAWSSecurityGroupChangesDataSource,
 		newAWSSecurityGroupRulesDataSource,
 	}

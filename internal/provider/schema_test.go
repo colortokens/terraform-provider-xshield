@@ -150,6 +150,8 @@ var dataSourceLookupAttributes = map[string][]string{
 	// what makes the read converge on the expected version.
 	"xshield_aws_enforcement_snapshot":   {"cloud_account_id", "region"},
 	"xshield_aws_enforcement_status":     {"cloud_account_id", "region"},
+	"xshield_azure_enforcement_snapshot": {"cloud_account_id", "region"},
+	"xshield_azure_enforcement_status":   {"cloud_account_id", "region"},
 	"xshield_aws_security_group_changes": {"cloud_account_id", "region"},
 	"xshield_aws_security_group_rules":   {"cloud_account_id", "region", "vpc_id", "group_name"},
 }
@@ -260,6 +262,8 @@ var resourcesWithoutDataSource = map[string]string{
 		"xshield_deployment_simulation are its read-only counterparts.",
 	"xshield_aws_enforcement_receipt": "a receipt reports an apply rather than storing an " +
 		"object Terraform reads back. xshield_aws_enforcement_status is its read-only counterpart.",
+	"xshield_azure_enforcement_receipt": "a receipt reports an apply rather than storing an " +
+		"object Terraform reads back. xshield_azure_enforcement_status is its read-only counterpart.",
 	"xshield_aws_security_group_changes_receipt": "a receipt reports what a workspace applied, " +
 		"and Xshield serves no read of it. xshield_aws_security_group_changes is its read-only counterpart.",
 }
