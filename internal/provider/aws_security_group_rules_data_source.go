@@ -309,7 +309,8 @@ func ruleMatches(rule sgrRuleModel, m wireRuleMatch) bool {
 	if canonicalProtocol(rule.IPProtocol.ValueString()) != canonicalProtocol(m.IPProtocol) {
 		return false
 	}
-	if m.FromPort != nil && (!samePort(rule.FromPort, m.FromPort) || !samePort(rule.ToPort, m.ToPort)) {
+	from, to := declaredPorts(rule)
+	if m.FromPort != nil && (!samePort(from, m.FromPort) || !samePort(to, m.ToPort)) {
 		return false
 	}
 	switch {
@@ -333,6 +334,15 @@ func canonicalProtocol(p string) string {
 		return name
 	}
 	return p
+}
+
+// declaredPorts are the rule's ports as AWS holds them: an ICMP rule that sets neither is every type and code, -1 to -1.
+func declaredPorts(rule sgrRuleModel) (from, to types.Int64) {
+	protocol := canonicalProtocol(rule.IPProtocol.ValueString())
+	if (protocol == "icmp" || protocol == "icmpv6") && rule.FromPort.IsNull() && rule.ToPort.IsNull() {
+		return types.Int64Value(-1), types.Int64Value(-1)
+	}
+	return rule.FromPort, rule.ToPort
 }
 
 func samePort(declared types.Int64, want *int64) bool {
