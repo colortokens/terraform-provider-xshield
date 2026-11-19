@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -52,7 +53,7 @@ func TestClassifyAssetSwitchErrorExplainsEachAwsRefusal(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			t.Parallel()
-			err := classifyAssetSwitchError(409, assetSwitchRefusal(tc.code, tc.message), nil)
+			err := classifyAssetSwitchError(409, assetSwitchRefusal(tc.code, tc.message), nil, shared.AssetStateTransitionInput{OutboundToDeploymentState: shared.AssetDeploymentStateDisabled.ToPointer()})
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -75,7 +76,8 @@ func TestClassifyAssetSwitchErrorExplainsEachAwsRefusal(t *testing.T) {
 
 func TestClassifyAssetSwitchErrorRetriesALevelChange(t *testing.T) {
 	t.Parallel()
-	err := classifyAssetSwitchError(409, assetSwitchRefusal("LEVEL_CHANGED", "the AWS protection level changed while the deploy started; nothing was written"), nil)
+	err := classifyAssetSwitchError(409, assetSwitchRefusal("LEVEL_CHANGED", "the AWS protection level changed while the deploy started; nothing was written"), nil,
+		shared.AssetStateTransitionInput{InboundToDeploymentState: shared.AssetDeploymentStateEnabled.ToPointer()})
 	if !isRetryableDeploymentError(err) {
 		t.Fatalf("LEVEL_CHANGED asks for the request to be sent again, got %v", err)
 	}
@@ -84,7 +86,7 @@ func TestClassifyAssetSwitchErrorRetriesALevelChange(t *testing.T) {
 func TestClassifyAssetSwitchErrorKeepsThePlainClassification(t *testing.T) {
 	t.Parallel()
 	message := "deployment in progress"
-	err := classifyAssetSwitchError(400, &shared.ErrorResponse{Message: &message}, nil)
+	err := classifyAssetSwitchError(400, &shared.ErrorResponse{Message: &message}, nil, shared.AssetStateTransitionInput{})
 	if !isRetryableDeploymentError(err) {
 		t.Fatalf("a busy tenant must still be retried, got %v", err)
 	}
@@ -131,5 +133,81 @@ func TestApplyAssetEnforcementSendsTheSwitchAgainAfterALevelChange(t *testing.T)
 	}
 	if got := calls.Load(); got != 2 {
 		t.Errorf("made %d requests, want the refused one and one more", got)
+	}
+}
+
+func assetSwitchRefusedWith(t *testing.T, code, message string, plan, state *AssetResourceModel) string {
+	t.Helper()
+	client := newAssetSwitchTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		body, _ := json.Marshal(map[string]any{"status": 409, "message": message, "details": map[string]string{"code": code}})
+		_, _ = w.Write(body)
+	})
+	var diags diag.Diagnostics
+	applyAssetEnforcement(context.Background(), client, "a1b2c3d4-0000-0000-0000-000000000000", plan, state, &diags)
+	if !diags.HasError() {
+		t.Fatalf("%s must fail the apply", code)
+	}
+	return diags.Errors()[0].Detail()
+}
+
+func TestANoConnectorRefusalNamesTheDirectionTheSwitchTurns(t *testing.T) {
+	t.Parallel()
+	on, off := types.BoolValue(true), types.BoolValue(false)
+	for _, tc := range []struct {
+		name         string
+		plan, state  AssetResourceModel
+		wantPhrases  []string
+		avoidPhrases []string
+	}{
+		{
+			name: "on", plan: AssetResourceModel{InboundEnforcement: on}, state: AssetResourceModel{InboundEnforcement: off},
+			wantPhrases:  []string{"switching enforcement on", "earlier Full control change", "reverted", "AWS connector", "apply again"},
+			avoidPhrases: []string{"switching enforcement off"},
+		},
+		{
+			name: "off", plan: AssetResourceModel{OutboundEnforcement: off}, state: AssetResourceModel{OutboundEnforcement: on},
+			wantPhrases:  []string{"switching enforcement off", "put back", "AWS connector", "apply again"},
+			avoidPhrases: []string{"switching enforcement on", "earlier Full control change"},
+		},
+		{
+			name: "on and off", plan: AssetResourceModel{InboundEnforcement: on, OutboundEnforcement: off},
+			state:       AssetResourceModel{InboundEnforcement: off, OutboundEnforcement: on},
+			wantPhrases: []string{"switching enforcement on", "switching enforcement off", "AWS connector"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			detail := assetSwitchRefusedWith(t, "NO_CONNECTOR",
+				"the deploy needs the moved rules of customer groups sg-shared put back for web-1, and account 111122223333 has no active AWS connector; nothing was written",
+				&tc.plan, &tc.state)
+			for _, phrase := range tc.wantPhrases {
+				if !strings.Contains(detail, phrase) {
+					t.Errorf("message is missing %q:\n%s", phrase, detail)
+				}
+			}
+			for _, phrase := range tc.avoidPhrases {
+				if strings.Contains(detail, phrase) {
+					t.Errorf("message must not say %q:\n%s", phrase, detail)
+				}
+			}
+		})
+	}
+}
+
+func TestAnAcknowledgementRefusalSaysHowToAcknowledgeFromTerraform(t *testing.T) {
+	t.Parallel()
+	detail := assetSwitchRefusedWith(t, "ACKNOWLEDGEMENT_REQUIRED",
+		"carriers of these customer groups lose the moved rules, and no group of ours can be attached to them: sg-shared (elb/web-lb); "+
+			"send each group id in acknowledgedGroupIds to accept it; nothing was written",
+		&AssetResourceModel{InboundEnforcement: types.BoolValue(true)}, &AssetResourceModel{InboundEnforcement: types.BoolValue(false)})
+	for _, phrase := range []string{"in Xshield", "acknowledg", "apply again", "not an attribute of this resource", "sg-shared (elb/web-lb)"} {
+		if !strings.Contains(detail, phrase) {
+			t.Errorf("message is missing %q:\n%s", phrase, detail)
+		}
+	}
+	if strings.HasPrefix(detail, "the API answered") {
+		t.Errorf("the refusal must be explained, not reported as a bad request:\n%s", detail)
 	}
 }

@@ -119,6 +119,7 @@ const (
 	awsRefusalPartialUndeploy  = "PARTIAL_UNDEPLOY"
 	awsRefusalUndeployTooLarge = "UNDEPLOY_TOO_LARGE"
 	awsRefusalNoConnector      = "NO_CONNECTOR"
+	awsRefusalAcknowledgement  = "ACKNOWLEDGEMENT_REQUIRED"
 )
 
 func deploymentRefusalCode(errResp *shared.ErrorResponse) string {
@@ -132,7 +133,7 @@ func deploymentRefusalCode(errResp *shared.ErrorResponse) string {
 // classifyAssetSwitchError classifies a refusal of the asset switch, which this
 // resource sends for one asset per request. The platform's own refusal text is
 // kept because it names the assets, ports and customer groups involved.
-func classifyAssetSwitchError(status int, errResp *shared.ErrorResponse, raw *http.Response) error {
+func classifyAssetSwitchError(status int, errResp *shared.ErrorResponse, raw *http.Response, input shared.AssetStateTransitionInput) error {
 	detail := apiErrorDetail(errResp, raw)
 	if errResp != nil && errResp.Message != nil {
 		detail = *errResp.Message
@@ -155,12 +156,36 @@ func classifyAssetSwitchError(status int, errResp *shared.ErrorResponse, raw *ht
 				"groups, then apply again. (%s)", detail)
 	case awsRefusalNoConnector:
 		return fmt.Errorf(
-			"switching enforcement off needs the moved customer group rules put back, and the AWS account has no active "+
-				"AWS connector to send that change to; nothing was written. Restore the account's AWS connector in Xshield "+
-				"so it is active, then apply again. (%s)", detail)
+			"%s, and the AWS account has no active AWS connector to send that change to; nothing was written. "+
+				"Restore the account's AWS connector in Xshield so it is active, then apply again. (%s)", noConnectorNeed(input), detail)
+	case awsRefusalAcknowledgement:
+		return fmt.Errorf(
+			"switching enforcement on for this asset takes moved customer group rules from resources no Xshield group can be "+
+				"attached to, named below, and the change must acknowledge that first; nothing was written. The acknowledgedGroupIds "+
+				"field the message names is not an attribute of this resource: switch the same enforcement on for this asset in "+
+				"Xshield, acknowledging the customer groups named below, then apply again, which finds the asset already enforced. (%s)", detail)
 	default:
 		return classifyDeploymentError(status, detail)
 	}
+}
+
+// noConnectorNeed is what the switch needs the AWS connector for, by the directions it turns: turning one on replaces an earlier
+// Full control change of the asset's customer groups, which is reverted first, and turning one off puts the moved rules back.
+func noConnectorNeed(input shared.AssetStateTransitionInput) string {
+	var needs []string
+	if turnsEnforcement(input, shared.AssetDeploymentStateEnabled) {
+		needs = append(needs, "switching enforcement on replaces an earlier Full control change of the asset's customer groups, "+
+			"which has to be reverted first")
+	}
+	if turnsEnforcement(input, shared.AssetDeploymentStateDisabled) {
+		needs = append(needs, "switching enforcement off needs the moved customer group rules put back")
+	}
+	return strings.Join(needs, "; ")
+}
+
+func turnsEnforcement(input shared.AssetStateTransitionInput, to shared.AssetDeploymentState) bool {
+	return input.InboundToDeploymentState != nil && *input.InboundToDeploymentState == to ||
+		input.OutboundToDeploymentState != nil && *input.OutboundToDeploymentState == to
 }
 
 // enforcementState converts the boolean a configuration expresses into the
@@ -211,7 +236,7 @@ func applyAssetEnforcement(
 			// 202 accepted the change; 304 means it was already in this state.
 			return nil
 		default:
-			return classifyAssetSwitchError(res.StatusCode, res.ErrorResponse, res.RawResponse)
+			return classifyAssetSwitchError(res.StatusCode, res.ErrorResponse, res.RawResponse, input)
 		}
 	})
 	if err != nil {
