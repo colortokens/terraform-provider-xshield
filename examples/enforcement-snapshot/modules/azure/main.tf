@@ -146,6 +146,25 @@ resource "azurerm_subnet_network_security_group_association" "this" {
   network_security_group_id = local.network_security_group_ids[each.value.network_security_group]
 }
 
+# Azure gives a group or association recreated under the same name its old ID, so an apply that restores one changes
+# nothing the receipt sends. One record per group is replaced whenever the apply creates, replaces or updates the group or
+# its association: an ID unknown until apply catches one created, and replace_triggered_by the group updated in place, such
+# as one whose removed rule is restored. An association has nothing to update in place. A new record ID sends the receipt
+# again, so Xshield observes the restored state at once.
+resource "terraform_data" "xshield_applied_resources" {
+  for_each = local.snap.published ? local.snap.network_security_groups : {}
+
+  triggers_replace = [
+    local.network_security_group_ids[each.key],
+    try(azurerm_subnet_network_security_group_association.this[each.key].id, null),
+    try(azurerm_network_interface_security_group_association.this[each.key].id, null),
+  ]
+
+  lifecycle {
+    replace_triggered_by = [azurerm_network_security_group.this[each.key]]
+  }
+}
+
 # Tells Xshield the version is applied, and which resource it created for each key, so its status shows the subscription
 # and region converged, and a lost state can be rebuilt from the receipt.
 resource "xshield_azure_enforcement_receipt" "this" {
@@ -156,6 +175,7 @@ resource "xshield_azure_enforcement_receipt" "this" {
   workspace        = local.workspace
   snapshot_version = local.snap.version
   exclusive_rules  = var.enable_exclusive_rules
+  resend_trigger   = join(",", [for key in sort(keys(terraform_data.xshield_applied_resources)) : terraform_data.xshield_applied_resources[key].id])
 
   network_security_groups = local.network_security_group_ids
   subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id }
