@@ -78,6 +78,31 @@ func TestGroupChangesFailThePlanWhenXshieldCannotBeRead(t *testing.T) {
 	}
 }
 
+// Read as unpublished, a handed-over account would list no group, and every module would put back a rule the cloud
+// connector keeps out of a group. Both reads say what the owner's workspace does instead.
+func TestGroupChangesStopThePlanOnceTheAccountIsHandedOver(t *testing.T) {
+	t.Parallel()
+	api, _ := newRoutedSnapshotAPI(t, map[string]cannedResponse{"/customergroupchanges": {http.StatusConflict, `{"status":409,"code":"handedOver","message":"handed over"}`}})
+	rulesArgs := pointArgs()
+	rulesArgs["vpc_id"] = tftypes.NewValue(tftypes.String, "vpc-1")
+	rulesArgs["group_name"] = tftypes.NewValue(tftypes.String, "web")
+	for name, read := range map[string]func() (bool, string){
+		"changes": func() (bool, string) {
+			var listing awsSecurityGroupChangesDataSourceModel
+			return readDataSource(t, &awsSecurityGroupChangesDataSource{api: api}, pointArgs(), &listing)
+		},
+		"rules": func() (bool, string) {
+			var rules awsSecurityGroupRulesDataSourceModel
+			return readDataSource(t, &awsSecurityGroupRulesDataSource{api: api}, rulesArgs, &rules)
+		},
+	} {
+		ok, errs := read()
+		if ok || !strings.Contains(errs, "to connector delivery") || !strings.Contains(errs, "destroy = false") || strings.Contains(errs, "Check the provider's endpoint") {
+			t.Errorf("%s: ok=%v %q, want the plan stopped with the owner workspace's step, not an endpoint error", name, ok, errs)
+		}
+	}
+}
+
 // A document for another account can hold a key that matches a group here, as in a shared VPC, and would take a
 // declared rule out of a group no change applies to.
 func TestGroupChangesServedForAnotherAccountOrRegionAreRefused(t *testing.T) {

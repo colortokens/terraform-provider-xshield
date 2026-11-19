@@ -198,6 +198,32 @@ func TestRuleMatchingWithoutAToPort(t *testing.T) {
 	}
 }
 
+// A rule declared for every ICMP type and code sets no port, and AWS holds it, as Xshield names it, from -1 to -1.
+func TestRuleMatchingEveryICMPTypeDeclaredWithoutPorts(t *testing.T) {
+	t.Parallel()
+	everyType := func(protocol string) sgrRuleModel {
+		r := declaredRule(protocol, 0, "0.0.0.0/0")
+		r.FromPort, r.ToPort = types.Int64Null(), types.Int64Null()
+		return r
+	}
+	everyICMP := wireRuleMatch{IPProtocol: "icmp", FromPort: i64(-1), ToPort: i64(-1), CIDRIPv4: ptr("0.0.0.0/0")}
+	for name, tc := range map[string]struct {
+		rule sgrRuleModel
+		want wireRuleMatch
+		same bool
+	}{
+		"icmp":                       {everyType("icmp"), everyICMP, true},
+		"icmp by number":             {everyType("1"), everyICMP, true},
+		"icmpv6":                     {everyType("icmpv6"), wireRuleMatch{IPProtocol: "icmpv6", FromPort: i64(-1), ToPort: i64(-1), CIDRIPv4: ptr("0.0.0.0/0")}, true},
+		"one icmp type":              {everyType("icmp"), wireRuleMatch{IPProtocol: "icmp", FromPort: i64(8), ToPort: i64(-1), CIDRIPv4: ptr("0.0.0.0/0")}, false},
+		"tcp declared without ports": {everyType("tcp"), wireRuleMatch{IPProtocol: "tcp", FromPort: i64(-1), ToPort: i64(-1), CIDRIPv4: ptr("0.0.0.0/0")}, false},
+	} {
+		if got := ruleMatches(tc.rule, tc.want); got != tc.same {
+			t.Errorf("%s: matched %v, want %v", name, got, tc.same)
+		}
+	}
+}
+
 func TestRulesFilterModelFitsTheDataSourceSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

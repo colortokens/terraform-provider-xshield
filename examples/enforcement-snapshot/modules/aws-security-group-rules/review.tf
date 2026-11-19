@@ -65,7 +65,7 @@ locals {
       "waiting"                 = "is waiting. Xshield takes it out once every workload that keeps it carries its cohort group."
       "reopens"                 = "gives workloads in the group traffic that change set ${entry.change_set} takes from them."
       "undeclared and waiting"  = "is no longer declared, and change set ${entry.change_set} is waiting to take it out. Declare it again, or the workloads that keep it lose it early. Xshield leaves it out once it is safe."
-      "undeclared and restored" = "is no longer declared, and the revert of change set ${entry.change_set} puts it back. Declare it again: the revert waits until the group holds it."
+      "undeclared and restored" = "is no longer declared, and the revert of change set ${entry.change_set} puts it back. Declare it again to keep its access: the revert keeps that access until a workspace that declares the rule applies, or until an operator ends the revert without it."
     }[entry.state])
   ]
 }

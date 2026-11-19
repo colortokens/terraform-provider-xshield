@@ -116,6 +116,20 @@ func (a cloudSnapshotAPI) publishedGroupChanges(ctx context.Context, account, re
 		return wireCustomerGroupChanges{}, false, nil
 	}
 	var diags diag.Diagnostics
+	// Read as unpublished, the listing would be empty and every declared rule would come back, including one the
+	// connector now keeps out of the group.
+	if isAPIRefusal(err, http.StatusConflict, codeHandedOver) {
+		diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery",
+			"The cloud connector now changes the rules of your own security groups that a Full control change applies to, so "+
+				"this workspace must stop managing those rules: an apply would put back a rule the connector took out of a group, "+
+				"or take out one it put back. Leave the rules in the account and stop managing them here: replace each module "+
+				"block that declares a group's rules through aws-security-group-rules with removed blocks for its "+
+				"aws_vpc_security_group_ingress_rule.this and aws_vpc_security_group_egress_rule.this that keep them "+
+				"(lifecycle { destroy = false }), remove the xshield_aws_security_group_changes data source and what reads it, and "+
+				"apply, as the provider's enforcement-snapshot README says under Stop enforcing. The apply changes nothing in AWS: "+
+				"it destroys any receipts the module holds, so Xshield forgets them, and the record the module keeps in state.")
+		return changes, true, diags
+	}
 	if err != nil {
 		diags.AddError("Cannot read the changes Xshield made to customer groups in "+account+"/"+region,
 			err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")

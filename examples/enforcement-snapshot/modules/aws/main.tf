@@ -205,8 +205,9 @@ locals {
 # An interface that filled up since Xshield last discovered it has no room for a
 # new group, and AWS would refuse the apply. So an attachment neither the last
 # receipt holds nor a hand-over offers goes only on an interface with room for every
-# new group: the others are left out with a warning, the receipt leaves them out, and
-# Xshield refuses the workload once discovery shows the interface full. Only those
+# new group, counted against the limit Xshield discovered, or the AWS default where it
+# has discovered none: the others are left out with a warning, the receipt leaves them
+# out, and Xshield refuses the workload once discovery shows the interface full. Only those
 # interfaces, and the groups new to them, are read. A version with network ACL entries
 # reads the status too, for the review's account of how far each network ACL reaches,
 # and a version with groups reads it for the groups the last receipt holds.
@@ -219,7 +220,9 @@ data "xshield_aws_enforcement_status" "this" {
 
 locals {
   held_attachments = { for key in toset(concat(try(keys(data.xshield_aws_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_aws_enforcement_status.this[0].handover_attachments), []))) : key => true }
-  new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !lookup(local.held_attachments, key, false) }
+  new_attachments  = { for key, attachment in local.attachments : key => attachment if !lookup(local.held_attachments, key, false) }
+
+  aws_default_security_groups_per_interface = 5
 }
 
 data "aws_network_interface" "receiving" {
@@ -246,7 +249,7 @@ data "aws_security_groups" "attaching" {
 }
 
 locals {
-  new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
+  new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => coalesce(attachment.slot_limit, local.aws_default_security_groups_per_interface)... }
   new_groups = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.security_group... }
   # The new groups each interface still has to take. One it already carries takes no further room.
   groups_to_add = {
@@ -263,22 +266,41 @@ locals {
   new_attachment_keys   = { for key in keys(local.new_attachments) : key => true }
   full_interface_ids    = { for id in keys(local.full_interfaces) : id => true }
   attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(lookup(local.new_attachment_keys, key, false) && lookup(local.full_interface_ids, attachment.network_interface_id, false)) }
+
+  # An interface the version takes one of Xshield's groups off: the last receipt holds the attachment, and the version
+  # no longer lists it. Its import ID is <network interface ID>_<security group ID>.
+  interfaces_losing_a_group = { for key, import_id in try(data.xshield_aws_enforcement_status.this[0].applied_attachments, {}) : split("_", import_id)[0] => key... if !can(local.snap.interface_attachments[key]) }
+  full_interfaces_adding_a_cohort_beside_a_loss = {
+    for id, instance in local.full_interfaces : id => instance
+    if can(local.interfaces_losing_a_group[id]) && anytrue([for group in local.groups_to_add[id] : lookup(local.snap.security_groups[group].tags, "ct:kind", "") == "cohort"])
+  }
+  # Xshield holds a new cohort group back from an interface that also loses one of its groups while discovery shows the
+  # interface full, so the next discovery settles a full interface it has not seen yet. A pinned version never does.
+  pinned_full_interfaces_adding_a_cohort_beside_a_loss = var.snapshot_version == null ? {} : local.full_interfaces_adding_a_cohort_beside_a_loss
 }
 
 check "interfaces_have_room" {
   assert {
     condition     = length(local.full_interfaces) == 0
-    error_message = "These network interfaces carry as many security groups as the account allows, so Xshield's new group was left off them this run, as AWS would refuse it: ${join(", ", [for id, instance in local.full_interfaces : "${id} (${instance})"])}. Xshield refuses these workloads once discovery shows the interfaces full. To enforce them, remove a group from each interface or raise the account's security groups per network interface quota."
+    error_message = "These network interfaces carry as many security groups as the account allows, so Xshield's new group was left off them this run, as AWS would refuse it: ${join(", ", [for id, instance in local.full_interfaces : "${id} (${instance})"])}. Xshield refuses these workloads once discovery shows the interfaces full. To enforce them, remove a group from each interface or raise the account's security groups per network interface quota.${length(local.full_interfaces_adding_a_cohort_beside_a_loss) == 0 ? "" : " On ${join(", ", keys(local.full_interfaces_adding_a_cohort_beside_a_loss))} the version also takes another of Xshield's groups off, and it still comes off. Once discovery shows the interface full, Xshield publishes a version that takes that group off and holds the new cohort group back, and puts the cohort group on in the version after."}"
   }
 }
 
 # Adds the group to the interface and leaves the interface's other groups in
-# place, as the cloud connector does.
+# place, as the cloud connector does. A version that moves an interface from
+# one of Xshield's groups to another, as when a new cohort group supersedes an
+# old one, attaches the new group before it detaches the old: an attachment
+# the version drops comes off only once Xshield has accepted the receipt, so a
+# group, rule or attachment AWS refuses leaves the interface as last applied.
 resource "aws_network_interface_sg_attachment" "this" {
   for_each = local.attachments_with_room
 
   security_group_id    = local.security_group_ids[each.value.security_group]
   network_interface_id = each.value.network_interface_id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # One parameter per database, function or service its own workspace attaches;
@@ -334,7 +356,7 @@ locals {
 check "pinned_network_acl_entries_present" {
   assert {
     condition     = length(local.network_acl_entries) == length(local.snap.network_acl_entries)
-    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out until the cloud connector has observed those network ACLs gone, and until then the apply ends with the receipt refused. The attachments and directory parameters this version removes, and with exclusive rules the rules it drops from a group, are removed before the receipt is sent; the security groups, rules and network ACL entries it deletes stay in place until a receipt is accepted. Plan and apply again once the cloud connector has observed them gone."
+    error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} has entries on network ACLs that no longer exist in ${local.account_id}/${local.region}, so they are left out: ${join(", ", sort(setsubtract(keys(local.snap.network_acl_entries), keys(local.network_acl_entries))))}. Xshield refuses a receipt that leaves them out until the cloud connector has observed those network ACLs gone, and until then the apply ends with the receipt refused. The directory parameters this version removes, and with exclusive rules the rules it drops from a group, are removed before the receipt is sent; the security groups, rules, attachments and network ACL entries it deletes stay in place until a receipt is accepted. Plan and apply again once the cloud connector has observed them gone."
   }
 }
 
@@ -388,4 +410,13 @@ resource "xshield_aws_enforcement_receipt" "this" {
   network_acl_entries = length(aws_network_acl_rule.this) == 0 ? null : { for key, entry in aws_network_acl_rule.this : key => "${entry.network_acl_id}:${entry.rule_number}:-1:${entry.egress}" }
 
   depends_on = [aws_ssm_parameter.directory, aws_vpc_security_group_rules_exclusive.this]
+
+  # A pinned version that swaps cohort groups on an interface that filled up since would leave the new one off and take
+  # the old one off, and the pin keeps it so. That stops the plan instead.
+  lifecycle {
+    precondition {
+      condition     = length(local.pinned_full_interfaces_adding_a_cohort_beside_a_loss) == 0
+      error_message = "The pinned version ${coalesce(var.snapshot_version, "-")} puts a cohort group on these network interfaces while it takes another of Xshield's groups off them, and they now have no room for the new one beside the old: ${join(", ", [for id, instance in local.pinned_full_interfaces_adding_a_cohort_beside_a_loss : "${id} (${instance})"])}. The new group goes on before the old one comes off, and AWS refuses a group past the account's security groups per network interface quota, so the apply would leave the new group off and take the old one off. The plan stopped and nothing was applied: every interface keeps the groups it has. Remove the pin, so that the version Xshield publishes for the full interface applies, or free a slot on each interface by removing a group of your own, or raise the quota, then plan again."
+    }
+  }
 }
