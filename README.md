@@ -13,7 +13,7 @@ terraform {
   required_providers {
     xshield = {
       source  = "colortokens/xshield"
-      version = "0.4.0"
+      version = "0.2.0"
     }
   }
 }
@@ -28,7 +28,8 @@ provider "xshield" {
 ```
 
 The published version comes from the release tag, which the goreleaser workflow builds on any tag
-matching `v*`. Keep the version above and `examples/provider/provider.tf` in step with it.
+matching `v*`. The version above, and the `?ref=` of every module `source` in the docs, is the latest
+release: the release workflow writes it when it tags; see [CONTRIBUTING](CONTRIBUTING.md#releasing).
 
 ## Getting started
 
@@ -96,7 +97,7 @@ Understanding the tenant, so policy can be written without the portal:
 When an AWS account's policy delivery is Terraform pipeline, your pipeline creates the security
 groups Xshield renders instead of the cloud connector. Start with the step-by-step
 [guide](docs/guides/aws-pipeline-enforcement.md). [examples/enforcement-snapshot](examples/enforcement-snapshot/README.md)
-explains each step in depth, and its modules use these:
+explains each step in depth. The modules it calls live in [modules/](modules/) and use these:
 
 | Resource or data source | Does |
 | --- | --- |

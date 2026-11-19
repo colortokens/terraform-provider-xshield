@@ -28,7 +28,7 @@
 # own_security_group_ids fails the plan, rather than the apply, when the
 # function's own groups and Xshield's are more than AWS allows on it.
 module "resize_xshield" {
-  source = "../modules/aws-group-lookup"
+  source = "../../../modules/aws-group-lookup"
 
   handle                 = "lambda/${local.function_name}"
   vpc_id                 = aws_security_group.resize.vpc_id

@@ -8,13 +8,13 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 
 Xshield decides everything that is enforced: which groups exist, every rule in them, what carries each group, which addresses of the malicious IP block template each network ACL denies, and under Full control which rule of a group of your own is left out. None of that is written in your code. Your code carries it to AWS, through the modules below.
 
-**Shipped with the provider.** You write none of it. Call each module by its `source`, at the tag of the provider release you run. The modules use the provider's own data sources and receipt resource, which the [provider's README](../../README.md#enforcing-aws-policy-through-your-own-pipeline) lists.
+**Shipped with the provider.** You write none of it. The modules live in the [`modules/`](../../modules/) directory at the root of the provider's repository. Call each module by its `source`, at the tag of the provider release you run. The modules use the provider's own data sources and receipt resource, which the [provider's README](../../README.md#enforcing-aws-policy-through-your-own-pipeline) lists.
 
 | Directory | What it is |
 |--|--|
-| `modules/aws` | The enforcement module. One block per AWS account and region. |
-| `modules/aws-group-lookup` | Gives a database, function or service the group it must attach. Reads only SSM. |
-| `modules/aws-security-group-rules` | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
+| [`modules/aws`](../../modules/aws/) | The enforcement module. One block per AWS account and region. |
+| [`modules/aws-group-lookup`](../../modules/aws-group-lookup/) | Gives a database, function or service the group it must attach. Reads only SSM. |
+| [`modules/aws-security-group-rules`](../../modules/aws-security-group-rules/) | Declares one of your own security group's rules through Full control. A group no approved change applies to plans as its code declares it. |
 
 **To copy and fill in.** New code in your repository, complete but for its inputs.
 
@@ -75,11 +75,11 @@ provider "aws" {
 provider "xshield" {} # credentials from XSHIELD_* environment variables
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v0.2.0"
 }
 ```
 
-The modules ship in the provider's repository, under `examples/enforcement-snapshot/modules/`. Set `ref` to the tag of the provider release you run, so the module and the provider match. `enforcement/` calls the module as `../modules/aws`, which exists only inside this repository: in your copy, change that `source` to the address above, or `terraform init` cannot find the module.
+The modules ship in the provider's repository, under `modules/`. Every `ref` on this page is the provider release it was published with; keep it at the tag of the provider release you run, so the module and the provider match. `enforcement/` calls the module as `../../../modules/aws`, which exists only inside this repository: in your copy, change that `source` to the address above, or `terraform init` cannot find the module.
 
 The module needs no inputs. It enforces the account and region the AWS provider is configured for, and refuses to apply a snapshot meant for any other. Each plan names the workload every change is for:
 
@@ -146,12 +146,12 @@ For an account that already runs this pipeline. Each step works with what the st
    terraform {
      required_providers {
        aws     = { source = "hashicorp/aws", version = ">= 6.29.0" }
-       xshield = { source = "colortokens/xshield", version = ">= X.Y.Z" }
+       xshield = { source = "colortokens/xshield", version = "0.2.0" }
      }
    }
 
    module "xshield_enforcement" {
-     source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
+     source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v0.2.0"
    }
    ```
 
@@ -235,7 +235,7 @@ That workspace declares nothing of Xshield's. The enforcement workspace creates 
 
 ```hcl
 module "orders_db_xshield" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-group-lookup?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
 
   handle                 = "rds/orders-db"
   vpc_id                 = aws_security_group.orders_db.vpc_id
@@ -329,7 +329,7 @@ resource "aws_security_group" "web" {
 }
 
 module "web_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws-security-group-rules?ref=vX.Y.Z"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id
@@ -367,7 +367,7 @@ moved {
 }
 ```
 
-The plan then shows the rule as `has moved to`, and nothing in AWS is added or destroyed. The one resource it adds is `terraform_data.xshield_routed`, the [record the module keeps in state](modules/aws-security-group-rules/README.md#the-record-kept-in-state).
+The plan then shows the rule as `has moved to`, and nothing in AWS is added or destroyed. The one resource it adds is `terraform_data.xshield_routed`, the [record the module keeps in state](../../modules/aws-security-group-rules/README.md#the-record-kept-in-state).
 
 `full-control/` is this workspace in full. Its `xshield.tf` holds everything the team adds, and its `main.tf` is the team's own code with the two changes marked.
 
@@ -515,7 +515,7 @@ If Xshield no longer publishes the change set at all when the `applied` receipt 
 
 A receipt's label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. Elsewhere, set `receipt_label` in the module call, for example to the pipeline's name, so that the notice says which workspace to apply. If Xshield cannot take the `applying` receipt, the apply stops before any rule of the group changes: fix the cause and apply again. If Xshield cannot take the `applied` receipt, the apply fails after the group's rules are created or updated, and before any is taken out. Fix the cause and apply again: the apply sends the receipt, then takes those rules out. Until Xshield has it, a revert of a change it reports keeps the access.
 
-Removing the module call, or destroying the workspace, destroys both receipts, and Xshield forgets their ID. Removing the call alone also destroys the group's rules: take a group out of the module as [the module's README](modules/aws-security-group-rules/README.md#taking-a-group-out-of-the-module) shows. Xshield keeps waiting for a receipt ID that no workspace declares any more, when a revert is of a change that ID reported narrowing a group. That happens when:
+Removing the module call, or destroying the workspace, destroys both receipts, and Xshield forgets their ID. Removing the call alone also destroys the group's rules: take a group out of the module as [the module's README](../../modules/aws-security-group-rules/README.md#taking-a-group-out-of-the-module) shows. Xshield keeps waiting for a receipt ID that no workspace declares any more, when a revert is of a change that ID reported narrowing a group. That happens when:
 
 - the receipts are taken out of the workspace's state with `terraform state rm`, or by a `removed` block that does not destroy them;
 - the workspace's state is rolled back to a version that holds another receipt ID, or none;
@@ -752,10 +752,11 @@ The module tests mock both providers, so they need no tenant or AWS account. Bui
 ```
 
 ```bash
-cd modules/aws && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform init -backend=false && TF_CLI_CONFIG_FILE=../../.dev.tfrc terraform test
+export TF_CLI_CONFIG_FILE="$PWD/.dev.tfrc"
+(cd ../../modules/aws && terraform init -backend=false && terraform test)
 ```
 
-`modules/aws-group-lookup`, `modules/aws-security-group-rules`, `enforcement-role/`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` have tests too. Run them the same way from their own directories; from `enforcement-role/`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` the file is `../.dev.tfrc`. The test of `full-control-adopt/` needs Terraform 1.11 or later. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how. `modules/aws/apply-order/` checks the order in which an apply creates and removes groups, rules and attachments, in a copy of `modules/aws` that logs each: its test file says how.
+`../../modules/aws-group-lookup`, `../../modules/aws-security-group-rules`, `enforcement-role/`, `monitor/`, `database/`, `apprunner/`, `full-control/` and `full-control-adopt/` have tests too. Run them the same way from their own directories. The test of `full-control-adopt/` needs Terraform 1.11 or later. `recovery/` and `handover/` hold a file for the enforcement workspace, not a workspace, so their tests run in a copy of one: each test file says how. `../../modules/aws/apply-order/` checks the order in which an apply creates and removes groups, rules and attachments, in a copy of `modules/aws` that logs each: its test file says how.
 
 ## What happens if
 
@@ -796,7 +797,7 @@ Each row is a mistake or a failure: what it does in AWS, what Xshield shows, and
 | The cloud connector has not read a network ACL in front of a workload | Nothing new is written to that network ACL. Entries already applied stay. | A `networkAclNotObserved` notice. The monitor reports `network_acl_block_not_enforced`. | Check that the cloud connector is running, is of a version that reads network ACLs, and can describe them. |
 | AWS refuses a rule during an enforcement apply | The apply fails. The group keeps its old rules, because new rules are created before old ones are removed. | No receipt is sent, so the version is not recorded as applied. | Fix what AWS refused, then run the workspace again. |
 | An apply stops before Terraform saves what it created: the runner is killed or loses its connection, or the run is force-canceled | AWS keeps what the apply created up to then, such as a group, a rule or a directory parameter, and the state does not hold it. The next apply tries to create it again, and AWS refuses with `InvalidGroup.Duplicate`, `InvalidPermission.Duplicate` or `ParameterAlreadyExists`. | No receipt is sent, so the version is not recorded as applied: `state` stays `pending`, or `unapplied` when nothing was applied before. | Import each resource the error names, as [An interrupted apply](#an-interrupted-apply) shows, then apply again. `recovery/` does not help here: it imports what the last receipt lists, and the interrupted apply sent none. |
-| A workload has no room for another security group, or its group would pass the quota of rules per security group | Nothing new is written for that workload. One that carries an Xshield group keeps it, with the rules last applied. One that carries none gets none. | An `assetRefused` or `groupRefused` notice with the reason, such as `NO_FREE_SLOT`. The monitor reports `workload_not_enforced`. | Free a slot on the workload's interfaces, or raise the quota. For a group over the rule quota, see `modules/aws/README.md`. |
+| A workload has no room for another security group, or its group would pass the quota of rules per security group | Nothing new is written for that workload. One that carries an Xshield group keeps it, with the rules last applied. One that carries none gets none. | An `assetRefused` or `groupRefused` notice with the reason, such as `NO_FREE_SLOT`. The monitor reports `workload_not_enforced`. | Free a slot on the workload's interfaces, or raise the quota. For a group over the rule quota, see [`modules/aws/README.md`](../../modules/aws/README.md). |
 | `snapshot_version` pins a version | The pinned version stays applied, at the rule numbers it gives its network ACL entries: an entry whose number now holds another entry in AWS stops the plan as usual, and after `terraform state rm` the apply fails on it with `NetworkAclEntryAlreadyExists` until the pin is removed. Entries of the version on a network ACL deleted since are left out, and a check names them. Until the cloud connector has observed that network ACL gone, the apply ends with the receipt refused. The directory parameters the version removes, and with exclusive rules the rules it drops from a group, go before the receipt is sent; the groups, rules, attachments and network ACL entries it deletes stay until a receipt is accepted. | Xshield reports the account as `pending` while the pin is in place. It refuses a receipt that leaves out entries of a network ACL until the cloud connector has observed the network ACL gone. | Plan and apply again once the cloud connector has observed the network ACL gone. Remove the pin when the rollback is over. |
 | The cloud connector stops observing the account | Nothing. | `drift_observed_at` stops moving, and after the next apply `drift_evaluated` is false. No new drift finding is listed, which means nobody looked. The monitor reports `drift_not_evaluated` once the latest observation is older than `max_unobserved_age`. | Check that the cloud connector is running and can reach the account. |
 

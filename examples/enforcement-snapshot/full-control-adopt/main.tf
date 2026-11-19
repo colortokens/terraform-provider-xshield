@@ -36,7 +36,7 @@ resource "aws_security_group" "web" {
 }
 
 module "web_rules" {
-  source = "../modules/aws-security-group-rules"
+  source = "../../../modules/aws-security-group-rules"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = var.vpc_id
@@ -62,7 +62,7 @@ resource "aws_security_group" "app" {
 # office ranges in cidr_blocks, which is two rules in AWS, so it is two entries
 # here. A rule may name another group or a prefix list as it did before.
 module "app_rules" {
-  source = "../modules/aws-security-group-rules"
+  source = "../../../modules/aws-security-group-rules"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = var.vpc_id
@@ -89,7 +89,7 @@ resource "aws_security_group" "batch" {
 }
 
 module "batch_rules" {
-  source = "../modules/aws-security-group-rules"
+  source = "../../../modules/aws-security-group-rules"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = var.vpc_id

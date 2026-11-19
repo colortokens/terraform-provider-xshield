@@ -17,7 +17,7 @@
 # own_security_group_ids fails the plan, rather than the apply, when the
 # database's own groups and Xshield's are more than AWS allows on it.
 module "orders_db_xshield" {
-  source = "../modules/aws-group-lookup"
+  source = "../../../modules/aws-group-lookup"
 
   handle                 = "rds/${local.identifier}"
   vpc_id                 = aws_security_group.orders_db.vpc_id
