@@ -116,13 +116,17 @@ level. Policies for groups under Full control are provided by ColorTokens separa
 ## Enforcing Azure policy through your own pipeline
 
 When an Azure subscription's policy delivery is Terraform pipeline, your pipeline creates the network security
-groups Xshield renders instead of the cloud connector, through the
-[azure enforcement module](modules/azure/README.md).
+groups Xshield renders instead of the cloud connector. Start with the step-by-step
+[guide](docs/guides/azure-pipeline-enforcement.md). The workspace applies them through the
+[azure enforcement module](modules/azure/README.md), and
 [enforcement-azure](examples/enforcement-snapshot/enforcement-azure) is a workspace that calls it, ready to copy.
+The module reads the snapshot and sends the receipt; the status runs in `check` blocks of a workspace of its own:
 
 | Resource or data source | Does |
 | --- | --- |
 | [`xshield_azure_enforcement_snapshot`](docs/data-sources/azure_enforcement_snapshot.md) | Fetches the network security groups Xshield expects in one subscription and region, and where each one goes. |
+| [`xshield_azure_enforcement_receipt`](docs/resources/azure_enforcement_receipt.md) | Reports which Azure resource was created for each key in the snapshot. |
+| [`xshield_azure_enforcement_status`](docs/data-sources/azure_enforcement_status.md) | Says whether the subscription has converged, which workloads Xshield refuses, and what drift the cloud connector sees. |
 
 ## Running the provider locally
 
