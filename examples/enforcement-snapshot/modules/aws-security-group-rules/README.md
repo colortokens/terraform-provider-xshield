@@ -18,7 +18,7 @@ Group web: rule ingress/ssh_all (TCP 22 from 0.0.0.0/0) is taken out by Xshield.
 Group web: rule ingress/app_range (TCP 8000-8100 from 10.8.0.0/16) is waiting. Xshield takes it out once every workload that keeps it carries its cohort group.
 Group web: rule ingress/tcp_internal (all TCP from 10.0.0.0/8) gives workloads in the group traffic that change set cs-example takes from them.
 Group web: TCP 3389 from 0.0.0.0/0 is no longer declared, and change set cs-example is waiting to take it out. Declare it again, or the workloads that keep it lose it early. Xshield leaves it out once it is safe.
-Group web: all traffic to 0.0.0.0/0 is no longer declared, and the revert of change set cs-example puts it back. Declare it again to keep its access: the revert does not wait for a rule no workspace declares, and ends without it.
+Group web: all traffic to 0.0.0.0/0 is no longer declared, and the revert of change set cs-example puts it back. Declare it again to keep its access: the revert keeps that access until a workspace that declares the rule applies, or until an operator ends the revert without it.
 ```
 
 A rule reads `from` its source when it is an ingress rule and `to` its destination when it is an egress rule. Ports read as `TCP 22`, `TCP 8000-8100`, `all TCP`, or `all traffic` for every protocol, the same words the enforcement module's `review` output uses.
