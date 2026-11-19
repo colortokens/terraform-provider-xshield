@@ -52,3 +52,43 @@ func TestAzureStatusOfAnUnpublishedPointIsQuiet(t *testing.T) {
 		t.Fatalf("unexpected point: %+v", m)
 	}
 }
+
+func TestAzureStatusReportsDriftFromTheConnectorsObservation(t *testing.T) {
+	m, _ := readAzureStatus(t, cannedResponse{http.StatusOK, `{"cloudProvider":"azure","state":"converged",
+		"expected":{"version":"v1","publishedAt":"2026-11-18T22:38:25Z"},
+		"applied":{"version":"v1","appliedAt":"2026-11-18T22:39:00Z","resources":{}},
+		"drift":{"observedAt":"2026-11-18T22:50:00Z","observationStale":false,"findings":[
+		{"kind":"memberUnattached","severity":"high","restoration":"pipeline","resource":"a-web","key":"nic-web",
+		"detail":"web-nic no longer carries its group nic-web; it is not enforced","detectedAt":"2026-11-18T22:50:01Z"},
+		{"kind":"ruleMissing","severity":"medium","restoration":"pipeline","resource":"nsg-id/securityRules/CT-Rule-Allow-1",
+		"resourceName":"CT-Rule-Allow-1","key":"nic-web/CT-Rule-Allow-1","detail":"approved rule was removed out of band"}]}}`})
+	if !m.DriftEvaluated.ValueBool() || m.DriftObservedAt.ValueString() != "2026-11-18T22:50:00Z" || len(m.DriftFindings) != 2 {
+		t.Fatalf("unexpected drift: %+v", m)
+	}
+	unattached, missing := m.DriftFindings[0], m.DriftFindings[1]
+	if unattached.Kind.ValueString() != "memberUnattached" || unattached.Resource.ValueString() != "a-web" ||
+		!unattached.ResourceName.IsNull() || unattached.DetectedAt.ValueString() != "2026-11-18T22:50:01Z" {
+		t.Fatalf("unexpected finding: %+v", unattached)
+	}
+	if missing.Key.ValueString() != "nic-web/CT-Rule-Allow-1" || missing.ResourceName.ValueString() != "CT-Rule-Allow-1" || !missing.DetectedAt.IsNull() {
+		t.Fatalf("unexpected finding: %+v", missing)
+	}
+}
+
+// An observation older than the latest apply describes what that apply replaced, so it is not evaluated.
+func TestAzureStatusDoesNotEvaluateAnObservationOlderThanTheApply(t *testing.T) {
+	m, _ := readAzureStatus(t, cannedResponse{http.StatusOK, `{"cloudProvider":"azure","state":"converged",
+		"expected":{"version":"v2","publishedAt":"2026-11-18T22:38:25Z"},
+		"applied":{"version":"v2","appliedAt":"2026-11-18T22:39:00Z","resources":{}},
+		"drift":{"observedAt":"2026-11-18T22:30:00Z","observationStale":true,"findings":[]}}`})
+	if m.DriftEvaluated.ValueBool() || m.DriftObservedAt.ValueString() != "2026-11-18T22:30:00Z" || m.DriftFindings == nil || len(m.DriftFindings) != 0 {
+		t.Fatalf("unexpected drift: %+v", m)
+	}
+}
+
+func TestAzureStatusWithNoObservationIsNotEvaluated(t *testing.T) {
+	m, _ := readAzureStatus(t, cannedResponse{http.StatusNotFound, xshieldNotPublished})
+	if m.DriftEvaluated.ValueBool() || !m.DriftObservedAt.IsNull() || m.DriftFindings == nil || len(m.DriftFindings) != 0 {
+		t.Fatalf("unexpected drift: %+v", m)
+	}
+}
