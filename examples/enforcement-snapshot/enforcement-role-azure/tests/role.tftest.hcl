@@ -46,6 +46,34 @@ run "network_actions_only" {
   }
 }
 
+run "a_join_for_every_link_an_interface_or_subnet_carries" {
+  command = plan
+
+  # Updating a network interface or subnet is checked against every resource it links to, so a missing join fails the
+  # apply on whichever customer first links that kind of resource.
+  assert {
+    condition = length(setsubtract([
+      "Microsoft.Network/networkSecurityGroups/join/action",
+      "Microsoft.Network/virtualNetworks/subnets/join/action",
+      "Microsoft.Network/publicIPAddresses/join/action",
+      "Microsoft.Network/applicationSecurityGroups/joinIpConfiguration/action",
+      "Microsoft.Network/loadBalancers/backendAddressPools/join/action",
+      "Microsoft.Network/loadBalancers/inboundNatRules/join/action",
+      "Microsoft.Network/loadBalancers/frontendIPConfigurations/join/action",
+      "Microsoft.Network/applicationGateways/backendAddressPools/join/action",
+      "Microsoft.Network/virtualNetworkTaps/join/action",
+      "Microsoft.Network/routeTables/join/action",
+      "Microsoft.Network/natGateways/join/action",
+      "Microsoft.Network/serviceEndpointPolicies/join/action",
+      "Microsoft.Network/serviceEndpointPolicies/joinSubnet/action",
+      "Microsoft.Network/virtualNetworks/subnets/joinViaServiceEndpoint/action",
+      "Microsoft.Network/publicIPAddresses/joinServiceEndpointNetworkIdentifier/action",
+      "Microsoft.Network/networkManagers/ipamPools/associateResourcesToPool/action",
+    ], one(azurerm_role_definition.enforcement.permissions).actions)) == 0
+    error_message = "The role misses the join of a resource a network interface or subnet can link to."
+  }
+}
+
 run "an_empty_scope_list_is_refused" {
   command = plan
 
