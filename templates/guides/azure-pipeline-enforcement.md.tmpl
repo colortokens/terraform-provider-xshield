@@ -12,11 +12,11 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 ## Before you start
 
-- An Xshield administrator has set the subscription to pipeline delivery, which needs its cloud connector to be Read-Only. Xshield keeps it Read-Only while the subscription stays on pipeline delivery, so the connector never writes beside your pipeline.
+- An Xshield administrator has set the subscription to pipeline delivery through the Xshield API, which needs its cloud connector to be Read-Only. Xshield keeps it Read-Only while the subscription stays on pipeline delivery, so the connector never writes beside your pipeline.
 - An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the subscription.
 - Terraform 1.7 or later, and the azurerm provider 4.81.0 or later.
 
-Xshield changes none of your own network security groups. Its group goes only on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. No workspace other than the enforcement workspace changes.
+Xshield changes none of your own network security groups. Its group goes only on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network (step 3).
 
 In every `source` below, replace `vX.Y.Z` with the tag of the `colortokens/xshield` provider release you run, so the module and the provider match.
 
@@ -32,7 +32,7 @@ Set these as secret environment variables on the runner of every workspace that 
 
 Give the azurerm provider its credentials through the `ARM_*` environment variables in the same way.
 
-**Done when** the variables are set on each runner that step 3, step 4 and step 5 use.
+**Done when** the variables are set on each runner that step 4, step 5 and step 6 use.
 
 ## Step 2: Create the enforcement role, once per subscription
 
@@ -42,7 +42,35 @@ Azure has no condition that limits these writes to Xshield's own groups. Set `sc
 
 **Done when** the apply prints `role_definition_id`.
 
-## Step 3: Create the enforcement workspace and apply it, once per subscription and region
+## Step 3: Keep Xshield's groups on subnets your code declares
+
+Azure keeps one network security group on each network interface and subnet, and the enforcement module sets Xshield's through an association resource. A workspace of yours that declares the same subnet keeps that association only if it declares the subnet as its own resource:
+
+| Your workspace declares | What happens to Xshield's group |
+|--|--|
+| `azurerm_subnet` and `azurerm_network_interface` resources | Kept, including when you change them |
+| Subnets inline in `azurerm_virtual_network`, as `subnet` blocks | Removed by your next apply of that workspace, even with no change to its code. Step 5's check reports `memberUnattached`, and the next enforcement apply puts the group back, so the two workspaces keep undoing each other. |
+| An `azurerm_subnet_network_security_group_association` or `azurerm_network_interface_security_group_association` for a level that carries Xshield's group | The apply fails, saying an association already exists. Nothing changes. |
+
+For each virtual network whose subnets hold workloads Xshield enforces, move every inline `subnet` block into an `azurerm_subnet` resource, with an `import` block so Terraform adopts the existing subnet rather than creating it, and leave the virtual network's `subnet` argument out:
+
+```terraform
+import {
+  to = azurerm_subnet.app
+  id = "/subscriptions/<subscription ID>/resourceGroups/network/providers/Microsoft.Network/virtualNetworks/main/subnets/app"
+}
+
+resource "azurerm_subnet" "app" {
+  name                 = "app"
+  resource_group_name  = "network"
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.20.1.0/24"]
+}
+```
+
+**Done when** a plan of each such workspace shows no change to any subnet.
+
+## Step 4: Create the enforcement workspace and apply it, once per subscription and region
 
 Start from [`enforcement-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-azure). In your copy, change the module's `source` from `../modules/azure` to the repository address, or `terraform init` fails:
 
@@ -74,11 +102,11 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-Read the plan before you apply it. Each group is named `ct-policy-` and a hash of its network interface or subnet, and `xshield_review` says in words where each group goes, for which workloads, and what its rules allow and deny. A workload you expect Xshield to enforce but that no group names is not in this version; step 4 says how to find out why. The apply creates Xshield's groups, associates each with its network interface or subnet, and sends the receipt last.
+Read the plan before you apply it. Each group is named `ct-policy-` and a hash of its network interface or subnet, and `xshield_review` says in words where each group goes, for which workloads, and what its rules allow and deny. A workload you expect Xshield to enforce but that no group names is not in this version; step 5 says how to find out why. The apply creates Xshield's groups, associates each with its network interface or subnet, and sends the receipt last.
 
-**Done when** a second `terraform plan -detailed-exitcode` returns `0`: Azure holds what Xshield published, and Xshield has the receipt. That does not yet show any workload carrying its group: step 4 does.
+**Done when** a second `terraform plan -detailed-exitcode` returns `0`: Azure holds what Xshield published, and Xshield has the receipt. That does not yet show any workload carrying its group: step 5 does.
 
-## Step 4: Check that each workload is enforced
+## Step 5: Check that each workload is enforced
 
 The receipt says what your pipeline applied, not what each workload carries. That shows at the cloud connector's first observation after the apply. Read it in a workspace of its own, configured as in step 1, which manages no resources:
 
@@ -118,11 +146,11 @@ az network vnet subnet show --ids <subnet ID> --query networkSecurityGroup.id --
 
 **Done when** `state` is `converged`, `drift_evaluated` is `true`, `findings` is empty, `notices` holds only those you have decided to accept, and every workload reads **Synchronized**.
 
-## Step 5: Run it on a schedule and watch it
+## Step 6: Run it on a schedule and watch it
 
 Xshield does not notify your pipeline when it publishes a version, so plan the enforcement workspace on a schedule, and apply when `terraform plan -detailed-exitcode` returns `2`. Add the `check` blocks of the [`xshield_azure_enforcement_status` example](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/data-sources/xshield_azure_enforcement_status) to a workspace of their own and plan it on a schedule too. Each warns, without failing the run, of a refused workload, high-severity drift, or a pipeline that has stopped resolving the version Xshield expects.
 
-**Done when** a plan of that workspace, taken after step 4's check has passed, prints no warning.
+**Done when** a plan of that workspace, taken after step 5's check has passed, prints no warning.
 
 ## Later
 
