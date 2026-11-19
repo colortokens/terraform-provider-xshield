@@ -234,7 +234,7 @@ run "applied_attachment_stays_on_a_full_interface" {
   }
 
   assert {
-    condition     = length(data.aws_network_interface.receiving) == 0 && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
+    condition     = !contains(keys(data.aws_network_interface.receiving), "eni-0a1") && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
     error_message = "an attachment the last receipt holds is neither read again nor left out"
   }
 }
@@ -249,7 +249,7 @@ run "handed_over_attachment_stays_on_a_full_interface" {
   }
 
   assert {
-    condition     = length(data.aws_network_interface.receiving) == 0 && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
+    condition     = !contains(keys(data.aws_network_interface.receiving), "eni-0a1") && contains(keys(aws_network_interface_sg_attachment.this), "i-0a1/eni-0a1")
     error_message = "an attachment a hand-over offers is neither read nor left out"
   }
 }
@@ -262,8 +262,8 @@ run "new_attachment_goes_on_an_interface_with_room" {
     error_message = "two groups and ours fit under a limit of five"
   }
   assert {
-    condition     = toset(keys(data.aws_network_interface.receiving)) == toset(["eni-0a1"])
-    error_message = "only the interface with a new attachment and a known limit is read"
+    condition     = toset(keys(data.aws_network_interface.receiving)) == toset(["eni-0a1", "eni-0a1b"])
+    error_message = "each interface with a new attachment is read, one whose limit Xshield has not discovered too"
   }
 }
 

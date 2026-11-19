@@ -188,3 +188,86 @@ run "a_full_interface_keeps_the_group_already_applied_and_leaves_only_the_new_on
     error_message = "five groups leave no room for the cohort group, and the group the last apply attached is kept"
   }
 }
+
+# The last receipt holds the workload's group and an old cohort group on the interface, and the version replaces the old
+# cohort group with a new one. The new one goes on before the old one comes off, so the interface needs room for both
+# at once; with none, the plan stops rather than leave the new one off and take the old one off.
+run "a_superseding_group_with_no_room_beside_the_one_it_replaces_stops_the_plan" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_status.this[0]
+    values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0ours", "ct-cohort-0old/eni-0a1" = "eni-0a1_sg-0old" }, handover_attachments = {} }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-0ours", "sg-0old"], attachment = [] }
+  }
+
+  expect_failures = [check.interfaces_have_room, xshield_aws_enforcement_receipt.this]
+}
+
+run "a_superseding_group_with_room_beside_the_one_it_replaces_goes_on" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_status.this[0]
+    values = { applied_attachments = { "i-0a1/eni-0a1" = "eni-0a1_sg-0ours", "ct-cohort-0old/eni-0a1" = "eni-0a1_sg-0old" }, handover_attachments = {} }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-0ours", "sg-0old"], attachment = [] }
+  }
+
+  assert {
+    condition     = length(local.full_interfaces) == 0 && toset(keys(aws_network_interface_sg_attachment.this)) == toset(["i-0a1/eni-0a1", "ct-cohort-0example/eni-0a1"])
+    error_message = "four groups and the new cohort group make five, so the new cohort group goes on beside the old one"
+  }
+}
+
+# A version can give an interface whose limit Xshield has not discovered. The AWS default of five applies to it.
+run "an_interface_whose_limit_is_not_discovered_is_counted_against_the_aws_default" {
+  command = plan
+
+  override_data {
+    target = data.xshield_aws_enforcement_snapshot.this
+    values = {
+      published = true
+      version   = "v7"
+      security_groups = {
+        "i-0a1" = {
+          name        = "ct-policy-3f2a9c1d7e4b"
+          description = "ColorTokens add-only enforcement group"
+          vpc_id      = "vpc-0abc"
+          tags        = { ManagedBy = "ColorTokens", "ct:kind" = "policy", "ct:delivery" = "pipeline" }
+        }
+        "ct-cohort-0example" = {
+          name        = "ct-cohort-0example"
+          description = "ColorTokens cohort group"
+          vpc_id      = "vpc-0abc"
+          tags        = { ManagedBy = "ColorTokens", "ct:kind" = "cohort", "ct:delivery" = "pipeline", "ct:split-group" = "sg-0example", "ct:change-set" = "cs-example" }
+        }
+      }
+      ingress_rules = {}
+      egress_rules  = {}
+      interface_attachments = {
+        "i-0a1/eni-0a1"              = { security_group = "i-0a1", network_interface_id = "eni-0a1", slot_limit = null }
+        "ct-cohort-0example/eni-0a1" = { security_group = "ct-cohort-0example", network_interface_id = "eni-0a1", slot_limit = null }
+      }
+      directory_entries           = {}
+      assets                      = { "asset-web-1" = { security_group = "i-0a1", attached_by = "pipeline" } }
+      withdrawing_security_groups = []
+    }
+  }
+  override_data {
+    target = data.aws_network_interface.receiving["eni-0a1"]
+    values = { security_groups = ["sg-1", "sg-2", "sg-3", "sg-4"], attachment = [] }
+  }
+
+  expect_failures = [check.interfaces_have_room]
+
+  assert {
+    condition     = length(aws_network_interface_sg_attachment.this) == 0
+    error_message = "four groups and two of ours pass the AWS default of five, so neither is attached"
+  }
+}

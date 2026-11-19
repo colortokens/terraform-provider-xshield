@@ -205,8 +205,9 @@ locals {
 # An interface that filled up since Xshield last discovered it has no room for a
 # new group, and AWS would refuse the apply. So an attachment neither the last
 # receipt holds nor a hand-over offers goes only on an interface with room for every
-# new group: the others are left out with a warning, the receipt leaves them out, and
-# Xshield refuses the workload once discovery shows the interface full. Only those
+# new group, counted against the limit Xshield discovered, or the AWS default where it
+# has discovered none: the others are left out with a warning, the receipt leaves them
+# out, and Xshield refuses the workload once discovery shows the interface full. Only those
 # interfaces, and the groups new to them, are read. A version with network ACL entries
 # reads the status too, for the review's account of how far each network ACL reaches,
 # and a version with groups reads it for the groups the last receipt holds.
@@ -219,7 +220,9 @@ data "xshield_aws_enforcement_status" "this" {
 
 locals {
   held_attachments = { for key in toset(concat(try(keys(data.xshield_aws_enforcement_status.this[0].applied_attachments), []), try(keys(data.xshield_aws_enforcement_status.this[0].handover_attachments), []))) : key => true }
-  new_attachments  = { for key, attachment in local.attachments : key => attachment if attachment.slot_limit != null && !lookup(local.held_attachments, key, false) }
+  new_attachments  = { for key, attachment in local.attachments : key => attachment if !lookup(local.held_attachments, key, false) }
+
+  aws_default_security_groups_per_interface = 5
 }
 
 data "aws_network_interface" "receiving" {
@@ -246,7 +249,7 @@ data "aws_security_groups" "attaching" {
 }
 
 locals {
-  new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.slot_limit... }
+  new_limits = { for attachment in values(local.new_attachments) : attachment.network_interface_id => coalesce(attachment.slot_limit, local.aws_default_security_groups_per_interface)... }
   new_groups = { for attachment in values(local.new_attachments) : attachment.network_interface_id => attachment.security_group... }
   # The new groups each interface still has to take. One it already carries takes no further room.
   groups_to_add = {
@@ -263,6 +266,11 @@ locals {
   new_attachment_keys   = { for key in keys(local.new_attachments) : key => true }
   full_interface_ids    = { for id in keys(local.full_interfaces) : id => true }
   attachments_with_room = { for key, attachment in local.attachments : key => attachment if !(lookup(local.new_attachment_keys, key, false) && lookup(local.full_interface_ids, attachment.network_interface_id, false)) }
+
+  # An interface the version takes one of Xshield's groups off: the last receipt holds the attachment, and the version
+  # no longer lists it. Its import ID is <network interface ID>_<security group ID>.
+  interfaces_losing_a_group      = { for key, import_id in try(data.xshield_aws_enforcement_status.this[0].applied_attachments, {}) : split("_", import_id)[0] => key... if !can(local.snap.interface_attachments[key]) }
+  full_interfaces_losing_a_group = { for id, instance in local.full_interfaces : id => instance if can(local.interfaces_losing_a_group[id]) }
 }
 
 check "interfaces_have_room" {
@@ -396,4 +404,13 @@ resource "xshield_aws_enforcement_receipt" "this" {
   network_acl_entries = length(aws_network_acl_rule.this) == 0 ? null : { for key, entry in aws_network_acl_rule.this : key => "${entry.network_acl_id}:${entry.rule_number}:-1:${entry.egress}" }
 
   depends_on = [aws_ssm_parameter.directory, aws_vpc_security_group_rules_exclusive.this]
+
+  # A new group goes on before the group it replaces comes off, so an interface without room for both would have the
+  # new one left off and the old one taken off, leaving the workload without either. That stops the plan instead.
+  lifecycle {
+    precondition {
+      condition     = length(local.full_interfaces_losing_a_group) == 0
+      error_message = "These network interfaces have no room for the group Xshield now gives them beside the group it takes off them: ${join(", ", [for id, instance in local.full_interfaces_losing_a_group : "${id} (${instance})"])}. The new group goes on before the old one comes off, so that the workload always carries one of them, and AWS refuses a group past the account's security groups per network interface quota. Left as it is, the apply would leave the new group off and take the old one off, so the plan stopped and nothing was applied: every interface keeps the groups it has. Xshield counted the room from its last discovery of the interface, and a group added to it since can leave none. Remove a group of your own from each interface, or raise the quota, then plan again."
+    }
+  }
 }
