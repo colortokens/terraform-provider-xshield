@@ -1,0 +1,23 @@
+terraform_version = "1.17.1"
+
+variables = {}
+
+planned_values = {"outputs": {}, "resources": {}}
+
+output_changes = {}
+
+resource_changes = {}
+
+raw = {
+	"checks": [
+		{
+			"address": {"kind": "check", "name": "xshield_drift_high", "to_display": "check.xshield_drift_high"},
+			"status":  "unknown",
+		},
+		{
+			"address":   {"kind": "check", "name": "xshield_never_applied", "to_display": "check.xshield_never_applied"},
+			"status":    "unknown",
+			"instances": null,
+		},
+	],
+}

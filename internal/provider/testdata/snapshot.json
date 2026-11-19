@@ -1,0 +1,995 @@
+{
+  "aws": {
+    "assets": {
+      "a-app-1": {
+        "attachedBy": "pipeline",
+        "securityGroup": "i-app-1"
+      },
+      "a-app-2": {
+        "attachedBy": "pipeline",
+        "securityGroup": "i-app-2"
+      },
+      "a-aurora-1": {
+        "attachedBy": "owner",
+        "securityGroup": "rds-cluster/orders-cluster"
+      },
+      "a-aurora-2": {
+        "attachedBy": "owner",
+        "securityGroup": "rds-cluster/orders-cluster"
+      },
+      "a-db-1": {
+        "attachedBy": "pipeline",
+        "securityGroup": "i-db-1"
+      },
+      "a-db-2": {
+        "attachedBy": "pipeline",
+        "securityGroup": "i-db-2"
+      },
+      "a-orders-db": {
+        "attachedBy": "owner",
+        "securityGroup": "rds/orders-db"
+      }
+    },
+    "cohorts": {
+      "ct-cohort-0123456789abcdef": {
+        "members": {
+          "a-legacy": "pipeline",
+          "a-reports": "owner"
+        }
+      }
+    },
+    "directory": {
+      "lambda/reports": {
+        "handle": "lambda/reports",
+        "parameterName": "/colortokens/v1/lambda/reports/security-groups",
+        "securityGroups": [
+          "ct-cohort-0123456789abcdef"
+        ],
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:delivery": "pipeline"
+        }
+      },
+      "rds-cluster/orders-cluster": {
+        "handle": "rds-cluster/orders-cluster",
+        "parameterName": "/colortokens/v1/rds-cluster/orders-cluster/security-groups",
+        "securityGroups": [
+          "rds-cluster/orders-cluster"
+        ],
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:delivery": "pipeline"
+        }
+      },
+      "rds/orders-db": {
+        "handle": "rds/orders-db",
+        "parameterName": "/colortokens/v1/rds/orders-db/security-groups",
+        "securityGroups": [
+          "rds/orders-db"
+        ],
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:delivery": "pipeline"
+        }
+      }
+    },
+    "egressRules": {
+      "i-app-1/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-app-1/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-app-2/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-app-2/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-db-1/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-db-1/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-db-2/out/tcp/443/198.51.100.0/24": {
+        "cidrIpv4": "198.51.100.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      },
+      "i-db-2/out/tcp/443/203.0.113.0/24": {
+        "cidrIpv4": "203.0.113.0/24",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template saas]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "760572cfaf7891c9",
+          "ct:template": "tmpl-saas"
+        },
+        "toPort": 443
+      }
+    },
+    "ingressRules": {
+      "ct-cohort-0123456789abcdef/in/tcp/443/0.0.0.0/0": {
+        "cidrIpv4": "0.0.0.0/0",
+        "cidrIpv6": null,
+        "description": "",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:kind": "cohort"
+        },
+        "toPort": 443
+      },
+      "i-app-1/in/tcp/443/0.0.0.0/0": {
+        "cidrIpv4": "0.0.0.0/0",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template web]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "d4344eaf868b3a0d",
+          "ct:template": "tmpl-web"
+        },
+        "toPort": 443
+      },
+      "i-app-1/in/tcp/443/::/0": {
+        "cidrIpv4": null,
+        "cidrIpv6": "::/0",
+        "description": "ColorTokens authored enforce [Template web]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "d4344eaf868b3a0d",
+          "ct:template": "tmpl-web"
+        },
+        "toPort": 443
+      },
+      "i-app-1/in/tcp/8080/10.0.0.0/8": {
+        "cidrIpv4": "10.0.0.0/8",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-specific test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-specific",
+          "ct:rule": "51b2d0381efb2053",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-1/in/tcp/8080/172.16.0.0/12": {
+        "cidrIpv4": "172.16.0.0/12",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-wide test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-wide",
+          "ct:rule": "eb0df47bef362037",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-1/in/tcp/8080/192.168.0.0/16": {
+        "cidrIpv4": "192.168.0.0/16",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-wide test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-wide",
+          "ct:rule": "eb0df47bef362037",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-1/in/tcp/8443/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-1/in/tcp/8443/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-1/in/tcp/8443/10.20.2.21/32": {
+        "cidrIpv4": "10.20.2.21/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-1/in/tcp/8443/10.20.2.22/32": {
+        "cidrIpv4": "10.20.2.22/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-2/in/tcp/443/0.0.0.0/0": {
+        "cidrIpv4": "0.0.0.0/0",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template web]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "d4344eaf868b3a0d",
+          "ct:template": "tmpl-web"
+        },
+        "toPort": 443
+      },
+      "i-app-2/in/tcp/443/::/0": {
+        "cidrIpv4": null,
+        "cidrIpv6": "::/0",
+        "description": "ColorTokens authored enforce [Template web]",
+        "fromPort": 443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "d4344eaf868b3a0d",
+          "ct:template": "tmpl-web"
+        },
+        "toPort": 443
+      },
+      "i-app-2/in/tcp/8080/10.0.0.0/8": {
+        "cidrIpv4": "10.0.0.0/8",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-specific test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-specific",
+          "ct:rule": "51b2d0381efb2053",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-2/in/tcp/8080/172.16.0.0/12": {
+        "cidrIpv4": "172.16.0.0/12",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-wide test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-wide",
+          "ct:rule": "eb0df47bef362037",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-2/in/tcp/8080/192.168.0.0/16": {
+        "cidrIpv4": "192.168.0.0/16",
+        "cidrIpv6": null,
+        "description": "ColorTokens test-wide test [Template admin]",
+        "fromPort": 8080,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "test",
+          "ct:origin": "test-wide",
+          "ct:rule": "eb0df47bef362037",
+          "ct:template": "tmpl-admin"
+        },
+        "toPort": 8080
+      },
+      "i-app-2/in/tcp/8443/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-2/in/tcp/8443/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-2/in/tcp/8443/10.20.2.21/32": {
+        "cidrIpv4": "10.20.2.21/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-app-2/in/tcp/8443/10.20.2.22/32": {
+        "cidrIpv4": "10.20.2.22/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-app-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-1/in/tcp/5432/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      },
+      "i-db-1/in/tcp/5432/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      },
+      "i-db-1/in/tcp/8443/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-1/in/tcp/8443/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-1/in/tcp/8443/10.20.2.21/32": {
+        "cidrIpv4": "10.20.2.21/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-1/in/tcp/8443/10.20.2.22/32": {
+        "cidrIpv4": "10.20.2.22/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-1",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-2/in/tcp/5432/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      },
+      "i-db-2/in/tcp/5432/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      },
+      "i-db-2/in/tcp/8443/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-2/in/tcp/8443/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-2/in/tcp/8443/10.20.2.21/32": {
+        "cidrIpv4": "10.20.2.21/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-2/in/tcp/8443/10.20.2.22/32": {
+        "cidrIpv4": "10.20.2.22/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template pci]",
+        "fromPort": 8443,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "8775ee0a3e0df791",
+          "ct:template": "tmpl-pci"
+        },
+        "toPort": 8443
+      },
+      "i-db-2/in/tcp/9999/10.1.2.3/32": {
+        "cidrIpv4": "10.1.2.3/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template batch]",
+        "fromPort": 9999,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "i-db-2",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "633e20e97beede57",
+          "ct:template": "tmpl-batch"
+        },
+        "toPort": 9999
+      },
+      "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template aurora]",
+        "fromPort": 3306,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "rds-cluster/orders-cluster",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "c6b5f50f5e3b63be",
+          "ct:template": "tmpl-aurora"
+        },
+        "toPort": 3306
+      },
+      "rds-cluster/orders-cluster/in/tcp/3306/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template aurora]",
+        "fromPort": 3306,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "rds-cluster/orders-cluster",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "c6b5f50f5e3b63be",
+          "ct:template": "tmpl-aurora"
+        },
+        "toPort": 3306
+      },
+      "rds/orders-db/in/tcp/5432/10.20.1.11/32": {
+        "cidrIpv4": "10.20.1.11/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "rds/orders-db",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      },
+      "rds/orders-db/in/tcp/5432/10.20.1.12/32": {
+        "cidrIpv4": "10.20.1.12/32",
+        "cidrIpv6": null,
+        "description": "ColorTokens authored enforce [Template db]",
+        "fromPort": 5432,
+        "ipProtocol": "tcp",
+        "prefixListId": null,
+        "referencedSecurityGroupId": null,
+        "securityGroup": "rds/orders-db",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:mode": "enforce",
+          "ct:origin": "authored",
+          "ct:rule": "130952efea4f7d35",
+          "ct:template": "tmpl-db"
+        },
+        "toPort": 5432
+      }
+    },
+    "interfaceAttachments": {
+      "ct-cohort-0123456789abcdef/eni-legacy": {
+        "networkInterfaceId": "eni-legacy",
+        "securityGroup": "ct-cohort-0123456789abcdef"
+      },
+      "i-app-1/eni-app-1": {
+        "networkInterfaceId": "eni-app-1",
+        "securityGroup": "i-app-1"
+      },
+      "i-app-1/eni-app-1-data": {
+        "networkInterfaceId": "eni-app-1-data",
+        "securityGroup": "i-app-1"
+      },
+      "i-app-2/eni-app-2": {
+        "networkInterfaceId": "eni-app-2",
+        "securityGroup": "i-app-2"
+      },
+      "i-db-1/eni-db-1": {
+        "networkInterfaceId": "eni-db-1",
+        "securityGroup": "i-db-1"
+      },
+      "i-db-2/eni-db-2": {
+        "networkInterfaceId": "eni-db-2",
+        "securityGroup": "i-db-2"
+      }
+    },
+    "securityGroups": {
+      "ct-cohort-0123456789abcdef": {
+        "description": "ColorTokens split cohort group",
+        "name": "ct-cohort-0123456789abcdef",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "ct:change-set": "cs-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "cohort",
+          "ct:split-group": "sg-web"
+        },
+        "vpcId": "vpc-1"
+      },
+      "i-app-1": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-71d5c9bdb47d",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-i-app-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "71d5c9bdb47d6d4e"
+        },
+        "vpcId": "vpc-1"
+      },
+      "i-app-2": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-464e493cc11e",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-i-app-2",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "464e493cc11e90bd"
+        },
+        "vpcId": "vpc-1"
+      },
+      "i-db-1": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-476d53d36137",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-i-db-1",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "476d53d36137fa97"
+        },
+        "vpcId": "vpc-1"
+      },
+      "i-db-2": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-2de79050fd74",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-i-db-2",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "2de79050fd747e27"
+        },
+        "vpcId": "vpc-1"
+      },
+      "rds-cluster/orders-cluster": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-25517a2f0b98",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-rds-cluster/orders-cluster",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "25517a2f0b98a9a5"
+        },
+        "vpcId": "vpc-1"
+      },
+      "rds/orders-db": {
+        "description": "ColorTokens add-only enforcement group",
+        "name": "ct-policy-d13362f8e6de",
+        "tags": {
+          "ManagedBy": "ColorTokens",
+          "Name": "ct-policy-rds/orders-db",
+          "ct:delivery": "pipeline",
+          "ct:kind": "policy",
+          "ct:managed": "policy-enforcement",
+          "ct:owner": "d13362f8e6dea708"
+        },
+        "vpcId": "vpc-1"
+      }
+    },
+    "withdrawing": []
+  },
+  "cloudAccountId": "123456789012",
+  "cloudProvider": "aws",
+  "region": "us-east-1",
+  "schemaVersion": "3",
+  "version": "b061afc5473e0168e8494d851d04805ea4b2a9205b173fd99ead96f533d5dc565be99cc68a5591be18f5e39a5ce6600f146965e5b77789f133f5359d69987eb5"
+}

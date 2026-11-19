@@ -64,6 +64,8 @@ jobs:
           XSHIELD_SERVER_URL: ${{ secrets.XSHIELD_SERVER_URL }}
           XSHIELD_TEST_ASSET_ID: ${{ secrets.XSHIELD_TEST_ASSET_ID }}
           XSHIELD_TEST_ASSET_NAME: ${{ secrets.XSHIELD_TEST_ASSET_NAME }}
+          XSHIELD_TEST_CLOUD_ACCOUNT_ID: ${{ secrets.XSHIELD_TEST_CLOUD_ACCOUNT_ID }}
+          XSHIELD_TEST_CLOUD_REGION: ${{ secrets.XSHIELD_TEST_CLOUD_REGION }}
         run: |
           export XSHIELD_PRIVATE_KEY_PATH="$RUNNER_TEMP/xshield_key.pem"
           go test -v -timeout 45m ./internal/provider/

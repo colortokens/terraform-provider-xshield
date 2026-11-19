@@ -21,6 +21,9 @@ const (
 	// xshield_asset rejects creation, so its tests adopt an existing asset.
 	envExistingAssetID   = "XSHIELD_TEST_ASSET_ID"
 	envExistingAssetName = "XSHIELD_TEST_ASSET_NAME"
+
+	envPublishedCloudAccountID = "XSHIELD_TEST_CLOUD_ACCOUNT_ID"
+	envPublishedCloudRegion    = "XSHIELD_TEST_CLOUD_REGION"
 )
 
 // testAccProtoV6ProviderFactories serves the provider under test in-process so

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func (ah *AuthenticationHook) signRequest(req *http.Request, signingMaterial sha
 	signatureMaterial := []string{
 		fmt.Sprintf("(request-target): %s %s", strings.ToLower(req.Method), req.URL.RequestURI()),
 		fmt.Sprintf("date: %s", date),
-		fmt.Sprintf("host: %s", req.Host),
+		fmt.Sprintf("host: %s", signedHost(req.Host)),
 		fmt.Sprintf("x-content-sha256: %s", req.Header.Get("x-content-sha256"))}
 
 	signature, err := calculateSignature(signatureMaterial, signingMaterial)
@@ -67,6 +68,14 @@ func (ah *AuthenticationHook) signRequest(req *http.Request, signingMaterial sha
 	req.Header.Set("host", req.Host)
 
 	return nil
+}
+
+// signedHost drops any port, because the API gateway checks the signature against the host without it.
+func signedHost(host string) string {
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		return name
+	}
+	return host
 }
 
 func calculateSignature(signatureMaterial []string, signingMaterial shared.ConfigurationProvider) (string, error) {

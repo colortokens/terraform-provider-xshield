@@ -1,0 +1,123 @@
+# aws enforcement module
+
+Applies the AWS resources Xshield rendered for one account and region, and reports the apply to Xshield.
+
+```hcl
+module "xshield_enforcement" {
+  source = "github.com/colortokens/terraform-provider-xshield//examples/enforcement-snapshot/modules/aws?ref=vX.Y.Z"
+}
+```
+
+It creates, from `xshield_aws_enforcement_snapshot`:
+
+- one `aws_security_group` per workload, named as [Group names](#group-names) describes and tagged as the Xshield cloud connector tags its own;
+- one `aws_vpc_security_group_ingress_rule` or `_egress_rule` per rule;
+- one `aws_vpc_security_group_rules_exclusive` per group, naming exactly that group's rules, so the next apply removes a rule added to the group outside Terraform;
+- one `aws_network_interface_sg_attachment` per instance interface, which adds the group and keeps the interface's other groups;
+- one `aws_ssm_parameter` per database, function or service, read by the `aws-group-lookup` module;
+- one `aws_network_acl_rule` per address of the malicious IP block template, which denies all traffic from it inbound or to it outbound on the network ACL in front of the workloads the template is assigned to;
+- the `xshield_aws_enforcement_receipt` that tells Xshield what was applied.
+
+While Xshield has published nothing for the account and region, it creates nothing, not even the receipt, and the plan shows no change. The run then warns, through the `xshield_published` check, that nothing is published and says what to look at if the account should have policy. If the account already holds security groups Xshield rendered for a pipeline, the plan fails instead: Xshield never unpublishes an account, so that means the provider is reading another tenant or endpoint, and applying would remove them. The check reads groups with `ec2:DescribeSecurityGroups`.
+
+To stop enforcing, withdraw the policy in Xshield. Xshield then publishes a version without the groups, and the next apply removes them and still sends the receipt, so Xshield knows the removal was applied. Do not run `terraform destroy`, or remove the module block, to stop enforcing: both delete the groups and tell Xshield nothing. See [Stop enforcing](../../README.md#stop-enforcing).
+
+An interface that filled up since Xshield last discovered it cannot take a new group, and AWS would refuse the apply. So an attachment neither the last receipt holds nor a hand-over offers goes only on an interface with room for every new group, against the limit Xshield discovered, or the AWS default of five where Xshield has discovered none. Any other is left out with a warning naming the interface and its instance, the receipt leaves it out, and Xshield refuses the workload once discovery shows the interface full. A new group the interface already carries takes no further room: an apply that attached it and then failed sent no receipt, and the run after it keeps the attachment. Only those interfaces and groups are read, with `ec2:DescribeNetworkInterfaces` and `ec2:DescribeSecurityGroups`.
+
+A version that moves an interface from one of Xshield's groups to another, as when a new `ct-cohort-` group supersedes an old one, attaches the new group before it detaches the old. An attachment the version drops comes off only after Xshield accepts the receipt, so when AWS refuses the new group, one of its rules or its attachment, the interface keeps the group it had, and the next apply tries again. The interface holds both groups for that moment, so it needs room for the new one beside the old. Xshield counts that room from its last discovery: once discovery shows such an interface full, it takes the old group off in one version and puts the new cohort group on in the next. An interface that filled up since gets the usual warning: the new cohort group is left off, the old group still comes off, and the next discovery settles it. A version pinned with `snapshot_version` is never followed by that split, so where a pinned version puts a cohort group on a full interface that also loses one of Xshield's groups, the plan stops instead, before anything is applied, and names each such interface and its instance. Remove the pin, free a slot on each interface by removing a group of your own, or raise the account's security groups per network interface quota. Terraform takes that order for an attachment the version drops from what the state recorded at the last apply, so after an upgrade from a module version without it, the order holds from the first apply that records it: that apply still detaches a dropped group before it attaches the new one, as earlier versions did. Versions Xshield publishes never rely on the order for that apply: when one moves an interface from one cohort group to another at once, your own group already holds every rule both cohort groups copy.
+
+A group's new rules are created before its old ones are removed, as the cloud connector writes them, so access a change keeps holds throughout the apply, and a rule AWS refuses leaves the old rules in place. While it changes, a group holds its old and new rules at once. When that would take it past the account's quota of rules per security group but its new rules alone fit, the apply first removes the old rules no new rule replaces, and the next apply adds the new ones: access both versions allow holds throughout, while a port the change moves closes on its old number one apply before it opens on its new one. A change that does not fit even then leaves the group as last applied. Either way Xshield says so in a `groupRefused` notice of `xshield_aws_enforcement_status`, with how many rules past the quota the group would be. To make such a change in one apply, first remove rules from the policy that the change does not replace, and apply that, or raise the quota. A rule naming another workload's Xshield group counts once in each address family and comes out only once the new rules are in, so when that workload stops carrying its group while this one is at the quota, the group stays on that workload, without rules, until the change fits: the notice names that group, and the group's `withdrawing` notice points back to it.
+
+Each group holds only the rules the snapshot declares for it. A rule added to it outside Terraform shows in the next plan as an in-place change of the group's `aws_vpc_security_group_rules_exclusive`, and the apply removes it. Set `enable_exclusive_rules = false` to leave such rules until a person removes them; the receipt tells Xshield which applies, and deleting the resources revokes no rule. The first apply that adds these resources removes any rule in the groups that the snapshot does not declare, and its plan shows only the rules each group keeps. Security groups of your own are never managed this way. Rules are revoked with `ec2:DescribeSecurityGroupRules`, `ec2:RevokeSecurityGroupIngress` and `ec2:RevokeSecurityGroupEgress`.
+
+Xshield numbers each network ACL entry in front of every allow on the network ACL that covers its address, from the even numbers 50 to 98 where those are in front, and keeps the number until an allow is put in front of the entry. The allow lets the address through until the next apply after the cloud connector observes it, which writes the deny at its new number before it deletes the old entry. It adds an entry only where the network ACL has room in the account's quota of rules per network ACL, beside the network ACL's other rules, and names any address it leaves out in a `networkAclEntryRefused` notice of `xshield_aws_enforcement_status`. It counts the room from the cloud connector's last observation, so rules added to the network ACL since can leave none: AWS then refuses the entry with `NetworkAclEntryLimitExceeded`, and a deny that was moving stays at its old number, which no longer blocks its address. Terraform reads and deletes an entry by its number alone, so an entry changed outside Terraform, or another entry written at its number, would be taken into state and deleted when the deny moves or is removed. While the version holds the deny at that number, the plan stops instead, before anything is applied, and names it: run `terraform state rm` on the entry it names, and Xshield gives the deny another number once the cloud connector observes the change. Nothing else checks what AWS holds at a number the apply deletes: once the cloud connector has observed the change, the plan that moves the deny to its new number deletes whatever AWS holds at the old one, and when the version no longer holds a deny, the apply deletes whatever AWS holds at its number. Before you apply a plan that deletes or replaces an entry, check that the entry at its number is still the deny, and run `terraform state rm` on any that is not. When the plan shows that entry as a deposed object, `terraform state rm` also takes any deny at its new number out of state: see [Malicious IP block on network ACLs](../../README.md#malicious-ip-block-on-network-acls). Entries are read with `ec2:DescribeNetworkAcls`, and written with `ec2:CreateNetworkAclEntry` and `ec2:DeleteNetworkAclEntry`. See [Malicious IP block on network ACLs](../../README.md#malicious-ip-block-on-network-acls).
+
+Resource keys are instance IDs and handles, and `<network ACL ID>/<in|out>/<address>` for a network ACL entry, so a plan names the workload or the address each change is for.
+
+## Group names
+
+A group takes the name the snapshot gives it. When the account has no security group name template in Xshield, that is the name the Xshield cloud connector gives its own: `ct-policy-` and twelve hexadecimal characters for a workload's group, `ct-cohort-` and sixteen for a cohort group. When the account has a template, Xshield names each new group from it:
+
+| Token | Value |
+|--|--|
+| `{id}` | The digest that tells Xshield's groups apart: twelve hexadecimal characters for a workload's group, sixteen for a cohort group. Required, exactly once. |
+| `{kind}` | `policy` for a workload's group, `cohort` for a cohort group. |
+| `{region}` | The AWS region. |
+| `{asset}` | The workload's name in Xshield; for the group of an Auto Scaling group or an Aurora cluster, that group's or cluster's own name; for a cohort group, the name of the customer group whose access it keeps. |
+| `{tag:<key>}` | The value of the workload's AWS tag `<key>`; empty for a cohort group. |
+
+Text outside the tokens may use only the characters a security group name can hold, and the template must start with text or with `{id}`, `{kind}` or `{region}`, never with `sg-`, and come to at most 255 characters with every token at its longest, so Xshield refuses a template that could give a name AWS refuses. A character a security group name cannot hold becomes `-` in a token's value, which is cut at 64 characters. With a template, a group's `Name` tag is its name. For example, `xs-{kind}-{asset}-{id}` names the group of a database named `orders-db` `xs-policy-orders-db-` followed by its digest.
+
+A group keeps its name for as long as it exists, since AWS replaces a group to rename it: a group the account already holds, under any name, keeps it, and setting, changing or removing the template names only groups created after the change. The cloud connector recognises only its own names, so Xshield refuses to move an account to connector delivery while it has a template, or while any group it last applied has another name.
+
+A VPC holds one security group per name. Before this module creates a group the last receipt does not hold, it looks the group's name up in the group's VPC, one `ec2:DescribeSecurityGroups` call per such group, and reads each group the lookup finds, one more call per group: the name filter reads `*` and `?` as wildcards, so a lookup can find groups under other names. If a group already has the name and is not Xshield's group for that key, told apart by its `ct:owner` tag, or by its `ct:change-set` tag for a cohort group, the plan stops before anything is applied and names that group and its VPC: rename or delete it, or change the template, and plan again. Once discovery shows such a group, Xshield refuses the workload with `NAME_COLLISION` and says so in a notice of `xshield_aws_enforcement_status`, and it refuses the later of two workloads the template would give the same name in one VPC the same way.
+
+The template names groups only. Add tags of your own through the `tags` input or the AWS provider's `default_tags`; the snapshot's own tags, `Name` among them, take precedence over both.
+
+## Reading a change in words
+
+The `review` output says what the applied version holds, as a list of sentences. A plan shows only a root module's outputs, so export it from the root module:
+
+```hcl
+output "xshield_review" {
+  value = module.xshield_enforcement.review
+}
+```
+
+A plan then lists the sentences that change under `Changes to Outputs`. Here a change set adds a cohort group, and one rule's source narrows:
+
+```
+Changes to Outputs:
+  ~ xshield_review = [
+      + "Cohort group ct-cohort-0example is for i-0a1 and i-0b2. It keeps access that customer group sg-0example gives up under change set cs-example.",
+      + "Cohort group ct-cohort-0example allows all TCP except 80 from 10.20.0.0/16.",
+        "Group for i-0a1 is attached by this workspace to 1 network interface.",
+      - "Group for i-0a1 allows TCP 443 from 0.0.0.0/0 and ::/0 (template Web servers).",
+      + "Group for i-0a1 allows TCP 443 from 10.0.0.0/8 (template Web servers).",
+        "Group for i-0b2 is attached by this workspace to 1 network interface.",
+        # (2 unchanged elements hidden)
+        "Group for rds/orders-db allows TCP 5432 from 10.20.1.11/32 (template Databases).",
+      - "Version 8c2f41d09a3b holds 3 groups, 4 rules and 2 interface attachments for 111111111111/us-east-1.",
+      + "Version e91b0c55d2f4 holds 4 groups, 5 rules and 4 interface attachments for 111111111111/us-east-1.",
+    ]
+```
+
+Every sentence names its group, so it reads on its own when the plan hides the others.
+
+- The first sentence for a group says whose it is and who attaches it. A workload is named by its instance ID or its handle, which is the only name the snapshot holds for it. A cohort group names the workloads it is for, the ID of the customer group whose access it keeps, and the change set. A group being withdrawn says so.
+- Then comes one sentence for each set of ports the group allows: `from` its sources for ingress rules, `to` its destinations for egress rules. Ports read as `TCP 22`, `TCP 8000-8100`, `TCP 22, 80 and 443`, `all TCP`, or `all traffic` for every protocol. Ranges that run from port 0 to port 65535 and leave ports out between them read by what they leave out: 0-79 with 81-65535 is `all TCP except 80`.
+- A sentence names the rules' template in brackets, taken from the end of each rule's description. A rule that a workload's own group keeps for a change set names the customer group and the change set instead.
+- One sentence for each address a network ACL blocks, such as `Network ACL acl-0a1b denies all inbound traffic from 203.0.113.7/32, which the malicious IP block template blocks.`
+- The last sentence counts the groups, rules and interface attachments, and the network ACL entries when there are any. It starts with the first twelve characters of the version, so anything that changes the version changes at least that sentence.
+
+Two limits keep the output short enough to read. A sentence names five sources, destinations or workloads and counts the rest. The output describes `review_max_groups` groups, 50 unless you set it: cohort groups first, then the rest in key order. One sentence counts the groups past that number. A change these limits hide still changes the last sentence, and the plan's resource changes show it in full.
+
+While Xshield has published nothing, the output is one sentence that says so. For a version that holds nothing, it is the last sentence alone.
+
+## Inputs
+
+| Name | Default | Description |
+|--|--|--|
+| `cloud_account_id` | The AWS provider's account | AWS account to enforce. A snapshot for any other account is refused. |
+| `region` | The AWS provider's region | AWS region to enforce. |
+| `snapshot_version` | `null` | Pins a version for break-glass rollback. Xshield reports the account as pending while it is set. Entries of the version on a network ACL deleted since are left out, and Xshield refuses the receipt without them until the cloud connector has observed that network ACL gone. |
+| `workspace` | `xshield-enforcement-<account>-<region>` | Name Xshield shows for the workspace that applied a version. |
+| `tags` | `{}` | Added to every resource. `ManagedBy` and `ct:*` are reserved. |
+| `enable_exclusive_rules` | `true` | Each group this module creates holds only the rules the snapshot declares, so the next apply removes a rule added outside Terraform. Set `false` to leave such a rule until a person removes it. |
+| `review_max_groups` | `50` | How many groups the `review` output describes in words. Groups past this number are counted, not described. |
+
+## Outputs
+
+| Name | Description |
+|--|--|
+| `published` | False while Xshield has published nothing for the account and region. |
+| `version` | Snapshot version applied. Null while nothing is published. |
+| `exclusive_rules_enabled` | Whether each group this module creates holds only the rules the snapshot declares. The receipt tells Xshield the same. |
+| `summary` | Counts of groups, rules, attachments and network ACL entries, the handles owning workspaces attach, and groups being withdrawn. |
+| `review` | What the applied version holds, as sentences: whose each group is, what its rules allow, and a closing count. |
+| `security_group_ids` | Each Xshield asset's group ID, keyed by Xshield asset ID. |
+| `attachment_keys` | The interface attachments this run declares, by snapshot key: the snapshot's, less any whose interface no longer exists or has no room. The import blocks in `recovery/` and `handover/` import only these. |
+| `network_acl_entry_keys` | The network ACL entries this run declares, by snapshot key: the snapshot's, less, while `snapshot_version` pins a version, any on a network ACL that no longer exists. The import blocks in `recovery/` import only these. |
+| `directory_entries` | The SSM parameter each owning workspace reads, keyed by handle. |
+
+Requires Terraform 1.7 and the AWS provider 6.29.0 or later, the first release with `aws_vpc_security_group_rules_exclusive`. `terraform test` runs the tests in `tests/` offline, with both providers mocked.

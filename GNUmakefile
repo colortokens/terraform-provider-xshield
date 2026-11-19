@@ -19,9 +19,7 @@ test:
 testacc:
 	TF_ACC=1 go test -v -timeout 45m ./internal/provider/
 
-# WARNING: docs/ is currently maintained by hand and has diverged from the
-# schemas. Running this regenerates every page from the schemas and examples,
-# discarding the curated descriptions. Reconcile the two before relying on it.
+# Regenerates docs/ from the schema descriptions and examples/; see CONTRIBUTING.
 docs:
 	go generate ./...
 

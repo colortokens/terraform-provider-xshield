@@ -1,0 +1,13 @@
+# Makes `terraform plan` use a locally-built provider binary instead of the
+# registry. Set the path below to the absolute path of the bundled bin/
+# directory on your machine, then:
+#
+#   export TF_CLI_CONFIG_FILE="$PWD/dev.tfrc"
+#
+# (run from the examples/enforcement-snapshot directory)
+provider_installation {
+  dev_overrides {
+    "colortokens/xshield" = "/absolute/path/to/examples/enforcement-snapshot/bin"
+  }
+  direct {}
+}

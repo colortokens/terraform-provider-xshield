@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -40,13 +42,18 @@ func TestProviderMetadata(t *testing.T) {
 	}
 }
 
-func completeProviderModel() XshieldProviderModel {
+func completeProviderModel(t *testing.T) XshieldProviderModel {
+	keyFile := filepath.Join(t.TempDir(), "key.pem")
+	if err := os.WriteFile(keyFile, []byte(testKeyPEM(t)), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return XshieldProviderModel{
 		ServerURL:          types.StringValue("https://example.invalid"),
 		TenancyId:          types.StringValue("tenancy"),
 		PrincipalId:        types.StringValue("user"),
 		FingerPrint:        types.StringValue("fingerprint"),
-		PrivateKeyLocation: types.StringValue("/tmp/key.pem"),
+		PrivateKeyLocation: types.StringValue(keyFile),
+		PrivateKey:         types.StringNull(),
 	}
 }
 
@@ -91,7 +98,7 @@ func TestBuildConfigProvider(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			model := completeProviderModel()
+			model := completeProviderModel(t)
 			test.mutate(&model)
 
 			resp := &fwprovider.ConfigureResponse{}
