@@ -6,6 +6,7 @@ data "azurerm_client_config" "current" {}
 locals {
   subscription_id = coalesce(var.cloud_account_id, data.azurerm_client_config.current.subscription_id)
   snap            = data.xshield_azure_enforcement_snapshot.this
+  workspace       = coalesce(var.workspace, "xshield-enforcement-${local.subscription_id}-${var.region}")
 }
 
 data "xshield_azure_enforcement_snapshot" "this" {
@@ -143,4 +144,20 @@ resource "azurerm_subnet_network_security_group_association" "this" {
 
   subnet_id                 = each.value.subnet_id
   network_security_group_id = local.network_security_group_ids[each.value.network_security_group]
+}
+
+# Tells Xshield the version is applied, and which resource it created for each key, so its status shows the subscription
+# and region converged, and a lost state can be rebuilt from the receipt.
+resource "xshield_azure_enforcement_receipt" "this" {
+  count = local.snap.published ? 1 : 0
+
+  cloud_account_id = local.snap.cloud_account_id
+  region           = local.snap.region
+  workspace        = local.workspace
+  snapshot_version = local.snap.version
+  exclusive_rules  = var.enable_exclusive_rules
+
+  network_security_groups = local.network_security_group_ids
+  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id }
+  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id }
 }

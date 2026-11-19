@@ -56,11 +56,17 @@ check "xshield_pipeline_stale" {
 
 ### Read-Only
 
+- `applied_at` (String) When the latest receipt was recorded.
+- `applied_interface_associations` (Map of String) From the last receipt: the interface association import ID, `<network interface ID>|<network security group ID>` of each resource the enforcement module created, keyed as the module keys `azurerm_network_interface_security_group_association.this`. Empty before the first receipt.
+- `applied_network_security_groups` (Map of String) From the last receipt: the network security group ID of each resource the enforcement module created, keyed as the module keys `azurerm_network_security_group.this`. Empty before the first receipt.
+- `applied_subnet_associations` (Map of String) From the last receipt: the subnet association import ID, the subnet's ID of each resource the enforcement module created, keyed as the module keys `azurerm_subnet_network_security_group_association.this`. Empty before the first receipt.
+- `applied_version` (String) Version in the latest apply receipt. Null when nothing has been applied.
 - `expected_version` (String) Version Xshield expects to be enforced, the hash of everything it asks for.
-- `last_checked_at` (String) When an enforcement plan last resolved the expected version. A stale value means the pipeline has stopped running.
+- `last_checked_at` (String) When an enforcement plan last resolved the expected version. A stale value means the pipeline has stopped running, whatever `state` says.
 - `notices` (List of Object) What Xshield could not enforce in the expected version, and why. A refused workload gets no network security group of Xshield's and keeps the groups it has, until the cause is fixed. `code`: `assetRefused`. `reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network security group of yours, which its message names, `DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, `NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, or `RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds. `asset_id`: the Xshield asset the notice is about. `asset_name`: the workload as Azure names it, when Xshield knows it. `group` and `since`: null on Azure. `message`: what happened and what to do about it. (see [below for nested schema](#nestedatt--notices))
+- `pending_since` (String) When the oldest policy change not yet applied was published.
 - `published` (Boolean) False while Xshield has published nothing for this subscription and region. `state` is then `unpublished`, `expected_version` is null and `notices` is empty, so checks stay quiet.
-- `state` (String) `unapplied` while Xshield has published a snapshot, `unpublished` when it has published nothing to apply, and `handedOver` when the subscription moved to connector delivery. Xshield does not yet record applies of an Azure snapshot, so a published one reports `unapplied` after an apply too: compare the workspace's `xshield_azure_enforcement_snapshot` version with `expected_version` to see whether it is current.
+- `state` (String) `converged` when the latest receipt is for the expected version, `pending` when Xshield expects newer policy than was applied, `unapplied` when nothing has been applied yet, `unpublished` when Xshield has published nothing to apply, and `handedOver` when the subscription moved to connector delivery.
 
 <a id="nestedatt--notices"></a>
 ### Nested Schema for `notices`

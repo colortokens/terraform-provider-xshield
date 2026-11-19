@@ -211,6 +211,15 @@ run "each_group_goes_on_its_network_interface_or_subnet" {
     condition     = output.summary.network_security_groups == 2 && output.summary.security_rules == 4 && output.summary.interface_associations == 1 && output.summary.subnet_associations == 1
     error_message = "The summary must count what the version holds."
   }
+  assert {
+    condition = (xshield_azure_enforcement_receipt.this[0].snapshot_version == "v42" &&
+      xshield_azure_enforcement_receipt.this[0].workspace == "xshield-enforcement-11111111-2222-3333-4444-555555555555-eastus2" &&
+      xshield_azure_enforcement_receipt.this[0].exclusive_rules &&
+      xshield_azure_enforcement_receipt.this[0].network_security_groups == tomap({ for key, group in azurerm_network_security_group.this : key => group.id }) &&
+      xshield_azure_enforcement_receipt.this[0].subnet_associations == tomap({ "ct-policy-8d612d812776" = azurerm_subnet_network_security_group_association.this["ct-policy-8d612d812776"].id }) &&
+    xshield_azure_enforcement_receipt.this[0].interface_associations == tomap({ "ct-policy-d2dd5b7ea0d5" = azurerm_network_interface_security_group_association.this["ct-policy-d2dd5b7ea0d5"].id }))
+    error_message = "The receipt must name the applied version, and the ID of every group and association created, by its key."
+  }
 }
 
 run "an_association_whose_network_interface_is_gone_is_left_out" {
@@ -226,6 +235,10 @@ run "an_association_whose_network_interface_is_gone_is_left_out" {
   assert {
     condition     = length(azurerm_network_security_group.this) == 2 && length(azurerm_subnet_network_security_group_association.this) == 1
     error_message = "Only the association with the deleted network interface is left out."
+  }
+  assert {
+    condition     = length(xshield_azure_enforcement_receipt.this[0].interface_associations) == 0
+    error_message = "The receipt leaves out the association it did not create, as Xshield accepts."
   }
 }
 
@@ -247,6 +260,10 @@ run "nothing_published_creates_nothing_and_says_so" {
   assert {
     condition     = length(azurerm_network_security_group.this) == 0 && length(azurerm_network_interface_security_group_association.this) == 0 && length(azurerm_subnet_network_security_group_association.this) == 0
     error_message = "Nothing published means nothing to create."
+  }
+  assert {
+    condition     = length(xshield_azure_enforcement_receipt.this) == 0
+    error_message = "Nothing published means no receipt: there is no version to report."
   }
 }
 
