@@ -72,6 +72,16 @@ run "a_join_for_every_link_an_interface_or_subnet_carries" {
   }
 }
 
+run "the_nsgs_xshield_creates_can_be_deleted" {
+  command = plan
+
+  # Without the delete, a group Xshield withdraws stays in the resource group, empty, until someone deletes it by hand.
+  assert {
+    condition     = contains(one(azurerm_role_definition.enforcement.permissions).actions, "Microsoft.Network/networkSecurityGroups/delete")
+    error_message = "The role misses Microsoft.Network/networkSecurityGroups/delete, so a withdrawn Xshield NSG is left behind."
+  }
+}
+
 run "an_empty_scope_list_is_refused" {
   command = plan
 
