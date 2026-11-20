@@ -7,3 +7,4 @@ bin/
 .dev.tfrc
 .terraform.lock.hcl
 policies/sentinel/.sentinel/
+.tftest-*/

@@ -21,11 +21,12 @@ Requires Go (see the `go` directive in `go.mod`) and Terraform.
 ```
 make build     # compile the provider
 make test      # unit tests; acceptance tests skip without TF_ACC
+make tftest    # terraform test in every module and example, providers mocked
 make fmt vet   # formatting and static analysis
 ```
 
-Every pull request must keep `make build`, `make test`, `make vet` and the
-formatting check green. These are enforced by the `Test` GitHub Actions
+Every pull request must keep `make build`, `make test`, `make tftest`,
+`make vet` and the formatting check green. These are enforced by the `Test` GitHub Actions
 workflow.
 
 `docs/` is generated from the schema descriptions, `examples/` and
