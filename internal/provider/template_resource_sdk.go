@@ -387,6 +387,9 @@ func (r *TemplateResourceModel) RefreshFromSharedTemplate(resp *shared.Template)
 		for templatePathsCount, templatePathsItem := range resp.TemplatePaths {
 			var templatePaths1 tfTypes.MetadataPath
 			templatePaths1.DestinationAssetID = types.StringPointerValue(templatePathsItem.DestinationAssetID)
+			if templatePathsItem.DestinationAssetID == nil && templatePathsItem.DestinationAsset != nil {
+				templatePaths1.DestinationAssetID = types.StringPointerValue(templatePathsItem.DestinationAsset.AssetID)
+			}
 			if templatePathsItem.DestinationNamedNetwork == nil {
 				templatePaths1.DestinationNamedNetwork = nil
 			} else {
@@ -412,6 +415,9 @@ func (r *TemplateResourceModel) RefreshFromSharedTemplate(resp *shared.Template)
 			templatePaths1.PortName = types.StringPointerValue(templatePathsItem.PortName)
 			templatePaths1.Protocol = types.StringPointerValue(templatePathsItem.Protocol)
 			templatePaths1.SourceAssetID = types.StringPointerValue(templatePathsItem.SourceAssetID)
+			if templatePathsItem.SourceAssetID == nil && templatePathsItem.SourceAsset != nil {
+				templatePaths1.SourceAssetID = types.StringPointerValue(templatePathsItem.SourceAsset.AssetID)
+			}
 			if templatePathsItem.SourceNamedNetwork == nil {
 				templatePaths1.SourceNamedNetwork = nil
 			} else {

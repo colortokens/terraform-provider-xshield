@@ -4947,6 +4947,9 @@ components:
           type: string
         destinationAssetID:
           type: string
+        destinationAsset:
+          $ref: '#/components/schemas/AssetSummary'
+          readOnly: true
         destinationNamedNetwork:
           $ref: '#/components/schemas/metadata.NamedNetworkReference'
         destinationTagBasedPolicy:
@@ -4969,6 +4972,9 @@ components:
           type: string
         sourceAssetID:
           type: string
+        sourceAsset:
+          $ref: '#/components/schemas/AssetSummary'
+          readOnly: true
         sourceNamedNetwork:
           $ref: '#/components/schemas/metadata.NamedNetworkReference'
         sourceTagBasedPolicy:
