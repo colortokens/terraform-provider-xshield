@@ -8,7 +8,7 @@
 # The cloud connector sets the groups of each database, function and service itself and leaves only its own
 # groups on it, so a workspace that still applies its lookup puts the team's groups back and takes off any group
 # the connector has added since. Before the switch to connector delivery, each such workspace adds the attribute
-# that lists the resource's groups to ignore_changes and applies, as the README's Stop enforcing section says. If
+# that lists the resource's groups to ignore_changes and applies, as the Xshield pipeline delivery reference says. If
 # that was not done before the switch, stop the runs of those workspaces now, do it in each before any of them runs
 # again and before you apply this file, and give each workload in Xshield's policy any access only its team's own
 # groups allowed. A resource declared inside a module takes no lifecycle block from the module call: point the

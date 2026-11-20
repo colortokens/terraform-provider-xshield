@@ -6,14 +6,14 @@ description: |-
 
 # Enforce AWS policy through your own pipeline
 
-Xshield renders every security group and rule for an AWS account and region, and the network ACL entries that block the malicious IP block template's addresses. Your pipeline applies them with the modules shipped in this provider's repository, and tells Xshield what it applied. You write no rule.
+Xshield renders every security group and rule for an AWS account and region. Your pipeline applies them with the modules shipped in this provider's repository, and tells Xshield what it applied. You write no rule.
 
-Each step below says who does it, what to run, and how to tell it worked. Take them in order: each relies on the one before it, so no workspace takes Xshield's group off a workload, and nothing runs on a schedule before step 6 has shown every workload enforced. The [reference](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#readme) explains every choice and every message in more depth.
+Each step below says who does it, what to run, and how to tell it worked. Take them in order: each relies on the one before it. The [Xshield documentation](https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws) covers pipeline delivery in depth, including operations, recovery and troubleshooting.
 
 ## Before you start
 
 - An Xshield administrator has set the account to pipeline delivery.
-- An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the account.
+- An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role must be able to read enforcement snapshots and create enforcement receipts, as the built-in ADMIN and USER roles can, and must cover every workload in the account.
 - Terraform 1.7 or later, and the AWS provider 6.29.0 or later.
 - A list of the workspaces that manage resources in the account and region. Three kinds change: one that declares an instance's or a network interface's security groups (step 3), one that owns a database, function, service or Auto Scaling group (step 5), and, under Full control only, one that owns a security group Xshield narrows (step 9). No other workspace changes.
 
@@ -41,7 +41,7 @@ Whoever owns IAM in the account applies [`enforcement-role/`](https://github.com
 
 ## Step 3: Keep Xshield's groups on instances your code declares
 
-Skip this step unless a workspace sets `vpc_security_group_ids` on an `aws_instance`, or `security_groups` on an `aws_network_interface`. That list is authoritative: the workspace's next apply takes off the group the enforcement workspace attached, and the instance is not enforced until the next enforcement apply puts it back. Tell Terraform to leave the list alone:
+Skip this step unless a workspace sets `vpc_security_group_ids` on an `aws_instance`, or `security_groups` on an `aws_network_interface`. That list is authoritative: the workspace's next apply takes off the group the enforcement workspace attached. Tell Terraform to leave the list alone:
 
 ```terraform
 resource "aws_instance" "web" {
@@ -59,7 +59,7 @@ resource "aws_network_interface" "web" {
 }
 ```
 
-Do this before the enforcement workspace's first apply in step 4, so no apply of these workspaces runs while their instances carry Xshield's group and the list is still managed. While the list is ignored, Terraform no longer applies your own edits to it: add or remove your own groups on such an instance with `aws_network_interface_sg_attachment`. Instances no workspace manages one by one, such as those of an Auto Scaling group, need nothing here.
+Do this before the enforcement workspace's first apply in step 4. While the list is ignored, add or remove your own groups on such an instance with `aws_network_interface_sg_attachment`. Instances no workspace manages one by one, such as those of an Auto Scaling group, need nothing here.
 
 **Done when** each such workspace has the `lifecycle` block on its default branch, and its plan shows no change to the list.
 
@@ -85,7 +85,7 @@ module "xshield_enforcement" {
 
 The module takes no policy input. It applies the snapshot for the account and region the AWS provider points at, and refuses one meant for any other.
 
-If the cloud connector enforces this account and region today, add [`handover/handover.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/handover) to the workspace before the first plan. The plan then imports the groups, rules and attachments the connector created, which stay in place and enforced, and creates only what is missing. Without it, the apply tries to create each group again and AWS refuses it with `InvalidGroup.Duplicate`. Delete the file after the first apply.
+If the cloud connector enforces this account and region today, add [`handover/handover.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/handover) to the workspace before the first plan, so the plan takes over the groups the connector created instead of creating them again. Delete the file after the first apply.
 
 ```shell
 terraform init
@@ -93,9 +93,9 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-Read the plan before you apply it. Each change names the workload it is for, by its instance ID or its handle, such as `rds/orders-db`, and an instance's attachment is keyed `<instance ID>/<network interface ID>`. An instance you expect Xshield to enforce but that has no attachment in the plan is not in this version; step 6 says how to find out why. The apply creates Xshield's groups and rules, attaches each instance's group, writes a directory entry for each database, function and service, and sends the receipt last.
+Read the plan before you apply it. Each change names the workload it is for, by its instance ID or its handle, such as `rds/orders-db`.
 
-**Done when** a second `terraform plan -detailed-exitcode` returns `0`: AWS holds what Xshield published, and Xshield has the receipt. That does not yet show any workload carrying its group: step 6 does.
+**Done when** a second `terraform plan -detailed-exitcode` returns `0`. That does not yet show any workload carrying its group: step 6 does.
 
 ## Step 5: Attach groups to databases, functions and services
 
@@ -129,13 +129,13 @@ output "xshield_security_group_ids" {
 | App Runner service | `apprunner/<service name>` |
 | Auto Scaling group | `asg/<Auto Scaling group name>` |
 
-Apply that workspace after the enforcement workspace has applied: its lookup returns the group only once that apply has written the resource's directory entry. A new resource gets its group once Xshield has discovered it: apply its workspace again then. In an account the cloud connector enforced, add the lookup only once the first enforcement apply, the one with `handover.tf`, has succeeded: until that apply has written the resource's entry, the lookup returns no group, and an apply takes the connector's group off the resource. Where an earlier move to connector delivery put the resource's group attribute in `ignore_changes`, take it out in the same change, or point a module call back from the copy of its module that ignores it.
+Apply that workspace after the enforcement workspace has applied. A new resource gets its group once Xshield has discovered it: apply its workspace again then. In an account the cloud connector enforced, add the lookup only once the first enforcement apply, the one with `handover.tf`, has succeeded.
 
 **Done when** the plan of each such workspace shows a group in `xshield_security_group_ids`, and after its apply the resource lists Xshield's group beside its own. [`database/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/database) is a complete example.
 
 ## Step 6: Check that each workload is enforced
 
-The receipt says what your pipeline applied, not what each workload carries. That shows at the cloud connector's first observation after the apply, which Xshield asks the connector for when it accepts a receipt of the version it expects. Read it in a workspace of its own, configured as in step 1, which manages no resources:
+The receipt says what your pipeline applied, not what each workload carries. That shows once the cloud connector next observes the account. Read it in a workspace of its own, configured as in step 1, which manages no resources:
 
 ```terraform
 data "xshield_aws_enforcement_status" "this" {
@@ -158,74 +158,25 @@ terraform apply -auto-approve
 terraform output xshield_enforcement
 ```
 
-The [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/monitor) workspace of step 10 reads the same status, but it stays quiet until an observation is overdue, so a quiet monitor right after an apply does not mean the check passed.
+Each finding and notice says what is wrong and what to do. A quiet [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/monitor) right after an apply does not mean this check passed: it stays quiet until an observation is overdue.
 
-| Check | Success | When it is not |
-|--|--|--|
-| The observation | `state = "converged"` and `drift_evaluated = true` | `drift_evaluated = false`: no observation has followed the apply yet. Run the check again later. If it stays false, check that the cloud connector is running and can reach the account. |
-| Each instance | AWS shows Xshield's group on its interfaces beside its own, and no finding or notice names it. Xshield's group is tagged `ManagedBy = ColorTokens` and `ct:delivery = pipeline`, and is named as the account's security group name template in Xshield names it, or `ct-policy-` and twelve hexadecimal characters where the account has none; the enforcement workspace's plan gives its name | `memberUnattached`: a workspace took the group off. Do step 3 for that workspace, then apply the enforcement workspace, which attaches it again. No attachment in the step 4 plan: an `assetRefused` notice names the instance and the cause; with no notice, Xshield has not yet discovered the instance or generated its policy. |
-| Each database, function, service and Auto Scaling group | The resource lists Xshield's group, and no `awaitingAttach` notice names it | `awaitingAttach`: its message names the workspace to apply and the group it attaches. A lookup that returns no group: the handle is misspelt, or the resource is not yet discovered or is refused. Set `warn_when_unlisted = true` on the lookup to have its plan say so. |
-| Every workload | Its **Policy status** in the Xshield portal reads **Synchronized** | Any other notice, such as `assetRefused` or `groupRefused`, says what keeps the workload from its policy and what to change. `assetPolicyInTest` is not a failure: the workload's asset policy is in test in that direction, which writes no rule on AWS, so its own groups keep deciding that traffic. |
-
-To see an instance's groups in AWS:
-
-```shell
-aws ec2 describe-instances --instance-ids i-0a1b2c3d \
-  --query 'Reservations[].Instances[].NetworkInterfaces[].[NetworkInterfaceId, join(`,`, Groups[].GroupName)]' --output text
-```
-
-**Done when** `state` is `converged`, `drift_evaluated` is `true`, `findings` is empty, `notices` holds nothing but `assetPolicyInTest` and the notices you have decided to accept, and every workload reads **Synchronized**.
+**Done when** `state` is `converged`, `drift_evaluated` is `true`, `findings` is empty, `notices` holds only notices you have decided to accept, and every workload's **Policy status** in the Xshield portal reads **Synchronized**. If `drift_evaluated` stays `false`, check that the cloud connector is running and can reach the account.
 
 ## Step 7: Run the owners' workspaces after the enforcement workspace
 
-Skip this step unless you did step 5, or will do step 9. Those workspaces change only when they run, and they read what the enforcement workspace's apply wrote. So run them after every enforcement apply, in this order:
+Skip this step unless you did step 5, or will do step 9. Those workspaces change only when they run, and they read what the enforcement workspace's apply wrote. Run them after every enforcement apply, in this order:
 
 1. The enforcement workspace.
-2. Each workspace with the lookup module (step 5). It attaches the group that apply created. Its lookup returns the group only once that apply has written the resource's directory entry.
-3. Under Full control, each workspace with the rules module (step 9). It takes a rule out of your group only after the enforcement workspace has written the rules each workload keeps into Xshield's groups, and each workload carries those groups. Run it after the workspaces that attach them: until discovery shows a workload carrying its group, the change waits and that plan shows nothing to take out.
+2. Each workspace with the lookup module (step 5).
+3. Under Full control, each workspace with the rules module (step 9).
 
-**HCP Terraform and Terraform Enterprise.** Give each owner's workspace a run trigger whose source is the enforcement workspace. A run is then queued in it after each successful apply of the enforcement workspace:
+In HCP Terraform or Terraform Enterprise, give each owner's workspace a run trigger whose source is the enforcement workspace. In your own CI, make each owner's job run after the enforcement job, and let jobs with the lookup module run even when the enforcement job fails. [`chain/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/chain) is a GitHub Actions example; leave out its `schedule` trigger until step 8.
 
-```terraform
-data "tfe_workspace" "xshield_enforcement" {
-  name         = "xshield-enforcement-us-east-1"
-  organization = "example-org"
-}
-
-data "tfe_workspace" "orders_db" {
-  name         = "orders-db"
-  organization = "example-org"
-}
-
-resource "tfe_run_trigger" "orders_db_after_xshield_enforcement" {
-  workspace_id  = data.tfe_workspace.orders_db.id
-  sourceable_id = data.tfe_workspace.xshield_enforcement.id
-}
-```
-
-A triggered run waits for someone to confirm its apply, unless the owner's workspace sets `auto_apply_run_trigger = true`. Where an owner's workspace holds resources in more than one account or region, give it a run trigger from the enforcement workspace of each.
-
-**Your own CI.** Make each owner's job run after the enforcement job: `needs` in GitHub Actions and GitLab CI, `dependsOn` in Azure Pipelines. Let it run when the enforcement job fails too (`if: ${{ !cancelled() }}` in GitHub Actions, `when: always` in GitLab CI, `condition: succeededOrFailed()` in Azure Pipelines). An enforcement apply removes a group's directory entry before it deletes the group, and AWS refuses to delete a group a resource still carries, as after pinning `snapshot_version` to a version without it, so only the owner's apply can free the group. Such a job reads only complete entries: the enforcement apply writes the directory entries only once every rule is in place, so after a failed apply a lookup returns what the last complete apply wrote, or no group where none has completed yet, which is why step 5 adds a lookup in an account the cloud connector enforced only after the first apply. Make a Full control job wait for the enforcement job to succeed. [`chain/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/chain) is a GitHub Actions example, which runs the `database/`, `function/` and `apprunner/` examples after the enforcement workspace and `full-control/` after them. Leave out its `schedule` trigger until step 8, and start it with **Run workflow**.
-
-A revert under Full control goes the other way: step 9's table says to apply the owner's workspace first. The chain is still safe when the enforcement workspace runs first: every workload keeps its access until the owner's workspace has put the rule back, and the next enforcement run then takes out what the revert removes.
-
-**When policy stops using a group**, after a rollback, an undeploy or a workload leaving policy, the same order removes it:
-
-1. The enforcement workspace's apply empties the workload's directory entry. It keeps the group and its rules, so the workload loses no access while it still carries the group.
-2. The owner's workspace takes the group out of the resource's own list at its next run. An Auto Scaling group's running instances keep it until they are replaced, as below.
-3. Once the cloud connector shows nothing holding the group, Xshield publishes a version without it, and the enforcement workspace's next apply deletes the group and its directory entry. In a chain that runs on a schedule, that is the next run's enforcement job. Nobody deletes the group by hand.
-
-An Auto Scaling group's running instances keep the group they launched with, and Xshield keeps it, as `withdrawing`, until they have been replaced from a launch template version without it: the one the Auto Scaling group names, which is the template's default version unless it names another.
-
-AWS keeps a Lambda function's network interface for some time after its configuration changes, and a published version of the function keeps the configuration it was published with, so delete the versions that list the group once no alias uses them. Until nothing holds the group, the `withdrawing` notice says what does, and the monitor warns of it as `group_withdrawing`. Under Full control, a revert first gives your group back the rules it moved, as above, and the group that kept them for the workload then leaves in the same way.
-
-**Done when** one run of the chain, started by hand, runs every workspace in this order, and a second run plans no change in any of them except what Xshield published after the first: a later discovery can release a held Full control change or give a resource its directory entry, and Xshield then publishes a new version, which `version` in the enforcement workspace's `summary` output, or the `version` of `xshield_aws_security_group_changes`, shows. Run the chain again after such a change, until a run plans no change.
+**Done when** one run of the chain, started by hand, runs every workspace in this order, and a second run plans no change in any of them except what Xshield published after the first.
 
 ## Step 8: Run the chain on a schedule
 
-Schedule the whole chain of step 7, not the enforcement workspace alone: some changes become ready at a discovery rather than an apply. A new resource gets its directory entry once Xshield has discovered it, and a Full control change waits until discovery shows each workload whose own workspace attaches Xshield's group carrying it. A run with nothing to change plans no change and applies nothing. Without step 7, schedule the enforcement workspace alone.
-
-Each workspace plans, and applies when its plan has changes:
+Schedule the whole chain of step 7, not the enforcement workspace alone: some changes become ready when Xshield next discovers the account rather than at an apply. Without step 7, schedule the enforcement workspace alone. Each workspace plans, and applies when its plan has changes:
 
 ```shell
 terraform plan -detailed-exitcode -out=tfplan
@@ -233,22 +184,13 @@ terraform plan -detailed-exitcode -out=tfplan
 terraform apply tfplan
 ```
 
-From here an approved policy change needs no edit to any code. It reaches AWS on the next run.
-
-In an account and region with many workloads, give each run room:
-
-- **Time.** A plan reads every group and rule the workspace manages back from AWS, at least one request each. AWS limits how many of these requests an account makes in a region, and every tool that reads security groups there shares that limit, Xshield's discovery included. The AWS provider waits and retries when AWS throttles it, so a plan of thousands of rules slows down rather than fails, and can take several minutes. The first apply takes longer, because AWS also limits how fast rules are added. Set the job's timeout to match, and space scheduled runs so that one finishes before the next starts. If a run still stops with `RequestLimitExceeded`, raise `max_retries` in the `aws` provider block.
-- **Memory.** Give the runner about 2 GB for 2,000 workloads, and about 1 GB more for every further 2,000.
+From here an approved policy change needs no edit to any code. It reaches AWS on the next run. In a large account, allow several minutes per plan and space scheduled runs so one finishes before the next starts.
 
 **Done when** a scheduled run with no approved change since the last one plans no change in any workspace, and step 6's check still passes.
 
 ## Step 9: Full control only: declare your own groups' rules through the rules module
 
-Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own. The workspace that owns the group makes that change, through `modules/aws-security-group-rules`. Do this once for each group, before a change that narrows it is approved, and add the workspace to the chain of step 7, after the workspaces with the lookup module.
-
-1. Configure the `xshield` provider as in step 1.
-2. Read `xshield_aws_security_group_changes` once in the root module.
-3. Move the group's rules into one module block. Give each rule a key you keep, and add a `moved` block for each rule resource you already have, so nothing in AWS changes.
+Skip this step unless you use Full control. Under Full control Xshield also narrows a broad rule in a security group of your own. The workspace that owns the group makes that change, through `modules/aws-security-group-rules`. Do this once for each group, before a change that narrows it is approved, and add the workspace to the chain of step 7.
 
 ```terraform
 provider "xshield" {}
@@ -280,41 +222,26 @@ moved {
 }
 ```
 
-Rules declared inline, as `aws_security_group_rule` resources, or outside Terraform move with `import` and `removed` blocks instead: see the reference's [table of starting points](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#a-group-whose-rules-are-declared-another-way-or-not-in-terraform).
+Give each rule a key you keep, and add a `moved` block for each rule resource you already have, so nothing in AWS changes. Rules declared inline, as `aws_security_group_rule` resources, or outside Terraform move with `import` and `removed` blocks instead, as [`full-control-adopt/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/full-control-adopt) shows.
 
-**Done when** the first plan shows each rule as moved or imported and adds `terraform_data.xshield_routed`. It destroys no rule and adds nothing else, unless a change that narrows the group was approved before this step: the plan then also adds that change's two receipts and takes out the rule it narrows, as the table below says. Apply it.
+**Done when** the first plan shows each rule as moved or imported, destroys no rule, and adds only `terraform_data.xshield_routed`. Apply it.
 
-Then, for each Full control change:
-
-| When | Do |
-|--|--|
-| A change that narrows the group is approved | Run the enforcement workspace, then this workspace. The plan shows the rule taken out and two receipts, `applying` and `applied`. |
-| The change is reverted | Plan and apply this workspace, then the enforcement workspace. Every workload keeps its access until this workspace has put the rule back. |
-| An apply stops with `-> 409` and `Run a new plan and apply it now` | The plan was made before a revert. No rule changed. Run a new plan and apply it. |
-| You upgrade the module from a version without receipts | Apply the workspace once, before a change narrows its group. An apply with no changes is enough. |
-
-Keep every rule in the map, before and after Xshield leaves it out. If you delete one yourself first, the workloads that still rely on it lose that traffic early.
+When a change is approved, run the enforcement workspace, then this workspace. When a change is reverted, run this workspace first. Keep every rule in the map, before and after Xshield leaves it out: if you delete one yourself first, the workloads that still rely on it lose that traffic early.
 
 ## Step 10: Watch it
 
-Copy [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/monitor) into a workspace of its own, set `cloud_account_id` and `region`, and plan it on a schedule. It manages no resources. Each problem, such as drift or an overdue apply, is a warning that says what to do. To stop a pipeline on a problem, name it in `fail_on`:
+Copy [`monitor/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/monitor) into a workspace of its own, set `cloud_account_id` and `region`, and plan it on a schedule. It manages no resources. Each problem is a warning that says what to do. To stop a pipeline on a problem, name it in `fail_on`:
 
 ```terraform
 fail_on = ["drift_high", "never_applied"]
 ```
 
-It warns of a missing observation only once one is overdue (`drift_not_evaluated`, after `max_unobserved_age`), so on its own it cannot show that a workload is enforced: step 6's check does.
-
 **Done when** a plan of the monitor, taken after step 6's check has passed, prints no warning.
 
 ## Later
 
-| When | Do |
-|--|--|
-| You want to stop enforcing | Undeploy the policy in Xshield and keep running the enforcement workspace: it removes the groups. Do not run `terraform destroy` on it. |
-| The account moves back to connector delivery | The cloud connector then sets the groups of each database, function and service itself and leaves only its own on it. Before you switch, give each workload in Xshield's policy any access only its team's own groups allow, and in each workspace with a group lookup add the attribute that lists the resource's groups to `ignore_changes` and apply: a lookup that still applies puts back the groups the connector takes off. Then switch, replace the module block with [`leave/leave.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/leave), remove the outputs that read the module, apply once, and stop running the workspace. Remove the lookups, then delete the directory parameters, as [Stop enforcing](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#stop-enforcing) says. Network ACL entries of the malicious IP block stay in place and are no longer tracked: `leave.tf` says how to list them before you apply, and to check each one before you delete it. |
-| The enforcement workspace's state is lost | Before any other apply, add [`recovery/recovery.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/recovery), read the plan, and apply. Its import blocks rebuild the state from the last receipt. An object of that receipt deleted outside Terraform since stops the plan with `Cannot import non-existent remote object`: add its key to `skipped_imports` in `recovery.tf`, under its kind, and the apply creates it again. A directory parameter needs no key: the plan leaves out one deleted since, and the apply writes it again. |
-| An apply stops part-way and the next one fails with `InvalidGroup.Duplicate`, `InvalidPermission.Duplicate`, `NetworkAclEntryAlreadyExists` or `ParameterAlreadyExists` | Import each resource the error names, then apply again: see [An interrupted apply](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#an-interrupted-apply). Import a network ACL entry only if it is the deny the plan gives. When the plan moves the deny to that number, keep that entry, which now blocks the address: delete the entry at the old number by hand if it is still the same deny, run `terraform state rm` on the address the error names, then import the new number to it. |
-| Malicious Deny on AWS is to be turned on for an account already on this pipeline | First upgrade the module and the provider, apply `enforcement-role/` from the same release, and copy `monitor/` again; then ask ColorTokens to turn it on. In that order the pipeline keeps running, and nothing is written to a network ACL before the role can read and write it: see [Turning on the malicious IP block](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#turning-on-the-malicious-ip-block). |
-| The monitor reports `network_acl_block_not_enforced` | Addresses of the malicious IP block template are not blocked on a network ACL: it has no room, the cloud connector has not read it, or an allow of yours is numbered below the deny. The warning says which and what to change: see [Malicious IP block on network ACLs](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#malicious-ip-block-on-network-acls). |
-| A plan stops with any other message | Look it up under [When something goes wrong](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#when-something-goes-wrong). |
+- **To stop enforcing**, undeploy the policy in Xshield and keep running the enforcement workspace: it removes the groups. Do not run `terraform destroy` on it, or remove its module block.
+- **To move the account back to connector delivery**, the enforcement workspace uses [`leave/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/leave), and the workspaces with a group lookup need a change first.
+- **If the enforcement workspace's state is lost**, add [`recovery/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/recovery) before any other apply.
+
+The [Xshield documentation](https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws-reference) gives the procedure for each of these, and for every failure and message a run can show.

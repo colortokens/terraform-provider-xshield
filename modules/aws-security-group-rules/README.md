@@ -68,9 +68,7 @@ Use the same output name in the enforcement workspace, for the enforcement modul
 
 The module keeps one `terraform_data` resource for the group, named `xshield_routed`. It lives in Terraform's state alone: it creates nothing in AWS and calls neither AWS nor Xshield. It records the account, region, VPC and group, and whether an approved change applied to the group at the last apply.
 
-A plan shows it three times in a group's life. The first plan with this version of the module creates it. A plan in which a change starts to apply to the group, or stops, updates it in place. A plan that removes the module call deletes it.
-
-That last plan is why it exists. Once a workspace stops calling the module and stops reading `xshield_aws_security_group_changes`, its plan reads nothing from Xshield, so nothing in the plan says a change applies to the group. The deleted record still does, and a policy check can read it to stop a plan that would put back a rule a change took out.
+The first plan with this version of the module creates it, a plan in which a change starts or stops applying to the group updates it in place, and a plan that removes the module call deletes it. Policy checks read it to tell when a plan would put back a rule a change took out.
 
 ## Taking a group out of the module
 
@@ -114,14 +112,8 @@ Removing the module call on its own destroys every rule of the group, as only th
 
 ## The receipts it sends
 
-While an approved change applies to the group, the module declares two `xshield_aws_security_group_changes_receipt` resources under one ID. Each tells Xshield which change sets the group's rules come from and their states, as the plan read them from `xshield_aws_security_group_rules`:
+While an approved change applies to the group, the module declares two `xshield_aws_security_group_changes_receipt` resources, `applying` and `applied`, that tell Xshield which change sets the group's rules came from. `applying` is sent before any rule of the group changes, and `applied` once they have; a rule the apply takes out is destroyed after `applied`. A revert of a change waits for these receipts, so after a revert, plan and apply the workspace again. A plan saved before a revert is refused at apply with no rule changed: run a new plan and apply it.
 
-- `applying`, with `stage = "applying"`, is sent before any rule is created or updated: the group's ingress and egress rules `depends_on` it. Xshield refuses it when the plan was made before a revert, and the apply then stops with no rule changed.
-- `applied`, with `stage = "applied"` and `receipt_id` set to the `applying` receipt's ID, `depends_on` the rules, so it is sent once they are created or updated.
-- The rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed only after `applied`. Without it, Terraform destroys such a rule before it sends `applying`, and a refused `applying` receipt would no longer stop it. Terraform reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second apply of this module version on: see [How a revert waits for this workspace](../../examples/enforcement-snapshot/README.md#how-a-revert-waits-for-this-workspace).
+Because the rules set `create_before_destroy`, a change AWS cannot make in place to your group, such as its name, description or VPC, fails with `InvalidGroup.Duplicate` while the group has a fixed `name`. Undo the change, or give the group `name_prefix` instead of `name` in the same change.
 
-Terraform applies `create_before_destroy` to your group as well, since the rules depend on it. A change AWS cannot make in place, to the group's name, description or VPC, replaces the group, and Terraform creates the new group before it destroys the old one. AWS refuses two groups of one name in a VPC, so while the group has a fixed `name` that change fails with `InvalidGroup.Duplicate`. Undo the change, or give the group `name_prefix` instead of `name` in the same change.
-
-A revert of a change waits for these receipts: see [How a revert waits for this workspace](../../examples/enforcement-snapshot/README.md#how-a-revert-waits-for-this-workspace).
-
-Xshield's notices name the receipts by `receipt_label` and their shared ID. The label defaults to the name of the HCP Terraform or Terraform Enterprise workspace. The API key's user must be able to create enforcement receipts as well as read cloud snapshots, as the built-in ADMIN and USER roles can.
+Xshield's notices name the receipts by `receipt_label`, which defaults to the name of the HCP Terraform or Terraform Enterprise workspace; set it elsewhere, for example to the pipeline's name. The API key's user must be able to create enforcement receipts as well as read cloud snapshots, as the built-in ADMIN and USER roles can. The [Xshield documentation](https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws-reference#how-a-revert-waits-for-the-owning-workspace) covers reverts and receipts in depth.

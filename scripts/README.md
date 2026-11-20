@@ -10,8 +10,7 @@ accepts, the API wins and the document needs correcting.
 ## Refreshing against a platform release
 
 1. **Diff the routes.** Compare the paths in `xshield_oas3.yaml` against the API's current route
-   list. Routes do disappear between releases: the port and path approval endpoints were removed,
-   and `refresh-progressive` was later renamed to `refresh-assetpolicy`.
+   list. Routes can be removed or renamed between releases.
 2. **Update `xshield_oas3.yaml`.** Bring the changed definitions across. If you are translating from
    a Swagger 2 description, `#/definitions/model.X` becomes `#/components/schemas/X`, a `body`
    parameter becomes a `requestBody`, and `type` on a non-body parameter moves under `schema`.
@@ -38,40 +37,16 @@ accepts, the API wins and the document needs correcting.
 ## Things the tests pin down
 
 `internal/sdk/sdk_test.go` asserts what goes on the wire, because a mismatch there fails only
-against a live tenant. It covers the zero-trust body (`inboundToDeploymentState`, not the removed
-`inboundToState`), the port deployment plan, the renamed asset-policy refresh path, and the fact
-that a 304 carries no body. `internal/provider/asset_mapping_test.go` decodes a realistic asset
-payload and asserts the enforcement fields reach Terraform state.
+against a live tenant. `internal/provider/asset_mapping_test.go` decodes a realistic asset payload
+and asserts the enforcement fields reach Terraform state. Add to these whenever you touch an
+operation. When a response looks empty or a parameter looks ignored, check what the API actually
+does before believing the document.
 
-Add to these whenever you touch an operation. A test that only proves the code compiles is not worth
-the line count.
+## Generated documentation
 
-## Where the document has been wrong before
-
-Each of these was a real defect, not a formatting nit, and each cost real debugging time:
-
-- **`SearchInput` nests its paging.** `limit`, `offset` and `sort` belong inside a `pagination`
-  object. They sat at the top level, where the API ignores them, so every list ran with the default
-  page of 100 rows and no sort, silently.
-- **`GET /api/fields` answers with `columns`.** The document described a different shape, so the
-  decode produced an empty catalogue from a perfectly good response.
-- **Template deduct answers 202, not the 204 the document listed.**
-- **`SortOrder` is the string `Asc` or `Desc`,** not the integer enum the document described.
-
-When a response looks empty or a parameter looks ignored, check what the API actually does before
-believing the document.
-
-## Known gaps
-
-- **`edrInfo` is deliberately absent** from `AssetDetails`. The API returns it; the provider drops it
-  rather than modelling the nested EDR host-import rules. Unknown JSON fields decode harmlessly.
-- **Attribute prose belongs on the schema, never in `docs/`.** `go generate ./...` runs
-  `tfplugindocs` and rewrites every page from the schema, so an edit to `docs/*.md` is deleted by the
-  next regeneration. Change the attribute's `Description` instead. Example blocks come from
-  `examples/resources/<name>/resource.tf` and `examples/data-sources/<name>/data-source.tf`, and the
-  import blocks from `import.sh`.
-
-  Older versions of `terraform-plugin-docs` failed here with `openpgp: key expired`, because they
-  downloaded a Terraform CLI whose signature they could not verify. v0.25.0 is a direct dependency
-  now, so `go generate ./...` works without any dependency juggling. A real Terraform CLI on `PATH`
-  avoids the download entirely, which `tfplugindocs` prefers.
+Attribute prose belongs on the schema, never in `docs/`. `go generate ./...` runs `tfplugindocs` and
+rewrites every page from the schema, so an edit to `docs/*.md` is deleted by the next regeneration.
+Change the attribute's `Description` instead. Example blocks come from
+`examples/resources/<name>/resource.tf` and `examples/data-sources/<name>/data-source.tf`, and the
+import blocks from `import.sh`. A real Terraform CLI on `PATH` avoids the download `tfplugindocs`
+otherwise makes.

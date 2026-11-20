@@ -833,7 +833,7 @@ run "warns_by_default_on_unacknowledged_carriers_and_block_templates_aws_does_no
 
   assert {
     condition = output.problems.block_rule_not_enforced == [
-      "Workloads in 123456789012/us-east-1 have block templates, which AWS does not enforce. For the malicious IP block template, see \"Turning on the malicious IP block\" in the enforcement-snapshot README:",
+      "Workloads in 123456789012/us-east-1 have block templates, which AWS does not enforce. For the malicious IP block template, see \"Turning on the malicious IP block\" in the Xshield pipeline delivery reference:",
       "  app-01, app-02: this block template blocks inbound tcp port 23, which AWS does not block for this workload (Block telnet)",
       "  app-03: this block template blocks inbound tcp port 23, outbound udp ports 137-139, which AWS does not block for this workload (Block telnet)",
     ]
@@ -864,7 +864,7 @@ run "a_malicious_ip_block_template_aws_does_not_enforce_points_at_turning_it_on"
   expect_failures = [check.xshield_block_rule_not_enforced]
 
   assert {
-    condition     = strcontains(output.problems.block_rule_not_enforced[0], "\"Turning on the malicious IP block\" in the enforcement-snapshot README")
+    condition     = strcontains(output.problems.block_rule_not_enforced[0], "\"Turning on the malicious IP block\" in the Xshield pipeline delivery reference")
     error_message = "A malicious IP block template AWS does not enforce must point at turning the block on, but reported ${jsonencode(output.problems)}."
   }
 }
