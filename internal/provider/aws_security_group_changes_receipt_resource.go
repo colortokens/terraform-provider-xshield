@@ -69,23 +69,14 @@ func (r *awsSecurityGroupChangesReceiptResource) Schema(ctx context.Context, req
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Tells Xshield which changes to your own security groups a workspace applies. The " +
 			"`aws-security-group-rules` module declares two for each group an approved Full control change applies to, " +
-			"under one ID: one with `stage = \"applying\"` that the group's rules depend on, so it is sent before any rule is " +
-			"created or updated, and one with `stage = \"applied\"` that depends on the rules, so it is sent once they are. The " +
-			"module's rules set `create_before_destroy`, so a rule the apply takes out of the group is destroyed after the " +
-			"`applied` receipt; without it, Terraform destroys such a rule before it sends the `applying` receipt. Terraform " +
-			"reads that order for a rule no longer declared from the state the last apply wrote, so it holds from the second " +
-			"apply of rules that set it. Rules wired to these receipts by hand need `create_before_destroy` too. The " +
-			"API key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the " +
+			"under one ID: one with `stage = \"applying\"`, sent before any rule of the group changes, and one with " +
+			"`stage = \"applied\"`, sent once they have. A revert of a change waits for these receipts, and Xshield refuses " +
+			"the `applying` receipt of a plan made before a revert, so the apply stops before any rule changes. The API " +
+			"key's user needs permission to create enforcement receipts as well as to read cloud snapshots, which the " +
 			"built-in ADMIN and USER roles both have.\n\n" +
-			"When a change is reverted, Xshield keeps the access it moved into `ct-cohort-` groups until every receipt ID " +
-			"that reported the change narrowing a group sends an `applied` receipt, after the revert, that no longer does, " +
-			"and it then sees the group hold the rules again. Each receipt sends what the plan read, so a plan made while the " +
-			"change narrowed the group and applied after it was reverted reports it still narrowing the group. Xshield " +
-			"refuses that `applying` receipt, and the apply stops before any rule that waits for it changes.\n\n" +
-			"Changing what it reports sends it again under the same `id`. Destroying the receipt that generated the ID tells " +
-			"Xshield to forget it, so no revert waits on it; destroying one sent under `receipt_id` sends nothing. A receipt ID that a workspace no longer declares, because its state lost the receipt or the " +
-			"workspace was deleted without being destroyed, keeps a revert waiting: import it by the ID the notice names, in " +
-			"any configuration, and destroy it.",
+			"Destroying the receipt that generated the ID tells Xshield to forget it. A receipt ID that no workspace " +
+			"declares any more keeps a revert waiting: import it by the ID the notice names, in any configuration, and " +
+			"destroy it.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -276,8 +267,8 @@ func handedOverReceiptAdvice(applying bool) string {
 	return done + " This account and region has been handed over to the cloud connector, which now changes the rules of your " +
 		"groups that a change applies to, so Xshield refuses every receipt from this workspace, and an apply of it would put back " +
 		"a rule the connector took out, or take out one it put back. Stop this workspace's runs, then stop managing these rules " +
-		"as step 6 of the enforcement-snapshot example's Stop enforcing section says " +
-		"(https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot#stop-enforcing): " +
+		"as step 6 of Stopping enforcement in the Xshield pipeline delivery reference says " +
+		"(https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws-reference#stopping-enforcement-and-moving-to-connector-delivery): " +
 		"replace each rules module block with removed blocks that keep the group's rules (lifecycle { destroy = false }), remove " +
 		"xshield_aws_security_group_changes and what reads it, and apply once."
 }

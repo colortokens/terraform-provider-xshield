@@ -15,6 +15,8 @@ import (
 var _ datasource.DataSource = &awsEnforcementStatusDataSource{}
 var _ datasource.DataSourceWithConfigure = &awsEnforcementStatusDataSource{}
 
+const pipelineDeliveryDocs = "https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws-platform-team#step-6-monitor"
+
 func newAWSEnforcementStatusDataSource() datasource.DataSource {
 	return &awsEnforcementStatusDataSource{}
 }
@@ -127,69 +129,20 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"code": types.StringType, "reason": types.StringType, "asset_id": types.StringType, "asset_name": types.StringType, "group": types.StringType,
 					"since": types.StringType, "message": types.StringType,
 				}},
-				MarkdownDescription: "What Xshield could not enforce in the latest version, and why. A refusal leaves a workload " +
-					"as it was: one that carries an Xshield group keeps it, with the rules last applied, and one that carries " +
-					"none gets none until the cause is fixed. A contained workload's group stays off its interfaces until the " +
-					"containment is reverted. A `groupRefused` group that fits once changed, but not while it changes, is the " +
-					"one exception: the rules its change removes and no new rule replaces come out first, and its new rules " +
-					"go in at the next apply if they then fit. " +
-					"A `portNotNarrowed` notice is about a port still deployed in Xshield on a workload whose customer security " +
-					"group a reverted Full control change no longer narrows: the group again allows more than the port's " +
-					"policy, until the port is deployed again and its change approved, or undeployed. " +
-					"A `prefixListSizeUnknown` notice is about the account and region, with one for each cause: the prefix lists Xshield " +
-					"has never read the size of, or a failed read of the region's prefix lists by the cloud connector. Xshield's count " +
-					"of the rules of each group whose rules name such a list, or any list while the read fails, against the quota of " +
-					"rules per security group is a guess until the connector reads them, so AWS may refuse those rules as over the " +
-					"quota. Its message names the lists, and the groups by their names in AWS, such as `ct-policy-0a1b2c3d4e5f`, ten of " +
-					"each and how many more. " +
-					"An `assetPolicyInTest` notice names a workload whose asset policy is in test in one direction. On AWS that writes " +
-					"no rule: a security group can only allow, so a test-wide allow of the intranet would open every port the workload's " +
-					"own security groups keep closed. Those groups keep deciding the ports and destinations the policy does not allow. " +
-					"A `carriersNotAcknowledged` notice is about one of your own security groups that a Full control change moves rules out of, while " +
-					"something carries it that no approval of the change showed, such as a load balancer or an interface no workload owns. No group of " +
-					"Xshield's can be attached to such a carrier, so Xshield keeps the moved rules until the carriers are acknowledged by deploying the " +
-					"change again; if the workspace that owns the group has already applied, they have lost those rules. " +
-					"A `revertEnded` notice is about a Full control revert that ended without discovery showing your security group holding its moved " +
-					"rules again, because nothing has carried the group for an hour or more. Xshield's groups that kept those rules are withdrawn: its " +
-					"message says whether the workspace that owns the group has put them back, or to plan and apply it before anything carries the group again. " +
-					"A `changeSetServesNoWorkload` notice is about a Full control change none of whose workloads remain: each workload it narrowed " +
-					"your security group for is gone from AWS or no longer carries the group. On pipeline delivery Xshield then reverts the change " +
-					"itself, and the group gets its moved rules back before Xshield's groups that kept them go; while workloads of the change on " +
-					"another group remain, its message says to revert the change in Xshield instead. " +
-					"A `blockRuleNotEnforced` notice names a workload with a block template in Xshield, which AWS does not enforce: a security group " +
-					"can only allow, so the traffic the template blocks passes wherever an allow rule, Xshield's or your own, covers it. There is one " +
-					"for each workload and template, naming every port the template blocks, and one for each workload with the malicious IP template that " +
-					"no network ACL entry of Xshield's blocks its addresses for. " +
-					"A `networkAclEntryRefused` notice names addresses of the malicious IP block template Xshield leaves off a network ACL, so they " +
-					"are not blocked for the workloads behind it: the network ACL has no place left in that direction, no rule number is free for " +
-					"them in front of the allows that cover them nor among the even numbers 50 to 98, or they wait for entries the next apply removes. Xshield counts the places from the cloud " +
-					"connector's last observation, so rules added to the network ACL since can still leave an apply refused with `NetworkAclEntryLimitExceeded`. A `networkAclNotObserved` notice names a network ACL the cloud " +
-					"connector has not read, or no longer shows, so Xshield adds no entry to it. A `networkAclEntryShadowed` notice names an " +
-					"entry of Xshield's that an allow rule of yours, numbered before it with no rule number free in front of it, lets the traffic through. " +
-					"A `networkAclReach` notice names a network ACL with entries of Xshield's whose subnets hold more than the workloads the malicious " +
-					"IP block template is assigned to, such as other workloads, a NAT gateway or a load balancer: AWS applies a network ACL to every " +
-					"resource in its subnets, so the entries block the template's addresses for those too. Nothing is refused for it. " +
-					"An `awaitingAttach` notice names a workload whose own workspace attaches Xshield's group, such as a database, a function " +
-					"or an Auto Scaling group, and which the cloud connector has not shown carrying the group since the last apply. Its policy " +
-					"is not enforced until it does. The message says which workspace to apply and which group it attaches, and the notice " +
-					"clears at the first observation after that apply that shows the workload carrying the group. " +
-					"An `observationStale` notice is about the account and region: the cloud connector has not observed them for three " +
-					"observation intervals since the last apply or observation, so a change made in AWS since is not shown as drift. " +
-					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, `revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, `networkAclReach`, `awaitingAttach` or `observationStale`. " +
-					"`reason`: the cloud connector's refusal code, as the Xshield portal shows it, such as `NO_FREE_SLOT` or `RULE_BUDGET_EXCEEDED:inbound/ipv4=61`, for `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed` and `revertEnded` the change set's ID, for `assetPolicyInTest` the direction in test, `inbound` or `outbound`, for `blockRuleNotEnforced` the block template's name, " +
-					"for `networkAclEntryRefused` why and which way, `ACL_FULL`, `NO_FREE_SLOT` or `AWAITING_REMOVAL` then `:in` or `:out`, " +
-					"for `networkAclNotObserved` `NOT_READ`, `NOT_FOUND` or the connector's error, for `networkAclEntryShadowed` the direction " +
-					"and number of the allow rule, such as `in:40`, " +
-					"or for `prefixListSizeUnknown` the error of the connector's failed read of the prefix lists, which its message leaves out, " +
-					"and null for prefix lists Xshield has not sized and for `carriersNotAcknowledged`, `networkAclReach`, `awaitingAttach` and `observationStale`. " +
+				MarkdownDescription: "What Xshield could not enforce in the latest version, and why, for a workload, a group or the " +
+					"account and region. A refused workload stays as it was: one that carries an Xshield group keeps it, with the rules " +
+					"last applied, and one that carries none gets none until the cause is fixed. Each notice's `message` says what " +
+					"happened and what to do; the [Xshield documentation](" + pipelineDeliveryDocs + ") describes every code. " +
+					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, " +
+					"`changeSetServesNoWorkload`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, " +
+					"`revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, " +
+					"`networkAclReach`, `awaitingAttach` or `observationStale`. " +
+					"`reason`: a short code qualifying the notice, such as the refusal code `NO_FREE_SLOT`, a change set's ID, or a " +
+					"direction; null where the code needs none. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
-					"`group`: the group the notice is about, when there is one: a security group by its key in the snapshot's `security_groups`, " +
-					"one of your own security groups as `<VPC ID>/<name>` for `changeSetHeld`, `changeSetServesNoWorkload`, `portNotNarrowed`, `carriersNotAcknowledged` and `revertEnded`, or the Auto Scaling group by " +
-					"its handle for `asgPolicyDiffers`, or the network ACL by its ID for the network ACL notices; null for `prefixListSizeUnknown`, whose message names its groups, and for `observationStale`. " +
+					"`group`: the security group, Auto Scaling group or network ACL the notice is about, when there is one. " +
 					"`asset_name`: the asset as AWS names it, its instance ID or its handle, such as `rds/orders-db`. " +
-					"`since`: for `changeSetHeld`, when the change was approved or, once its revert is requested, when that was; " +
-					"for `portNotNarrowed`, when the revert was requested; for `observationStale`, the last apply or observation it counts from; " +
-					"null for every other code. " +
+					"`since`: when the condition began, for the codes that track it; otherwise null. " +
 					"`message`: what happened and what it means for the workload.",
 			},
 			"applied_security_groups": appliedIDs("security group ID", "`aws_security_group.this`"),
@@ -218,21 +171,13 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 				MarkdownDescription: "Differences between the cloud as observed and the snapshot as applied. " +
 					"`kind`: what differs, such as `ruleMissing`, `ruleUnmanaged` or `memberUnattached`. " +
 					"`severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. " +
-					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` when Terraform cannot see it " +
-					"and it must be removed by hand, `workload` when the owning workspace's attachment must change, `approval` when a " +
-					"change must be approved in Xshield. A rule added " +
-					"to an Xshield group outside Terraform is `pipeline` when the latest receipt set `exclusive_rules`, otherwise `manual`. " +
-					"A `memberWrongGroup` finding, a workload carrying another workload's Xshield group, is `workload`, or `manual` for " +
-					"a workload whose group the enforcement workspace attaches: that workspace never detaches a group, so detach it " +
-					"from each of the workload's network interfaces by hand. A `memberCustomerAccessWidens` finding, under Full " +
-					"control, is `approval`: a rule of one of your own security groups on the workload opens a port its policy does " +
-					"not allow, no approved change moves it out, and its detail says how to preview and approve the change that does. " +
+					"`restoration`: who puts it right: `pipeline`, the next enforcement apply; `workload`, the next apply of the " +
+					"workspace that owns the resource; `manual`, a person; `approval`, a change approved in Xshield. " +
 					"`resource`: AWS ID of the affected resource, or the Xshield asset ID for an attachment finding. " +
 					"`resource_name`: for an attachment finding, the workload as AWS names it, its instance ID or its handle. " +
 					"`key`: snapshot key involved, when there is one. " +
 					"`detail`: human-readable explanation. " +
-					"`detected_at`: when Xshield recorded the finding, which stays recorded until an observation shows it gone; null " +
-					"for a state the next enforcement apply clears or makes, which Xshield does not record as drift.",
+					"`detected_at`: when Xshield recorded the finding; null for a state the next enforcement apply clears.",
 			},
 		},
 	}

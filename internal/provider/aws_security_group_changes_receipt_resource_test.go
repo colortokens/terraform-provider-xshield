@@ -1079,7 +1079,7 @@ func TestAReceiptRefusedAsHandedOverSaysToStopManagingTheRules(t *testing.T) {
 				t.Fatalf("error %v and state %v, want an error and no receipt in state", resp.Diagnostics, resp.State.Raw)
 			}
 			detail := resp.Diagnostics.Errors()[0].Detail()
-			for _, want := range []string{"handed over to the cloud connector", "Stop this workspace's runs", "#stop-enforcing",
+			for _, want := range []string{"handed over to the cloud connector", "Stop this workspace's runs", "#stopping-enforcement-and-moving-to-connector-delivery",
 				"removed blocks", "destroy = false", "xshield_aws_security_group_changes"} {
 				if !strings.Contains(detail, want) {
 					t.Errorf("the error does not say %q:\n%s", want, detail)

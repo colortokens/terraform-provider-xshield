@@ -41,7 +41,7 @@ variable "region" {
 }
 
 variable "enforcement_role_arn" {
-  description = "Role the pipeline assumes in the account; see the role permissions in the README."
+  description = "Role the pipeline assumes in the account; created from enforcement-role/."
   type        = string
 }
 
