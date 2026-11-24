@@ -23,16 +23,17 @@ mock_provider "azurerm" {
 mock_provider "xshield" {
   mock_data "xshield_azure_enforcement_snapshot" {
     defaults = {
-      published                       = true
-      version                         = "v43"
-      network_security_groups         = {}
-      interface_associations          = {}
-      subnet_associations             = {}
-      assets                          = {}
-      held_interface_associations     = {}
-      held_subnet_associations        = {}
-      released_interface_associations = {}
-      released_subnet_associations    = {}
+      published                        = true
+      version                          = "v43"
+      network_security_groups          = {}
+      interface_associations           = {}
+      subnet_associations              = {}
+      assets                           = {}
+      held_interface_associations      = {}
+      held_subnet_associations         = {}
+      released_interface_associations  = {}
+      released_subnet_associations     = {}
+      customer_network_security_groups = {}
     }
   }
 }
@@ -56,6 +57,17 @@ run "a_released_association_whose_interface_still_carries_xshields_group_is_remo
     target = data.azurerm_network_interface.leaving["ct-policy-0123456789ab"]
     values = { name = "nic-old", network_security_group_id = "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-0123456789ab" }
   }
+  override_data {
+    target = data.azurerm_resources.xshield_network_security_groups[0]
+    values = { resources = [{
+      id                  = "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-0123456789ab"
+      name                = "ct-policy-0123456789ab"
+      type                = "Microsoft.Network/networkSecurityGroups"
+      location            = "eastus2"
+      resource_group_name = "rg-app"
+      tags                = { "ct:delivery" = "pipeline", "ct:level" = "networkInterface" }
+    }] }
+  }
 
   assert {
     condition     = keys(data.azurerm_network_interface.leaving) == ["ct-policy-0123456789ab"]
@@ -64,6 +76,76 @@ run "a_released_association_whose_interface_still_carries_xshields_group_is_remo
   assert {
     condition     = length(azurerm_network_interface_security_group_association.this) == 0
     error_message = "A released association whose interface carries Xshield's group must leave the configuration."
+  }
+}
+
+# With a name template Xshield's group is named sg-prod-0123456789ab, not by its key, and its pipeline tag says it is Xshield's.
+run "a_released_association_whose_interface_carries_xshields_group_under_a_template_name_is_removed" {
+  command = plan
+
+  override_data {
+    target = data.xshield_azure_enforcement_snapshot.this
+    values = {
+      published                       = true
+      version                         = "v43"
+      released_interface_associations = { "ct-policy-0123456789ab" = "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-old" }
+    }
+  }
+  override_data {
+    target = data.azurerm_network_interface.leaving["ct-policy-0123456789ab"]
+    values = { name = "nic-old", network_security_group_id = "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/SG-Prod-0123456789ab" }
+  }
+  override_data {
+    target = data.azurerm_resources.xshield_network_security_groups[0]
+    values = { resources = [{
+      id                  = "/subscriptions/sub-a/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/sg-prod-0123456789ab"
+      name                = "sg-prod-0123456789ab"
+      type                = "Microsoft.Network/networkSecurityGroups"
+      location            = "eastus2"
+      resource_group_name = "rg-app"
+      tags                = { "ct:delivery" = "pipeline", "ct:level" = "networkInterface" }
+    }] }
+  }
+
+  assert {
+    condition     = length(azurerm_network_interface_security_group_association.this) == 0
+    error_message = "A released association whose interface carries Xshield's group must leave the configuration, whatever the group is named and however Azure cases its ID."
+  }
+}
+
+run "a_held_subnet_association_whose_subnet_carries_xshields_group_under_a_template_name_is_removed" {
+  command = plan
+
+  override_data {
+    target = data.xshield_azure_enforcement_snapshot.this
+    values = {
+      published = true
+      version   = "v43"
+      held_subnet_associations = { "ct-policy-ffffffffffff" = {
+        level_id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a/subnets/snet-old"
+        network_security_group_id = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/sg-prod-ffffffffffff"
+      } }
+    }
+  }
+  override_data {
+    target = data.azurerm_subnet.leaving["ct-policy-ffffffffffff"]
+    values = { name = "snet-old", network_security_group_id = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/sg-prod-ffffffffffff" }
+  }
+  override_data {
+    target = data.azurerm_resources.xshield_network_security_groups[0]
+    values = { resources = [{
+      id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/sg-prod-ffffffffffff"
+      name                = "sg-prod-ffffffffffff"
+      type                = "Microsoft.Network/networkSecurityGroups"
+      location            = "eastus2"
+      resource_group_name = "rg-net"
+      tags                = { "ct:delivery" = "pipeline", "ct:level" = "networkInterface" }
+    }] }
+  }
+
+  assert {
+    condition     = length(azurerm_subnet_network_security_group_association.this) == 0
+    error_message = "A held association whose subnet carries Xshield's own group again is no longer held, whatever the group is named."
   }
 }
 

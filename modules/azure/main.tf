@@ -141,9 +141,23 @@ locals {
   )
 }
 
+# Xshield's groups are the ones tagged for a pipeline. Their names are no guide, as a name template can name them anything.
+data "azurerm_resources" "xshield_network_security_groups" {
+  count = length(local.leaving_interfaces) + length(local.leaving_subnets) > 0 ? 1 : 0
+
+  type          = "Microsoft.Network/networkSecurityGroups"
+  required_tags = { "ct:delivery" = "pipeline" }
+}
+
+locals {
+  # A level that carries no group reads back as "" or null, which coalesce turns to "-": taking the association off it takes
+  # nothing of yours.
+  xshields_or_no_group = merge({ "-" = true }, { for group in try(data.azurerm_resources.xshield_network_security_groups[0].resources, []) : lower(group.id) => true })
+}
+
 # Azure removes an association by taking whatever group its network interface or subnet carries off it. So each one
 # this version stops wanting is read first: a removal is refused while the level carries a group other than Xshield's,
-# which Xshield names by its key, and one Xshield holds stays in the state, unchanged, while its level carries such a group.
+# and one Xshield holds stays in the state, unchanged, while its level carries such a group.
 data "azurerm_network_interface" "leaving" {
   for_each = local.leaving_interfaces
 
@@ -152,7 +166,7 @@ data "azurerm_network_interface" "leaving" {
 
   lifecycle {
     postcondition {
-      condition     = contains(keys(local.snap.held_interface_associations), each.key) || lower(element(split("/", coalesce(self.network_security_group_id, "/${each.key}")), -1)) == lower(each.key)
+      condition     = contains(keys(local.snap.held_interface_associations), each.key) || lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false)
       error_message = "Network interface ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the interface's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
     }
   }
@@ -167,7 +181,7 @@ data "azurerm_subnet" "leaving" {
 
   lifecycle {
     postcondition {
-      condition     = contains(keys(local.snap.held_subnet_associations), each.key) || lower(element(split("/", coalesce(self.network_security_group_id, "/${each.key}")), -1)) == lower(each.key)
+      condition     = contains(keys(local.snap.held_subnet_associations), each.key) || lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false)
       error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the subnet's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
     }
   }
@@ -176,13 +190,13 @@ data "azurerm_subnet" "leaving" {
 locals {
   held_interfaces = {
     for key, held in local.snap.held_interface_associations : key => { level_id = held.level_id, network_security_group_id = held.network_security_group_id }
-    if contains(keys(local.leaving_interfaces), key) && lower(element(split("/", coalesce(try(data.azurerm_network_interface.leaving[key].network_security_group_id, null), "/${key}")), -1)) != lower(key)
+    if contains(keys(local.leaving_interfaces), key) && !lookup(local.xshields_or_no_group, lower(coalesce(try(data.azurerm_network_interface.leaving[key].network_security_group_id, null), "-")), false)
   }
   # azurerm reads a subnet association's group back from the subnet, unlike an interface association's, so a held subnet
   # association is given the group the subnet carries now, which its state then holds.
   held_subnets = {
     for key, held in local.snap.held_subnet_associations : key => { level_id = held.level_id, network_security_group_id = data.azurerm_subnet.leaving[key].network_security_group_id }
-    if lower(element(split("/", coalesce(try(data.azurerm_subnet.leaving[key].network_security_group_id, null), "/${key}")), -1)) != lower(key)
+    if !lookup(local.xshields_or_no_group, lower(coalesce(try(data.azurerm_subnet.leaving[key].network_security_group_id, null), "-")), false)
   }
 }
 
@@ -206,6 +220,65 @@ resource "azurerm_subnet_network_security_group_association" "this" {
   network_security_group_id = each.value.network_security_group_id
 }
 
+# Xshield writes a workload's rules into a group of yours when every network interface or subnet of the workload carries
+# one. azurerm takes a group's rules either inline or as rule resources, so each such group gets them as rule resources of
+# this module's, except a group whose own configuration declares its rules inline: that configuration passes them through
+# xshield_azure_security_rules, as its next apply would remove rules it does not declare.
+locals {
+  customer_network_security_groups_in_code = toset([for id in var.customer_network_security_groups_in_code : lower(id)])
+  customer_network_security_groups         = { for key, group in local.snap.customer_network_security_groups : key => group if !contains(local.customer_network_security_groups_in_code, lower(group.id)) }
+}
+
+data "azurerm_network_security_group" "customer" {
+  for_each = local.customer_network_security_groups
+
+  name                = each.value.name
+  resource_group_name = each.value.resource_group_name
+}
+
+# The rules the group holds now keep Xshield's rules at the priorities they hold, and give a moved or new one a priority
+# no rule holds, as Azure refuses two rules at one priority and direction and applies rule resources in no set order.
+data "xshield_azure_security_rules" "customer" {
+  for_each = local.customer_network_security_groups
+
+  cloud_account_id          = local.snap.cloud_account_id
+  region                    = var.region
+  version                   = local.snap.version
+  network_security_group_id = each.value.id
+  current_security_rules    = [for rule in data.azurerm_network_security_group.customer[each.key].security_rule : { name = rule.name, priority = rule.priority, direction = rule.direction }]
+}
+
+locals {
+  customer_security_rules = merge([
+    for key, rules in data.xshield_azure_security_rules.customer : {
+      for rule in rules.xshield_security_rules : "${key}/${rule.name}" => merge(rule, {
+        network_security_group_name = local.customer_network_security_groups[key].name
+        resource_group_name         = local.customer_network_security_groups[key].resource_group_name
+      })
+    }
+  ]...)
+}
+
+resource "azurerm_network_security_rule" "customer" {
+  for_each = local.customer_security_rules
+
+  name                         = each.value.name
+  network_security_group_name  = each.value.network_security_group_name
+  resource_group_name          = each.value.resource_group_name
+  priority                     = each.value.priority
+  direction                    = each.value.direction
+  access                       = each.value.access
+  protocol                     = each.value.protocol
+  source_address_prefix        = each.value.source_address_prefix != "" ? each.value.source_address_prefix : null
+  source_address_prefixes      = length(each.value.source_address_prefixes) > 0 ? each.value.source_address_prefixes : null
+  destination_address_prefix   = each.value.destination_address_prefix != "" ? each.value.destination_address_prefix : null
+  destination_address_prefixes = length(each.value.destination_address_prefixes) > 0 ? each.value.destination_address_prefixes : null
+  source_port_range            = each.value.source_port_range != "" ? each.value.source_port_range : null
+  source_port_ranges           = length(each.value.source_port_ranges) > 0 ? each.value.source_port_ranges : null
+  destination_port_range       = each.value.destination_port_range != "" ? each.value.destination_port_range : null
+  destination_port_ranges      = length(each.value.destination_port_ranges) > 0 ? each.value.destination_port_ranges : null
+}
+
 # Azure gives a group or association recreated under the same name its old ID, so an apply that restores one changes
 # nothing the receipt sends. One record per group is replaced whenever the apply creates, replaces or updates the group or
 # its association: an ID unknown until apply catches one created, and replace_triggered_by the group updated in place, such
@@ -225,6 +298,17 @@ resource "terraform_data" "xshield_applied_resources" {
   }
 }
 
+# As above, for Xshield's rules in your groups: a rule recreated under its name gets its old ID back.
+resource "terraform_data" "xshield_applied_customer_rules" {
+  count = local.snap.published && length(local.customer_security_rules) > 0 ? 1 : 0
+
+  triggers_replace = [for key in sort(keys(azurerm_network_security_rule.customer)) : azurerm_network_security_rule.customer[key].id]
+
+  lifecycle {
+    replace_triggered_by = [azurerm_network_security_rule.customer]
+  }
+}
+
 # Tells Xshield the version is applied, and which resource it created for each key, so its status shows the subscription
 # and region converged, and a lost state can be rebuilt from the receipt.
 resource "xshield_azure_enforcement_receipt" "this" {
@@ -235,7 +319,7 @@ resource "xshield_azure_enforcement_receipt" "this" {
   workspace        = local.workspace
   snapshot_version = local.snap.version
   exclusive_rules  = var.enable_exclusive_rules
-  resend_trigger   = join(",", [for key in sort(keys(terraform_data.xshield_applied_resources)) : terraform_data.xshield_applied_resources[key].id])
+  resend_trigger   = join(",", concat([for key in sort(keys(terraform_data.xshield_applied_resources)) : terraform_data.xshield_applied_resources[key].id], terraform_data.xshield_applied_customer_rules[*].id))
 
   network_security_groups = local.network_security_group_ids
   subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id if !contains(keys(local.held_subnets), key) }

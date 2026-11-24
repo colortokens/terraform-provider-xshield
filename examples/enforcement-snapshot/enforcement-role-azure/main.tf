@@ -54,7 +54,7 @@ variable "pipeline_principal_ids" {
 }
 
 variable "scopes" {
-  description = "Resource IDs to assign the role on: the resource groups that hold your workloads' network interfaces and subnets. The whole subscription by default."
+  description = "Resource IDs to assign the role on: the resource groups that hold your workloads' network interfaces and subnets, and your network security groups on those subnets. The whole subscription by default."
   type        = list(string)
   default     = null
 
@@ -72,7 +72,7 @@ locals {
 resource "azurerm_role_definition" "enforcement" {
   name        = "Xshield enforcement (${var.subscription_id})"
   scope       = local.subscription
-  description = "Applies the network security groups Xshield renders, and associates them with network interfaces and subnets."
+  description = "Applies the network security groups Xshield renders, associates them with network interfaces and subnets, and writes Xshield's rules into network security groups it does not own."
 
   assignable_scopes = [local.subscription]
 
@@ -87,6 +87,11 @@ resource "azurerm_role_definition" "enforcement" {
       "Microsoft.Network/networkSecurityGroups/write",
       "Microsoft.Network/networkSecurityGroups/delete",
       "Microsoft.Network/networkSecurityGroups/join/action",
+
+      # Xshield's rules in a group of yours, written as rules of their own beside yours.
+      "Microsoft.Network/networkSecurityGroups/securityRules/read",
+      "Microsoft.Network/networkSecurityGroups/securityRules/write",
+      "Microsoft.Network/networkSecurityGroups/securityRules/delete",
 
       "Microsoft.Network/networkInterfaces/read",
       "Microsoft.Network/networkInterfaces/write",

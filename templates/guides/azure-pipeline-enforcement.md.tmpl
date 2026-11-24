@@ -16,7 +16,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 - An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the subscription.
 - Terraform 1.7 or later, and the azurerm provider 4.81.0 or later.
 
-Xshield changes none of your own network security groups. Its group goes only on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network (step 3).
+Xshield's group goes on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. Where every network interface and subnet of a workload carries a group of yours, Xshield adds the workload's rules to your subnet's group instead, ahead of your rules and naming only that workload's addresses, and leaves your rules as they are. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network, or the rules of such a group inline (step 3).
 
 The module lives in the [`modules/azure`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the module and the provider match.
 
@@ -36,9 +36,9 @@ Give the azurerm provider its credentials through the `ARM_*` environment variab
 
 ## Step 2: Create the enforcement role, once per subscription
 
-Whoever owns access control in the subscription applies [`enforcement-role-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role-azure), with `pipeline_principal_ids` set to the object IDs of the service principal or managed identity your runner uses. Creating the role and its assignments takes Owner or User Access Administrator on the subscription. The role itself can write network security groups, network interfaces and subnets, and holds the join actions Azure checks when they change: no compute, identity or data access.
+Whoever owns access control in the subscription applies [`enforcement-role-azure/`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/enforcement-role-azure), with `pipeline_principal_ids` set to the object IDs of the service principal or managed identity your runner uses. Creating the role and its assignments takes Owner or User Access Administrator on the subscription. The role itself can write network security groups and their rules, network interfaces and subnets, and holds the join actions Azure checks when they change: no compute, identity or data access.
 
-Azure has no condition that limits these writes to Xshield's own groups. Set `scopes` to the resource groups that hold your workloads' network interfaces and subnets, rather than leaving the role on the whole subscription. Associating a group rewrites the whole network interface or subnet, and Azure checks a join on every resource it links to where that resource is, so `scopes` must also hold the resource groups of linked resources, such as a hub's route tables.
+Azure has no condition that limits these writes to Xshield's own groups. Set `scopes` to the resource groups that hold your workloads' network interfaces and subnets, and your network security groups on those subnets, rather than leaving the role on the whole subscription. Associating a group rewrites the whole network interface or subnet, and Azure checks a join on every resource it links to where that resource is, so `scopes` must also hold the resource groups of linked resources, such as a hub's route tables.
 
 **Done when** the apply prints `role_definition_id`.
 
@@ -69,6 +69,30 @@ resource "azurerm_subnet" "app" {
 ```
 
 **Done when** a plan of each such workspace shows no change to any subnet.
+
+### Keep Xshield's rules in groups of yours that your code declares
+
+Where every network interface and subnet of a workload carries a group of yours, the enforcement module adds the workload's rules to your subnet's group as `azurerm_network_security_rule` resources. The enforcement snapshot's `customer_network_security_groups` lists these groups. A workspace of yours that declares one of them with its rules inline, in `security_rule`, removes Xshield's rules at its next apply. For each such group, declare its rules through `xshield_azure_security_rules`, which gives back your rules with Xshield's ahead of them, and list the group's resource ID in the module's `customer_network_security_groups_in_code` in step 4:
+
+```terraform
+data "xshield_azure_security_rules" "app" {
+  cloud_account_id          = "<subscription ID>"
+  region                    = "eastus2"
+  network_security_group_id = "/subscriptions/<subscription ID>/resourceGroups/network/providers/Microsoft.Network/networkSecurityGroups/app"
+  declared_security_rules   = local.app_rules
+}
+
+resource "azurerm_network_security_group" "app" {
+  name                = "app"
+  resource_group_name = "network"
+  location            = "eastus2"
+  security_rule       = data.xshield_azure_security_rules.app.security_rules
+}
+```
+
+That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing.
+
+**Done when** a plan of each such workspace shows only Xshield's rules added to the group.
 
 ## Step 4: Create the enforcement workspace and apply it, once per subscription and region
 
@@ -102,7 +126,7 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
-Read the plan before you apply it. Each group is named `ct-policy-` and a hash of its network interface or subnet, and `xshield_review` says in words where each group goes, for which workloads, and what its rules allow and deny. A workload you expect Xshield to enforce but that no group names is not in this version; step 5 says how to find out why. The apply creates Xshield's groups, associates each with its network interface or subnet, and sends the receipt last.
+Read the plan before you apply it. Each group is named `ct-policy-` and a hash of its network interface or subnet, or from the cloud account's security group name template when it has one, and `xshield_review` says in words where each group goes, for which workloads, and what its rules allow and deny. A workload you expect Xshield to enforce but that no group names is not in this version; step 5 says how to find out why. The apply creates Xshield's groups, associates each with its network interface or subnet, and sends the receipt last.
 
 **Done when** a second `terraform plan -detailed-exitcode` returns `0`: Azure holds what Xshield published, and Xshield has the receipt. That does not yet show any workload carrying its group: step 5 does.
 

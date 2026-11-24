@@ -206,6 +206,7 @@ mock_provider "xshield" {
         "vm-1"       = { level = "networkInterface", network_security_groups = ["ct-policy-1b1b1b1b1b1b"] }
         "refused"    = { level = null, network_security_groups = [] }
       }
+      customer_network_security_groups = {}
     }
   }
 }

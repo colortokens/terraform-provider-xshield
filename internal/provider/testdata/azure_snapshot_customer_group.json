@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1",
+  "version": "93a534709fe7d554d638e0870a4e153d5a6ec66cad61ca124a8347701057b1d86a139c704dbdd77cea0c8870d2d52173c37f58225eb3dcb83e242c53501205e0",
+  "cloudProvider": "azure",
+  "cloudAccountId": "11111111-2222-3333-4444-555555555555",
+  "region": "eastus2",
+  "aws": null,
+  "azure": {
+    "networkSecurityGroups": {},
+    "subnetAssociations": {},
+    "interfaceAssociations": {},
+    "assets": {
+      "web": {
+        "level": "subnet",
+        "networkSecurityGroups": [],
+        "customerNetworkSecurityGroups": [
+          "customer-nsg-5b8ff476f40c"
+        ]
+      }
+    },
+    "customerNetworkSecurityGroups": {
+      "customer-nsg-5b8ff476f40c": {
+        "id": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-snet-owner",
+        "resourceGroupName": "rg-net",
+        "name": "nsg-snet-owner",
+        "securityRules": [
+          {
+            "name": "CT-Rule-Allow-64c02cd7face",
+            "priority": 100,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "AzureLoadBalancer"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Allow-89dbc7f62dbc",
+            "priority": 501,
+            "direction": "Inbound",
+            "access": "Allow",
+            "protocol": "Tcp",
+            "sourceAddressPrefixes": [
+              "10.0.0.0/8"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "443"
+            ]
+          },
+          {
+            "name": "CT-Rule-Deny-7afbbb662c01",
+            "priority": 3001,
+            "direction": "Inbound",
+            "access": "Deny",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "0.0.0.0/0"
+            ],
+            "destinationAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          },
+          {
+            "name": "CT-Rule-Deny-93ef773b5a07",
+            "priority": 3001,
+            "direction": "Outbound",
+            "access": "Deny",
+            "protocol": "*",
+            "sourceAddressPrefixes": [
+              "10.1.0.4/32"
+            ],
+            "destinationAddressPrefixes": [
+              "0.0.0.0/0"
+            ],
+            "sourcePortRanges": [
+              "*"
+            ],
+            "destinationPortRanges": [
+              "*"
+            ]
+          }
+        ],
+        "subnets": {
+          "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a/subnets/snet-app": [
+            "web"
+          ]
+        }
+      }
+    }
+  }
+}

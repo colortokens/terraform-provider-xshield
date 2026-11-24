@@ -24,6 +24,9 @@ var enforcementModuleDifferences = map[string]string{
 		"in the group itself, ahead of its allows.",
 	"output directory_entries": "On AWS the workspace that owns a database attaches its group, through a directory parameter. On Azure a " +
 		"database or function is reached through its subnet, which the azure module associates itself.",
+	"variable customer_network_security_groups_in_code": "On AWS Xshield's rules reach a group of yours only through " +
+		"xshield_aws_security_group_rules in that group's own configuration. On Azure the module writes them into a group of yours as " +
+		"rules of their own, except in a group whose configuration declares its rules inline, which this lists.",
 }
 
 type moduleInterface struct {

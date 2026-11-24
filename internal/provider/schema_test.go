@@ -154,6 +154,7 @@ var dataSourceLookupAttributes = map[string][]string{
 	"xshield_azure_enforcement_status":   {"cloud_account_id", "region"},
 	"xshield_aws_security_group_changes": {"cloud_account_id", "region"},
 	"xshield_aws_security_group_rules":   {"cloud_account_id", "region", "vpc_id", "group_name"},
+	"xshield_azure_security_rules":       {"cloud_account_id", "region", "network_security_group_id"},
 }
 
 func TestDataSourceLookupKeysAreConfigurable(t *testing.T) {

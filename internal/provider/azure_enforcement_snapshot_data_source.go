@@ -62,8 +62,17 @@ type azHeldAssociationModel struct {
 }
 
 type azAssetModel struct {
-	Level                 types.String   `tfsdk:"level"`
-	NetworkSecurityGroups []types.String `tfsdk:"network_security_groups"`
+	Level                         types.String   `tfsdk:"level"`
+	NetworkSecurityGroups         []types.String `tfsdk:"network_security_groups"`
+	CustomerNetworkSecurityGroups []types.String `tfsdk:"customer_network_security_groups"`
+}
+
+type azCustomerNetworkSecurityGroupModel struct {
+	ID                types.String              `tfsdk:"id"`
+	ResourceGroupName types.String              `tfsdk:"resource_group_name"`
+	Name              types.String              `tfsdk:"name"`
+	SecurityRules     []azSecurityRuleModel     `tfsdk:"security_rules"`
+	Subnets           map[string][]types.String `tfsdk:"subnets"`
 }
 
 type azureEnforcementSnapshotDataSourceModel struct {
@@ -76,6 +85,8 @@ type azureEnforcementSnapshotDataSourceModel struct {
 	SubnetAssociations    map[string]azSubnetAssociationModel    `tfsdk:"subnet_associations"`
 	InterfaceAssociations map[string]azInterfaceAssociationModel `tfsdk:"interface_associations"`
 	Assets                map[string]azAssetModel                `tfsdk:"assets"`
+
+	CustomerNetworkSecurityGroups map[string]azCustomerNetworkSecurityGroupModel `tfsdk:"customer_network_security_groups"`
 
 	HeldInterfaceAssociations     map[string]azHeldAssociationModel `tfsdk:"held_interface_associations"`
 	HeldSubnetAssociations        map[string]azHeldAssociationModel `tfsdk:"held_subnet_associations"`
@@ -100,6 +111,14 @@ type wireAzureSecurityRule struct {
 	DestinationPortRanges      []string `json:"destinationPortRanges"`
 }
 
+type wireAzureCustomerNetworkSecurityGroup struct {
+	ID                string                  `json:"id"`
+	ResourceGroupName string                  `json:"resourceGroupName"`
+	Name              string                  `json:"name"`
+	SecurityRules     []wireAzureSecurityRule `json:"securityRules"`
+	Subnets           map[string][]string     `json:"subnets"`
+}
+
 type wireAzurePlan struct {
 	NetworkSecurityGroups map[string]struct {
 		Name              string                  `json:"name"`
@@ -117,13 +136,15 @@ type wireAzurePlan struct {
 		NetworkInterfaceID   string `json:"networkInterfaceId"`
 	} `json:"interfaceAssociations"`
 	Assets map[string]struct {
-		Level                 string   `json:"level"`
-		NetworkSecurityGroups []string `json:"networkSecurityGroups"`
+		Level                         string   `json:"level"`
+		NetworkSecurityGroups         []string `json:"networkSecurityGroups"`
+		CustomerNetworkSecurityGroups []string `json:"customerNetworkSecurityGroups"`
 	} `json:"assets"`
-	HeldInterfaceAssociations     map[string]wireAzureHeldAssociation `json:"heldInterfaceAssociations"`
-	HeldSubnetAssociations        map[string]wireAzureHeldAssociation `json:"heldSubnetAssociations"`
-	ReleasedInterfaceAssociations map[string]string                   `json:"releasedInterfaceAssociations"`
-	ReleasedSubnetAssociations    map[string]string                   `json:"releasedSubnetAssociations"`
+	CustomerNetworkSecurityGroups map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
+	HeldInterfaceAssociations     map[string]wireAzureHeldAssociation              `json:"heldInterfaceAssociations"`
+	HeldSubnetAssociations        map[string]wireAzureHeldAssociation              `json:"heldSubnetAssociations"`
+	ReleasedInterfaceAssociations map[string]string                                `json:"releasedInterfaceAssociations"`
+	ReleasedSubnetAssociations    map[string]string                                `json:"releasedSubnetAssociations"`
 }
 
 func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -149,9 +170,12 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Fetches the Azure resources Xshield expects in one subscription and region, already rendered: a network " +
 			"security group of Xshield's own for each network interface or subnet it enforces at, with the group's whole rule set, " +
-			"and the association that puts each group there. Xshield places its group only on a network interface or subnet " +
-			"that carries no group of yours, so your groups are never changed, and Azure applies both. The groups and " +
-			"associations are keyed by the group's name, so a plan names the group each change is for.\n\n" +
+			"and the association that puts each group there. Xshield places its group on a network interface or subnet that " +
+			"carries no group of yours, and Azure applies both. Where every network interface or subnet of a workload carries a " +
+			"group of yours, Xshield's rules for the workload go into your subnet's group instead, ahead of your rules and naming " +
+			"only the workload's own addresses, so your rules still decide the traffic of everything else the group covers. " +
+			"The groups and associations are keyed by `ct-policy-` and a hash of their network interface or subnet, which stays " +
+			"the same when a group's name comes from the subscription's name template, so a plan names the level each change is for.\n\n" +
 			"Use it through the `azure` enforcement module, which creates these resources.",
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id": schema.StringAttribute{Required: true, MarkdownDescription: "Azure subscription ID the snapshot is for."},
@@ -180,8 +204,9 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 			"network_security_groups": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"name": types.StringType, "resource_group_name": types.StringType, "location": types.StringType,
 				"tags": types.MapType{ElemType: types.StringType}, "security_rules": types.ListType{ElemType: azSecurityRuleType},
-			}}, "One network security group per network interface or subnet Xshield enforces at, keyed by its name. "+
-				"`name`: `ct-policy-` and a hash of the network interface or subnet, fixed for the group's life. "+
+			}}, "One network security group per network interface or subnet Xshield enforces at, keyed by `ct-policy-` and a hash of it. "+
+				"`name`: the key, or, when the subscription has a security group name template, the template's name for the group. "+
+				"A group keeps the name it was first applied under, so changing the template names only new groups. "+
 				"`resource_group_name`: resource group the group is created in, that of its network interface or subnet. "+
 				"`location`: region the group is created in. "+
 				"`tags`: `ct:delivery` and `ct:level`, which let the cloud connector recognise the group as Xshield's, never as one of yours. "+
@@ -195,20 +220,32 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"passes as it did before the group, and lets the load balancer's health probes in at priority 100."),
 			"subnet_associations": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"network_security_group": types.StringType, "subnet_id": types.StringType,
-			}}, "Each subnet a group goes on, keyed by the group's name. "+
+			}}, "Each subnet a group goes on, keyed by the group's key. "+
 				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
 				"`subnet_id`: resource ID of the subnet to associate it with."),
 			"interface_associations": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"network_security_group": types.StringType, "network_interface_id": types.StringType,
-			}}, "Each network interface a group goes on, keyed by the group's name. "+
+			}}, "Each network interface a group goes on, keyed by the group's key. "+
 				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
 				"`network_interface_id`: resource ID of the network interface to associate it with."),
 			"assets": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
-				"level": types.StringType, "network_security_groups": azStringsType,
+				"level": types.StringType, "network_security_groups": azStringsType, "customer_network_security_groups": azStringsType,
 			}}, "Where each Xshield asset is enforced, keyed by Xshield asset ID. "+
 				"`level`: `networkInterface` or `subnet`. Null when the asset was refused, when its policy writes no rule, or when Xshield enforces it nowhere. "+
-				"`network_security_groups`: keys, in `network_security_groups`, of the groups that carry the asset's rules. "+
-				"Empty when `level` is null."),
+				"`network_security_groups`: keys, in `network_security_groups`, of Xshield's groups that carry the asset's rules. "+
+				"`customer_network_security_groups`: keys, in `customer_network_security_groups`, of your groups that carry them. "+
+				"Both are empty when `level` is null."),
+			"customer_network_security_groups": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
+				"id": types.StringType, "resource_group_name": types.StringType, "name": types.StringType,
+				"security_rules": types.ListType{ElemType: azSecurityRuleType}, "subnets": types.MapType{ElemType: azStringsType},
+			}}, "Each network security group of yours that takes Xshield's rules for the workloads in its subnet, because every "+
+				"network interface or subnet of those workloads carries a group of yours, keyed by `customer-nsg-` and a hash of "+
+				"its resource ID. "+
+				"`id`, `resource_group_name` and `name`: the group's resource ID, resource group and name. "+
+				"`security_rules`: Xshield's rules for the group, each naming only its workload's own addresses, with no allow "+
+				"of all traffic, as your rules decide the rest. Their `priority` gives only the order Azure is to evaluate them "+
+				"in: read them through `xshield_azure_security_rules`, which numbers them ahead of your rules. "+
+				"`subnets`: each subnet whose workloads the rules are for, by resource ID, with the Xshield asset IDs of those workloads."),
 			"held_interface_associations": objects(azHeldAssociationType, "Associations an earlier apply made whose network "+
 				"interface now carries a network security group of yours in place of Xshield's, keyed by Xshield's group name. "+
 				"Azure removes an association by taking whatever group its network interface carries off it, so removing one of "+
@@ -277,6 +314,7 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		HeldSubnetAssociations:        map[string]azHeldAssociationModel{},
 		ReleasedInterfaceAssociations: map[string]types.String{},
 		ReleasedSubnetAssociations:    map[string]types.String{},
+		CustomerNetworkSecurityGroups: map[string]azCustomerNetworkSecurityGroupModel{},
 	}
 	if snap == nil {
 		return m
@@ -284,12 +322,16 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 	plan := snap.Azure
 	m.Version = types.StringValue(snap.Version)
 	for key, g := range plan.NetworkSecurityGroups {
-		rules := make([]azSecurityRuleModel, 0, len(g.SecurityRules))
-		for _, r := range g.SecurityRules {
-			rules = append(rules, azureRuleModel(r))
-		}
 		m.NetworkSecurityGroups[key] = azNetworkSecurityGroupModel{Name: types.StringValue(g.Name), ResourceGroupName: types.StringValue(g.ResourceGroupName),
-			Location: types.StringValue(g.Location), Tags: nonNilTags(g.Tags), SecurityRules: rules}
+			Location: types.StringValue(g.Location), Tags: nonNilTags(g.Tags), SecurityRules: azureRuleModels(g.SecurityRules)}
+	}
+	for key, g := range plan.CustomerNetworkSecurityGroups {
+		subnets := make(map[string][]types.String, len(g.Subnets))
+		for subnetID, assetIDs := range g.Subnets {
+			subnets[subnetID] = toStrList(assetIDs)
+		}
+		m.CustomerNetworkSecurityGroups[key] = azCustomerNetworkSecurityGroupModel{ID: types.StringValue(g.ID), ResourceGroupName: types.StringValue(g.ResourceGroupName),
+			Name: types.StringValue(g.Name), SecurityRules: azureRuleModels(g.SecurityRules), Subnets: subnets}
 	}
 	for key, a := range plan.SubnetAssociations {
 		m.SubnetAssociations[key] = azSubnetAssociationModel{NetworkSecurityGroup: types.StringValue(a.NetworkSecurityGroup), SubnetID: types.StringValue(a.SubnetID)}
@@ -299,7 +341,8 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 			NetworkInterfaceID: types.StringValue(a.NetworkInterfaceID)}
 	}
 	for id, a := range plan.Assets {
-		m.Assets[id] = azAssetModel{Level: optionalString(a.Level), NetworkSecurityGroups: toStrList(a.NetworkSecurityGroups)}
+		m.Assets[id] = azAssetModel{Level: optionalString(a.Level), NetworkSecurityGroups: toStrList(a.NetworkSecurityGroups),
+			CustomerNetworkSecurityGroups: toStrList(a.CustomerNetworkSecurityGroups)}
 	}
 	for key, h := range plan.HeldInterfaceAssociations {
 		m.HeldInterfaceAssociations[key] = azHeldAssociationModel{LevelID: types.StringValue(h.LevelID), NetworkSecurityGroupID: types.StringValue(h.NetworkSecurityGroupID)}
@@ -314,6 +357,14 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		m.ReleasedSubnetAssociations[key] = types.StringValue(levelID)
 	}
 	return m
+}
+
+func azureRuleModels(rules []wireAzureSecurityRule) []azSecurityRuleModel {
+	models := make([]azSecurityRuleModel, 0, len(rules))
+	for _, r := range rules {
+		models = append(models, azureRuleModel(r))
+	}
+	return models
 }
 
 func azureRuleModel(r wireAzureSecurityRule) azSecurityRuleModel {

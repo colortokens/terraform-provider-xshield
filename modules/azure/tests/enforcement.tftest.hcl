@@ -110,6 +110,7 @@ mock_provider "xshield" {
         "api" = { level = "subnet", network_security_groups = ["ct-policy-8d612d812776"] }
         "db"  = { level = null, network_security_groups = [] }
       }
+      customer_network_security_groups = {}
     }
   }
 }

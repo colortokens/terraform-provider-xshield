@@ -34,6 +34,13 @@ variable "enable_exclusive_rules" {
   nullable    = false
 }
 
+variable "customer_network_security_groups_in_code" {
+  description = "Resource IDs of network security groups of yours whose rules a Terraform configuration declares inline. Xshield writes a workload's rules into your subnet's group when every network interface or subnet of the workload carries a group of yours, and this module adds them to the group as rule resources. An apply of inline rules removes every rule it does not declare, so for a group listed here the module adds nothing: its configuration passes its rules through the xshield_azure_security_rules data source and declares the rules that come back."
+  type        = set(string)
+  default     = []
+  nullable    = false
+}
+
 variable "review_max_groups" {
   description = "How many groups the review output describes in words, by key. Groups past this number are counted, not described."
   type        = number

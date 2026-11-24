@@ -86,6 +86,7 @@ mock_provider "xshield" {
         "web" = { level = "networkInterface", network_security_groups = ["ct-policy-d2dd5b7ea0d5"] }
         "api" = { level = "subnet", network_security_groups = ["ct-policy-8d612d812776"] }
       }
+      customer_network_security_groups = {}
     }
   }
 }
