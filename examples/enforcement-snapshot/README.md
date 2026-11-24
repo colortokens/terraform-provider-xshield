@@ -22,6 +22,7 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | `enforcement/` | An enforcement workspace. |
 | `enforcement-azure/` | An enforcement workspace for an Azure subscription and region. |
 | `enforcement-role/` | The IAM role the enforcement workspace assumes, with only the permissions it needs. |
+| `enforcement-role-azure/` | The Azure role the Azure enforcement workspace runs as, with only the permissions it needs. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and can stop a plan on the ones you choose. |
 | `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order, on a schedule. |
 | `policies/` | An example Sentinel and OPA policy, `xshield-checks`, for the workspace that runs the monitor. |
@@ -31,6 +32,7 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | Directory | When |
 |--|--|
 | `handover/` | An account moves from cloud connector delivery to pipeline delivery. |
+| `handover-azure/` | An Azure subscription moves from cloud connector delivery to pipeline delivery. Delete it once a plan imports nothing. |
 | `leave/` | An account moves back to cloud connector delivery. |
 | `recovery/` | The enforcement workspace's state is lost. |
 

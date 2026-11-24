@@ -122,7 +122,7 @@ locals {
 # A workload's network interface can go before discovery tells Xshield, so an association is planned only while its
 # network interface exists: a deleted one never fails the apply.
 data "azurerm_resources" "network_interfaces" {
-  count = length(local.snap.interface_associations) + length(local.snap.held_interface_associations) + length(local.snap.released_interface_associations) > 0 ? 1 : 0
+  count = length(local.snap.interface_associations) + length(local.snap.handover_interface_associations) + length(local.snap.held_interface_associations) + length(local.snap.released_interface_associations) > 0 ? 1 : 0
 
   type = "Microsoft.Network/networkInterfaces"
 }
@@ -200,9 +200,63 @@ locals {
   }
 }
 
+# The cloud connector enforced at a handover level with a group of its own while the level had none. Creating the
+# association there would clear the connector's group until the apply ends, so the apply creates only the group, and once
+# the receipt reaches Xshield the connector puts that group in place of its own in a single change. The association is
+# then taken over: imported, by the import blocks of handover.tf, where the level carries the group, or created where
+# the level carries none. While the level still carries the connector's group the apply leaves it alone.
+locals {
+  handover_interfaces = { for key, association in local.snap.handover_interface_associations : key => association if lookup(local.present_interfaces, lower(association.network_interface_id), false) }
+  # A group created by this apply has no ID until it is created, and Azure builds a group's ID from its name.
+  planned_network_security_group_ids = {
+    for key, group in local.snap.network_security_groups : key => lower("/subscriptions/${local.subscription_id}/resourceGroups/${group.resource_group_name}/providers/Microsoft.Network/networkSecurityGroups/${group.name}")
+  }
+}
+
+data "azurerm_network_interface" "handover" {
+  for_each = local.handover_interfaces
+
+  name                = split("/", each.value.network_interface_id)[8]
+  resource_group_name = split("/", each.value.network_interface_id)[4]
+}
+
+data "azurerm_subnet" "handover" {
+  for_each = local.snap.handover_subnet_associations
+
+  name                 = split("/", each.value.subnet_id)[10]
+  virtual_network_name = split("/", each.value.subnet_id)[8]
+  resource_group_name  = split("/", each.value.subnet_id)[4]
+}
+
+locals {
+  handover_interface_groups = { for key, interface in data.azurerm_network_interface.handover : key => lower(coalesce(interface.network_security_group_id, "-")) }
+  handover_subnet_groups    = { for key, subnet in data.azurerm_subnet.handover : key => lower(coalesce(subnet.network_security_group_id, "-")) }
+
+  handed_over_interfaces = {
+    for key, association in local.handover_interfaces : key => association
+    if contains(["-", local.planned_network_security_group_ids[association.network_security_group]], local.handover_interface_groups[key])
+  }
+  handed_over_subnets = {
+    for key, association in local.snap.handover_subnet_associations : key => association
+    if contains(["-", local.planned_network_security_group_ids[association.network_security_group]], local.handover_subnet_groups[key])
+  }
+  awaiting_handover = concat(
+    [for key, association in local.handover_interfaces : split("/", association.network_interface_id)[8] if !contains(keys(local.handed_over_interfaces), key)],
+    [for key, association in local.snap.handover_subnet_associations : split("/", association.subnet_id)[10] if !contains(keys(local.handed_over_subnets), key)],
+  )
+}
+
+check "xshield_handover" {
+  assert {
+    condition     = length(local.awaiting_handover) == 0
+    error_message = "The cloud connector's own network security group is still on ${join(", ", local.awaiting_handover)}. Once this apply's receipt reaches Xshield, the connector puts Xshield's group in its place, and the next apply takes the association over."
+  }
+}
+
 resource "azurerm_network_interface_security_group_association" "this" {
   for_each = merge(
     { for key, association in local.interface_associations : key => { level_id = association.network_interface_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
+    { for key, association in local.handed_over_interfaces : key => { level_id = association.network_interface_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     local.held_interfaces,
   )
 
@@ -213,6 +267,7 @@ resource "azurerm_network_interface_security_group_association" "this" {
 resource "azurerm_subnet_network_security_group_association" "this" {
   for_each = merge(
     { for key, association in local.snap.subnet_associations : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
+    { for key, association in local.handed_over_subnets : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     local.held_subnets,
   )
 

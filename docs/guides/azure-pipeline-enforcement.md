@@ -120,6 +120,8 @@ output "xshield_review" {
 
 The module takes no policy input. `resource_provider_registrations = "none"` keeps azurerm from registering resource providers, which the enforcement role does not allow.
 
+If the cloud connector enforces this subscription and region today, add [`handover-azure/handover.tf`](https://github.com/colortokens/terraform-provider-xshield/tree/main/examples/enforcement-snapshot/handover-azure) to the workspace before the first plan. The first apply creates Xshield's groups, and where the connector's group is on a network interface or subnet that carried none before, it leaves the association for later, as Azure would clear the connector's group while it associated Xshield's. The `xshield_handover` check names each such level. Once the apply's receipt reaches Xshield, the connector puts Xshield's group in place of its own in a single change, so the workload is enforced throughout, and the next scheduled plan imports the association. Delete the file once a plan imports nothing.
+
 ```shell
 terraform init
 terraform plan -out=tfplan

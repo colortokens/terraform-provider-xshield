@@ -39,3 +39,16 @@ output "interface_association_keys" {
   description = "The network interface associations this run declares, by snapshot key: the snapshot's, less any whose network interface no longer exists."
   value       = keys(local.interface_associations)
 }
+
+output "handover_interface_association_imports" {
+  description = "The import ID of each network interface association the cloud connector has handed over, by snapshot key: where the connector has put Xshield's group in place of its own. The import blocks of handover.tf take them into the state."
+  value = {
+    for key, association in local.handed_over_interfaces : key => "${association.network_interface_id}|${data.azurerm_network_interface.handover[key].network_security_group_id}"
+    if local.handover_interface_groups[key] != "-"
+  }
+}
+
+output "handover_subnet_association_imports" {
+  description = "As handover_interface_association_imports, for a subnet association, whose import ID is the subnet's ID."
+  value       = { for key, association in local.handed_over_subnets : key => association.subnet_id if local.handover_subnet_groups[key] != "-" }
+}

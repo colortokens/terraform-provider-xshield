@@ -84,7 +84,11 @@ type azureEnforcementSnapshotDataSourceModel struct {
 	NetworkSecurityGroups map[string]azNetworkSecurityGroupModel `tfsdk:"network_security_groups"`
 	SubnetAssociations    map[string]azSubnetAssociationModel    `tfsdk:"subnet_associations"`
 	InterfaceAssociations map[string]azInterfaceAssociationModel `tfsdk:"interface_associations"`
-	Assets                map[string]azAssetModel                `tfsdk:"assets"`
+
+	HandoverSubnetAssociations    map[string]azSubnetAssociationModel    `tfsdk:"handover_subnet_associations"`
+	HandoverInterfaceAssociations map[string]azInterfaceAssociationModel `tfsdk:"handover_interface_associations"`
+
+	Assets map[string]azAssetModel `tfsdk:"assets"`
 
 	CustomerNetworkSecurityGroups map[string]azCustomerNetworkSecurityGroupModel `tfsdk:"customer_network_security_groups"`
 
@@ -119,6 +123,16 @@ type wireAzureCustomerNetworkSecurityGroup struct {
 	Subnets           map[string][]string     `json:"subnets"`
 }
 
+type wireAzureSubnetAssociation struct {
+	NetworkSecurityGroup string `json:"networkSecurityGroup"`
+	SubnetID             string `json:"subnetId"`
+}
+
+type wireAzureInterfaceAssociation struct {
+	NetworkSecurityGroup string `json:"networkSecurityGroup"`
+	NetworkInterfaceID   string `json:"networkInterfaceId"`
+}
+
 type wireAzurePlan struct {
 	NetworkSecurityGroups map[string]struct {
 		Name              string                  `json:"name"`
@@ -127,15 +141,11 @@ type wireAzurePlan struct {
 		Tags              map[string]string       `json:"tags"`
 		SecurityRules     []wireAzureSecurityRule `json:"securityRules"`
 	} `json:"networkSecurityGroups"`
-	SubnetAssociations map[string]struct {
-		NetworkSecurityGroup string `json:"networkSecurityGroup"`
-		SubnetID             string `json:"subnetId"`
-	} `json:"subnetAssociations"`
-	InterfaceAssociations map[string]struct {
-		NetworkSecurityGroup string `json:"networkSecurityGroup"`
-		NetworkInterfaceID   string `json:"networkInterfaceId"`
-	} `json:"interfaceAssociations"`
-	Assets map[string]struct {
+	SubnetAssociations            map[string]wireAzureSubnetAssociation    `json:"subnetAssociations"`
+	InterfaceAssociations         map[string]wireAzureInterfaceAssociation `json:"interfaceAssociations"`
+	HandoverSubnetAssociations    map[string]wireAzureSubnetAssociation    `json:"handoverSubnetAssociations"`
+	HandoverInterfaceAssociations map[string]wireAzureInterfaceAssociation `json:"handoverInterfaceAssociations"`
+	Assets                        map[string]struct {
 		Level                         string   `json:"level"`
 		NetworkSecurityGroups         []string `json:"networkSecurityGroups"`
 		CustomerNetworkSecurityGroups []string `json:"customerNetworkSecurityGroups"`
@@ -152,9 +162,11 @@ func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req d
 }
 
 var (
-	azStringsType         = types.ListType{ElemType: types.StringType}
-	azHeldAssociationType = types.ObjectType{AttrTypes: map[string]attr.Type{"level_id": types.StringType, "network_security_group_id": types.StringType}}
-	azSecurityRuleType    = types.ObjectType{AttrTypes: map[string]attr.Type{
+	azStringsType              = types.ListType{ElemType: types.StringType}
+	azSubnetAssociationType    = types.ObjectType{AttrTypes: map[string]attr.Type{"network_security_group": types.StringType, "subnet_id": types.StringType}}
+	azInterfaceAssociationType = types.ObjectType{AttrTypes: map[string]attr.Type{"network_security_group": types.StringType, "network_interface_id": types.StringType}}
+	azHeldAssociationType      = types.ObjectType{AttrTypes: map[string]attr.Type{"level_id": types.StringType, "network_security_group_id": types.StringType}}
+	azSecurityRuleType         = types.ObjectType{AttrTypes: map[string]attr.Type{
 		"name": types.StringType, "priority": types.Int64Type, "direction": types.StringType, "access": types.StringType,
 		"protocol": types.StringType, "source_address_prefix": types.StringType, "source_address_prefixes": azStringsType,
 		"destination_address_prefix": types.StringType, "destination_address_prefixes": azStringsType,
@@ -218,16 +230,24 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"field with the plural one empty; two or more are in the plural field with the singular one empty. Every rule "+
 				"set ends with an allow of all traffic in each direction at priority 4096, so traffic no Xshield rule decides "+
 				"passes as it did before the group, and lets the load balancer's health probes in at priority 100."),
-			"subnet_associations": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
-				"network_security_group": types.StringType, "subnet_id": types.StringType,
-			}}, "Each subnet a group goes on, keyed by the group's key. "+
+			"subnet_associations": objects(azSubnetAssociationType, "Each subnet a group goes on, keyed by the group's key. "+
 				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
 				"`subnet_id`: resource ID of the subnet to associate it with."),
-			"interface_associations": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
-				"network_security_group": types.StringType, "network_interface_id": types.StringType,
-			}}, "Each network interface a group goes on, keyed by the group's key. "+
+			"interface_associations": objects(azInterfaceAssociationType, "Each network interface a group goes on, keyed by the group's key. "+
 				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
 				"`network_interface_id`: resource ID of the network interface to associate it with."),
+			"handover_subnet_associations": objects(azSubnetAssociationType, "Associations of subnets the cloud connector "+
+				"enforced at with a group of its own while the subnet had none, keyed by the group's key. Azure takes an association by clearing whatever group its subnet carries, so creating one "+
+				"while the connector's group is on the subnet would leave it with no group until the apply ends. Once this "+
+				"version's groups are applied, the connector puts each one in place of its own group in a single change, and the "+
+				"`azure` enforcement module then takes the association over by importing it, so the subnet is never left without "+
+				"a group. Each moves to `subnet_associations` once an apply has taken it over. "+
+				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
+				"`subnet_id`: resource ID of the subnet."),
+			"handover_interface_associations": objects(azInterfaceAssociationType, "As `handover_subnet_associations`, for a "+
+				"network interface. "+
+				"`network_security_group`: key, in `network_security_groups`, of the group to associate. "+
+				"`network_interface_id`: resource ID of the network interface."),
 			"assets": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"level": types.StringType, "network_security_groups": azStringsType, "customer_network_security_groups": azStringsType,
 			}}, "Where each Xshield asset is enforced, keyed by Xshield asset ID. "+
@@ -310,6 +330,9 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		InterfaceAssociations: map[string]azInterfaceAssociationModel{},
 		Assets:                map[string]azAssetModel{},
 
+		HandoverSubnetAssociations:    map[string]azSubnetAssociationModel{},
+		HandoverInterfaceAssociations: map[string]azInterfaceAssociationModel{},
+
 		HeldInterfaceAssociations:     map[string]azHeldAssociationModel{},
 		HeldSubnetAssociations:        map[string]azHeldAssociationModel{},
 		ReleasedInterfaceAssociations: map[string]types.String{},
@@ -333,13 +356,10 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		m.CustomerNetworkSecurityGroups[key] = azCustomerNetworkSecurityGroupModel{ID: types.StringValue(g.ID), ResourceGroupName: types.StringValue(g.ResourceGroupName),
 			Name: types.StringValue(g.Name), SecurityRules: azureRuleModels(g.SecurityRules), Subnets: subnets}
 	}
-	for key, a := range plan.SubnetAssociations {
-		m.SubnetAssociations[key] = azSubnetAssociationModel{NetworkSecurityGroup: types.StringValue(a.NetworkSecurityGroup), SubnetID: types.StringValue(a.SubnetID)}
-	}
-	for key, a := range plan.InterfaceAssociations {
-		m.InterfaceAssociations[key] = azInterfaceAssociationModel{NetworkSecurityGroup: types.StringValue(a.NetworkSecurityGroup),
-			NetworkInterfaceID: types.StringValue(a.NetworkInterfaceID)}
-	}
+	m.SubnetAssociations = azureSubnetAssociationModels(plan.SubnetAssociations)
+	m.InterfaceAssociations = azureInterfaceAssociationModels(plan.InterfaceAssociations)
+	m.HandoverSubnetAssociations = azureSubnetAssociationModels(plan.HandoverSubnetAssociations)
+	m.HandoverInterfaceAssociations = azureInterfaceAssociationModels(plan.HandoverInterfaceAssociations)
 	for id, a := range plan.Assets {
 		m.Assets[id] = azAssetModel{Level: optionalString(a.Level), NetworkSecurityGroups: toStrList(a.NetworkSecurityGroups),
 			CustomerNetworkSecurityGroups: toStrList(a.CustomerNetworkSecurityGroups)}
@@ -357,6 +377,22 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		m.ReleasedSubnetAssociations[key] = types.StringValue(levelID)
 	}
 	return m
+}
+
+func azureSubnetAssociationModels(wire map[string]wireAzureSubnetAssociation) map[string]azSubnetAssociationModel {
+	models := make(map[string]azSubnetAssociationModel, len(wire))
+	for key, a := range wire {
+		models[key] = azSubnetAssociationModel{NetworkSecurityGroup: types.StringValue(a.NetworkSecurityGroup), SubnetID: types.StringValue(a.SubnetID)}
+	}
+	return models
+}
+
+func azureInterfaceAssociationModels(wire map[string]wireAzureInterfaceAssociation) map[string]azInterfaceAssociationModel {
+	models := make(map[string]azInterfaceAssociationModel, len(wire))
+	for key, a := range wire {
+		models[key] = azInterfaceAssociationModel{NetworkSecurityGroup: types.StringValue(a.NetworkSecurityGroup), NetworkInterfaceID: types.StringValue(a.NetworkInterfaceID)}
+	}
+	return models
 }
 
 func azureRuleModels(rules []wireAzureSecurityRule) []azSecurityRuleModel {

@@ -265,3 +265,44 @@ func TestAzureSnapshotMapsTheAssociationsItHoldsAndReleases(t *testing.T) {
 		t.Errorf("released subnet associations %+v, want the one on %s", m.ReleasedSubnetAssociations, oldSubnet)
 	}
 }
+
+func TestAzureSnapshotMapsTheAssociationsTheConnectorHandsOver(t *testing.T) {
+	t.Parallel()
+	subnet := azureTestResourceID("rg-net", "virtualNetworks/vnet-a/subnets/snet-handover")
+	nic := azureTestResourceID("rg-app", "networkInterfaces/nic-handover")
+	body := strings.Replace(readTestdata(t, "azure_snapshot.json"), `"azure": {`, `"azure": {
+    "handoverSubnetAssociations": {"ct-policy-aaaaaaaaaaaa": {"networkSecurityGroup": "ct-policy-aaaaaaaaaaaa", "subnetId": "`+subnet+`"}},
+    "handoverInterfaceAssociations": {"ct-policy-bbbbbbbbbbbb": {"networkSecurityGroup": "ct-policy-bbbbbbbbbbbb", "networkInterfaceId": "`+nic+`"}},`, 1)
+	m, ok, errs, _ := readAzureSnapshot(t, publishedAzureSnapshot(t, body))
+	if !ok {
+		t.Fatal(errs)
+	}
+	subnetAssociation := m.HandoverSubnetAssociations["ct-policy-aaaaaaaaaaaa"]
+	if len(m.HandoverSubnetAssociations) != 1 || subnetAssociation.SubnetID.ValueString() != subnet ||
+		subnetAssociation.NetworkSecurityGroup.ValueString() != "ct-policy-aaaaaaaaaaaa" {
+		t.Errorf("handover subnet associations %+v, want the one on %s", m.HandoverSubnetAssociations, subnet)
+	}
+	nicAssociation := m.HandoverInterfaceAssociations["ct-policy-bbbbbbbbbbbb"]
+	if len(m.HandoverInterfaceAssociations) != 1 || nicAssociation.NetworkInterfaceID.ValueString() != nic ||
+		nicAssociation.NetworkSecurityGroup.ValueString() != "ct-policy-bbbbbbbbbbbb" {
+		t.Errorf("handover interface associations %+v, want the one on %s", m.HandoverInterfaceAssociations, nic)
+	}
+	if _, inSubnets := m.SubnetAssociations["ct-policy-aaaaaaaaaaaa"]; inSubnets {
+		t.Error("an association the connector hands over is also listed as one to create")
+	}
+	if _, inInterfaces := m.InterfaceAssociations["ct-policy-bbbbbbbbbbbb"]; inInterfaces {
+		t.Error("an association the connector hands over is also listed as one to create")
+	}
+}
+
+func TestAzureSnapshotWithoutHandoversReadsThemAsEmptyMaps(t *testing.T) {
+	t.Parallel()
+	m, ok, errs, _ := readAzureSnapshot(t, publishedAzureSnapshot(t, readTestdata(t, "azure_snapshot.json")))
+	if !ok {
+		t.Fatal(errs)
+	}
+	if m.HandoverSubnetAssociations == nil || len(m.HandoverSubnetAssociations) != 0 ||
+		m.HandoverInterfaceAssociations == nil || len(m.HandoverInterfaceAssociations) != 0 {
+		t.Errorf("handover associations %+v %+v, want empty maps", m.HandoverSubnetAssociations, m.HandoverInterfaceAssociations)
+	}
+}

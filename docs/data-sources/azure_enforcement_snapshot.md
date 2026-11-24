@@ -52,6 +52,8 @@ output "where_each_asset_is_enforced" {
 
 - `assets` (Map of Object) Where each Xshield asset is enforced, keyed by Xshield asset ID. `level`: `networkInterface` or `subnet`. Null when the asset was refused, when its policy writes no rule, or when Xshield enforces it nowhere. `network_security_groups`: keys, in `network_security_groups`, of Xshield's groups that carry the asset's rules. `customer_network_security_groups`: keys, in `customer_network_security_groups`, of your groups that carry them. Both are empty when `level` is null. (see [below for nested schema](#nestedatt--assets))
 - `customer_network_security_groups` (Map of Object) Each network security group of yours that takes Xshield's rules for the workloads in its subnet, because every network interface or subnet of those workloads carries a group of yours, keyed by `customer-nsg-` and a hash of its resource ID. `id`, `resource_group_name` and `name`: the group's resource ID, resource group and name. `security_rules`: Xshield's rules for the group, each naming only its workload's own addresses, with no allow of all traffic, as your rules decide the rest. Their `priority` gives only the order Azure is to evaluate them in: read them through `xshield_azure_security_rules`, which numbers them ahead of your rules. `subnets`: each subnet whose workloads the rules are for, by resource ID, with the Xshield asset IDs of those workloads. (see [below for nested schema](#nestedatt--customer_network_security_groups))
+- `handover_interface_associations` (Map of Object) As `handover_subnet_associations`, for a network interface. `network_security_group`: key, in `network_security_groups`, of the group to associate. `network_interface_id`: resource ID of the network interface. (see [below for nested schema](#nestedatt--handover_interface_associations))
+- `handover_subnet_associations` (Map of Object) Associations of subnets the cloud connector enforced at with a group of its own while the subnet had none, keyed by the group's key. Azure takes an association by clearing whatever group its subnet carries, so creating one while the connector's group is on the subnet would leave it with no group until the apply ends. Once this version's groups are applied, the connector puts each one in place of its own group in a single change, and the `azure` enforcement module then takes the association over by importing it, so the subnet is never left without a group. Each moves to `subnet_associations` once an apply has taken it over. `network_security_group`: key, in `network_security_groups`, of the group to associate. `subnet_id`: resource ID of the subnet. (see [below for nested schema](#nestedatt--handover_subnet_associations))
 - `held_interface_associations` (Map of Object) Associations an earlier apply made whose network interface now carries a network security group of yours in place of Xshield's, keyed by Xshield's group name. Azure removes an association by taking whatever group its network interface carries off it, so removing one of these would remove your group. The `azure` enforcement module keeps each in its state unchanged while the network interface carries a group other than Xshield's, and Xshield drops it once the interface carries none. `level_id`: resource ID of the network interface. `network_security_group_id`: resource ID of the group the apply associated, as the state holds it. (see [below for nested schema](#nestedatt--held_interface_associations))
 - `held_subnet_associations` (Map of Object) As `held_interface_associations`, for a subnet. `level_id`: resource ID of the subnet. `network_security_group_id`: resource ID of the group the apply associated. azurerm reads a subnet association's group back from the subnet, so the module gives a held one the group the subnet carries now. (see [below for nested schema](#nestedatt--held_subnet_associations))
 - `interface_associations` (Map of Object) Each network interface a group goes on, keyed by the group's key. `network_security_group`: key, in `network_security_groups`, of the group to associate. `network_interface_id`: resource ID of the network interface to associate it with. (see [below for nested schema](#nestedatt--interface_associations))
@@ -101,6 +103,24 @@ Read-Only:
 - `source_port_range` (String)
 - `source_port_ranges` (List of String)
 
+
+
+<a id="nestedatt--handover_interface_associations"></a>
+### Nested Schema for `handover_interface_associations`
+
+Read-Only:
+
+- `network_interface_id` (String)
+- `network_security_group` (String)
+
+
+<a id="nestedatt--handover_subnet_associations"></a>
+### Nested Schema for `handover_subnet_associations`
+
+Read-Only:
+
+- `network_security_group` (String)
+- `subnet_id` (String)
 
 
 <a id="nestedatt--held_interface_associations"></a>

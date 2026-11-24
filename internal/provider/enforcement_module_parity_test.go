@@ -20,6 +20,10 @@ var enforcementModuleDifferences = map[string]string{
 	"output network_security_group_ids": "See security_group_ids: Azure calls the group a network security group, and an asset can have several.",
 	"output attachment_keys":            "Azure associates a group with a network interface, and the azure module's interface_association_keys names those.",
 	"output interface_association_keys": "See attachment_keys.",
+	"output handover_interface_association_imports": "On AWS handover.tf imports what the cloud connector created from " +
+		"xshield_aws_enforcement_status. On Azure the connector puts Xshield's group on each level it enforced at, and only a read " +
+		"of the level shows when it has, so the azure module names what to import.",
+	"output handover_subnet_association_imports": "See handover_interface_association_imports.",
 	"output network_acl_entry_keys": "The aws module blocks malicious addresses in network ACLs. The azure module blocks them with deny rules " +
 		"in the group itself, ahead of its allows.",
 	"output directory_entries": "On AWS the workspace that owns a database attaches its group, through a directory parameter. On Azure a " +
