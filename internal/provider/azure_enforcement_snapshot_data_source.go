@@ -96,6 +96,9 @@ type azureEnforcementSnapshotDataSourceModel struct {
 	HeldSubnetAssociations        map[string]azHeldAssociationModel `tfsdk:"held_subnet_associations"`
 	ReleasedInterfaceAssociations map[string]types.String           `tfsdk:"released_interface_associations"`
 	ReleasedSubnetAssociations    map[string]types.String           `tfsdk:"released_subnet_associations"`
+
+	ContainedInterfaceAssociations map[string]azHeldAssociationModel `tfsdk:"contained_interface_associations"`
+	ContainedSubnetAssociations    map[string]azHeldAssociationModel `tfsdk:"contained_subnet_associations"`
 }
 
 type wireAzureHeldAssociation struct {
@@ -150,11 +153,13 @@ type wireAzurePlan struct {
 		NetworkSecurityGroups         []string `json:"networkSecurityGroups"`
 		CustomerNetworkSecurityGroups []string `json:"customerNetworkSecurityGroups"`
 	} `json:"assets"`
-	CustomerNetworkSecurityGroups map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
-	HeldInterfaceAssociations     map[string]wireAzureHeldAssociation              `json:"heldInterfaceAssociations"`
-	HeldSubnetAssociations        map[string]wireAzureHeldAssociation              `json:"heldSubnetAssociations"`
-	ReleasedInterfaceAssociations map[string]string                                `json:"releasedInterfaceAssociations"`
-	ReleasedSubnetAssociations    map[string]string                                `json:"releasedSubnetAssociations"`
+	CustomerNetworkSecurityGroups  map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
+	HeldInterfaceAssociations      map[string]wireAzureHeldAssociation              `json:"heldInterfaceAssociations"`
+	HeldSubnetAssociations         map[string]wireAzureHeldAssociation              `json:"heldSubnetAssociations"`
+	ReleasedInterfaceAssociations  map[string]string                                `json:"releasedInterfaceAssociations"`
+	ReleasedSubnetAssociations     map[string]string                                `json:"releasedSubnetAssociations"`
+	ContainedInterfaceAssociations map[string]wireAzureHeldAssociation              `json:"containedInterfaceAssociations"`
+	ContainedSubnetAssociations    map[string]wireAzureHeldAssociation              `json:"containedSubnetAssociations"`
 }
 
 func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -284,6 +289,18 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 					"Xshield's, so a group of yours put there since Xshield last observed the subscription is never removed."},
 			"released_subnet_associations": schema.MapAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "As `released_interface_associations`, for a subnet, with the subnet's resource ID."},
+			"contained_interface_associations": objects(azHeldAssociationType, "Associations of a workload Xshield's cloud "+
+				"connector contains, keyed by Xshield's group name. The connector contains a workload by putting a network security "+
+				"group of its own on the network interface in place of Xshield's, and puts Xshield's back when the containment is "+
+				"reverted, so the `azure` enforcement module keeps each association in its state unchanged and creates none: "+
+				"either would take the connector's group off. An association no earlier apply made is left out until the "+
+				"containment is reverted. "+
+				"`level_id`: resource ID of the network interface. "+
+				"`network_security_group_id`: resource ID of the group the apply associated, as the state holds it."),
+			"contained_subnet_associations": objects(azHeldAssociationType, "As `contained_interface_associations`, for a subnet. "+
+				"`level_id`: resource ID of the subnet. "+
+				"`network_security_group_id`: resource ID of the group the apply associated. azurerm reads a subnet "+
+				"association's group back from the subnet, so the module gives a contained one the group the subnet carries now."),
 		},
 	}
 }
@@ -338,6 +355,9 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		ReleasedInterfaceAssociations: map[string]types.String{},
 		ReleasedSubnetAssociations:    map[string]types.String{},
 		CustomerNetworkSecurityGroups: map[string]azCustomerNetworkSecurityGroupModel{},
+
+		ContainedInterfaceAssociations: map[string]azHeldAssociationModel{},
+		ContainedSubnetAssociations:    map[string]azHeldAssociationModel{},
 	}
 	if snap == nil {
 		return m
@@ -375,6 +395,12 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 	}
 	for key, levelID := range plan.ReleasedSubnetAssociations {
 		m.ReleasedSubnetAssociations[key] = types.StringValue(levelID)
+	}
+	for key, c := range plan.ContainedInterfaceAssociations {
+		m.ContainedInterfaceAssociations[key] = azHeldAssociationModel{LevelID: types.StringValue(c.LevelID), NetworkSecurityGroupID: types.StringValue(c.NetworkSecurityGroupID)}
+	}
+	for key, c := range plan.ContainedSubnetAssociations {
+		m.ContainedSubnetAssociations[key] = azHeldAssociationModel{LevelID: types.StringValue(c.LevelID), NetworkSecurityGroupID: types.StringValue(c.NetworkSecurityGroupID)}
 	}
 	return m
 }

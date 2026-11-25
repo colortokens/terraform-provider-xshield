@@ -146,7 +146,7 @@ locals {
 # A workload's network interface can go before discovery tells Xshield, so an association is planned only while its
 # network interface exists: a deleted one never fails the apply.
 data "azurerm_resources" "network_interfaces" {
-  count = length(local.snap.interface_associations) + length(local.snap.handover_interface_associations) + length(local.snap.held_interface_associations) + length(local.snap.released_interface_associations) > 0 ? 1 : 0
+  count = length(local.snap.interface_associations) + length(local.snap.handover_interface_associations) + length(local.snap.held_interface_associations) + length(local.snap.released_interface_associations) + length(local.snap.contained_interface_associations) > 0 ? 1 : 0
 
   type = "Microsoft.Network/networkInterfaces"
 }
@@ -224,6 +224,29 @@ locals {
   }
 }
 
+# Xshield's cloud connector contains a workload by putting a group of its own on the level in place of Xshield's, and puts
+# Xshield's back when it reverts, so an association of a contained workload stays in the state unchanged and none is created.
+data "azurerm_subnet" "contained" {
+  for_each = local.snap.contained_subnet_associations
+
+  name                 = split("/", each.value.level_id)[10]
+  virtual_network_name = split("/", each.value.level_id)[8]
+  resource_group_name  = split("/", each.value.level_id)[4]
+}
+
+locals {
+  contained_interfaces = {
+    for key, contained in local.snap.contained_interface_associations : key => { level_id = contained.level_id, network_security_group_id = contained.network_security_group_id }
+    if lookup(local.present_interfaces, lower(contained.level_id), false)
+  }
+  contained_subnets = {
+    for key, contained in local.snap.contained_subnet_associations : key => {
+      level_id                  = contained.level_id
+      network_security_group_id = coalesce(data.azurerm_subnet.contained[key].network_security_group_id, contained.network_security_group_id)
+    }
+  }
+}
+
 # The cloud connector enforced at a handover level with a group of its own while the level had none. Creating the
 # association there would clear the connector's group until the apply ends, so the apply creates only the group, and once
 # the receipt reaches Xshield the connector puts that group in place of its own in a single change. The association is
@@ -282,6 +305,7 @@ resource "azurerm_network_interface_security_group_association" "this" {
     { for key, association in local.interface_associations : key => { level_id = association.network_interface_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     { for key, association in local.handed_over_interfaces : key => { level_id = association.network_interface_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     local.held_interfaces,
+    local.contained_interfaces,
   )
 
   network_interface_id      = each.value.level_id
@@ -293,6 +317,7 @@ resource "azurerm_subnet_network_security_group_association" "this" {
     { for key, association in local.snap.subnet_associations : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     { for key, association in local.handed_over_subnets : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     local.held_subnets,
+    local.contained_subnets,
   )
 
   subnet_id                 = each.value.level_id
@@ -401,6 +426,6 @@ resource "xshield_azure_enforcement_receipt" "this" {
   resend_trigger   = join(",", concat([for key in sort(keys(terraform_data.xshield_applied_resources)) : terraform_data.xshield_applied_resources[key].id], terraform_data.xshield_applied_customer_rules[*].id))
 
   network_security_groups = local.network_security_group_ids
-  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id if !contains(keys(local.held_subnets), key) }
-  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id if !contains(keys(local.held_interfaces), key) }
+  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id if !contains(concat(keys(local.held_subnets), keys(local.contained_subnets)), key) }
+  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id if !contains(concat(keys(local.held_interfaces), keys(local.contained_interfaces)), key) }
 }

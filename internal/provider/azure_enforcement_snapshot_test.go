@@ -2,6 +2,7 @@ package provider
 
 import (
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -304,5 +305,26 @@ func TestAzureSnapshotWithoutHandoversReadsThemAsEmptyMaps(t *testing.T) {
 	if m.HandoverSubnetAssociations == nil || len(m.HandoverSubnetAssociations) != 0 ||
 		m.HandoverInterfaceAssociations == nil || len(m.HandoverInterfaceAssociations) != 0 {
 		t.Errorf("handover associations %+v %+v, want empty maps", m.HandoverSubnetAssociations, m.HandoverInterfaceAssociations)
+	}
+}
+
+func TestAzureSnapshotMapsTheAssociationsOfAContainedWorkload(t *testing.T) {
+	t.Parallel()
+	nic := azureTestResourceID("rg-app", "networkInterfaces/nic-web")
+	subnet := azureTestResourceID("rg-net", "virtualNetworks/vnet-a/subnets/snet-db")
+	groupID := azureTestResourceID("rg-app", "networkSecurityGroups/ct-policy-0123456789ab")
+	body := strings.Replace(readTestdata(t, "azure_snapshot.json"), `"azure": {`, `"azure": {
+    "containedInterfaceAssociations": {"ct-policy-0123456789ab": {"levelId": "`+nic+`", "networkSecurityGroupId": "`+groupID+`"}},
+    "containedSubnetAssociations": {"ct-policy-ba9876543210": {"levelId": "`+subnet+`", "networkSecurityGroupId": "`+groupID+`"}},`, 1)
+	m, ok, errs, _ := readAzureSnapshot(t, publishedAzureSnapshot(t, body))
+	if !ok {
+		t.Fatal(errs)
+	}
+	want := map[string]azHeldAssociationModel{"ct-policy-0123456789ab": {LevelID: types.StringValue(nic), NetworkSecurityGroupID: types.StringValue(groupID)}}
+	if !reflect.DeepEqual(m.ContainedInterfaceAssociations, want) {
+		t.Errorf("contained interface associations %+v, want %+v", m.ContainedInterfaceAssociations, want)
+	}
+	if got := m.ContainedSubnetAssociations["ct-policy-ba9876543210"]; len(m.ContainedSubnetAssociations) != 1 || got.LevelID.ValueString() != subnet {
+		t.Errorf("contained subnet associations %+v, want the one on %s", m.ContainedSubnetAssociations, subnet)
 	}
 }
