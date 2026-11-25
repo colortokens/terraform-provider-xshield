@@ -229,7 +229,7 @@ run "on_by_default_each_group_holds_only_xshields_rules" {
     error_message = "rules are exclusive unless turned off"
   }
   assert {
-    condition     = length(data.azurerm_resources.network_security_groups) == 0 && length(data.azurerm_network_security_group.kept_rules) == 0
+    condition     = length(data.azurerm_network_security_group.kept_rules) == 0
     error_message = "with exclusive rules the module reads no group's rules"
   }
   assert {

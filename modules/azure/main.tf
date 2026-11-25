@@ -49,22 +49,42 @@ check "xshield_published" {
   }
 }
 
+# A resource group holds one network security group per name, whatever its region, so the name of each group the last
+# receipt does not hold is looked up, and a group already holding it stops the plan unless it carries Xshield's
+# ct:delivery tag: one an apply created before it failed without a receipt, or whose state was lost. azurerm would
+# otherwise refuse the group and suggest importing the holder, which would give a group of yours Xshield's rules.
+data "xshield_azure_enforcement_status" "this" {
+  count = local.snap.published && length(local.snap.network_security_groups) > 0 ? 1 : 0
+
+  cloud_account_id = local.subscription_id
+  region           = var.region
+}
+
+locals {
+  applied_network_security_groups = try(data.xshield_azure_enforcement_status.this[0].applied_network_security_groups, {})
+  new_network_security_groups     = { for key, group in local.snap.network_security_groups : key => group if lookup(local.applied_network_security_groups, key, null) == null }
+}
+
 # azurerm has no resource that leaves a group's other rules alone: a group's rules are given either inline or as rule
 # resources, and using both on one group makes each overwrite the other's rules. So with enable_exclusive_rules off,
 # the rules a group already holds that are not Xshield's are read back and given again with Xshield's. Xshield names
 # its rules CT-Rule- or CT-Test-Rule-, as the cloud connector does, so a rule named otherwise is someone else's.
 data "azurerm_resources" "network_security_groups" {
-  count = var.enable_exclusive_rules || length(local.snap.network_security_groups) == 0 ? 0 : 1
+  count = length(local.new_network_security_groups) > 0 || !var.enable_exclusive_rules && length(local.snap.network_security_groups) > 0 ? 1 : 0
 
   type = "Microsoft.Network/networkSecurityGroups"
 }
 
 locals {
-  present_network_security_groups = { for group in try(data.azurerm_resources.network_security_groups[0].resources, []) : lower("${group.resource_group_name}/${group.name}") => true }
+  present_network_security_groups = { for group in try(data.azurerm_resources.network_security_groups[0].resources, []) : lower("${group.resource_group_name}/${group.name}") => group }
+  network_security_group_name_holders = {
+    for key, group in local.new_network_security_groups : key => local.present_network_security_groups[lower("${group.resource_group_name}/${group.name}")]
+    if contains(keys(local.present_network_security_groups), lower("${group.resource_group_name}/${group.name}")) && try(local.present_network_security_groups[lower("${group.resource_group_name}/${group.name}")].tags["ct:delivery"], "") != "pipeline"
+  }
 }
 
 data "azurerm_network_security_group" "kept_rules" {
-  for_each = { for key, group in local.snap.network_security_groups : key => group if lookup(local.present_network_security_groups, lower("${group.resource_group_name}/${group.name}"), false) }
+  for_each = { for key, group in local.snap.network_security_groups : key => group if !var.enable_exclusive_rules && contains(keys(local.present_network_security_groups), lower("${group.resource_group_name}/${group.name}")) }
 
   name                = each.value.name
   resource_group_name = each.value.resource_group_name
@@ -106,6 +126,10 @@ resource "azurerm_network_security_group" "this" {
   )
 
   lifecycle {
+    precondition {
+      condition     = !contains(keys(local.network_security_group_name_holders), each.key)
+      error_message = "Network security group ${each.value.name} already exists in resource group ${each.value.resource_group_name} (${try(local.network_security_group_name_holders[each.key].id, "")}) and is not Xshield's, so Azure would refuse Xshield's group ${each.key} under that name. The plan stopped and nothing was applied. Do not import the existing group: this module would replace its rules with Xshield's. Xshield gives its group another name once the cloud connector's next observation of ${local.subscription_id}/${var.region} shows yours, so plan again then. If a later plan still stops here, rename your group or move it to another resource group."
+    }
     precondition {
       condition     = length(try(local.kept_rule_conflicts[each.key], [])) == 0
       error_message = "Network security group ${each.value.name} holds rules added outside Terraform at a priority and direction one of Xshield's rules takes: ${join(", ", try(local.kept_rule_conflicts[each.key], []))}. Azure takes one rule for each priority and direction in a group, so move each to a priority Xshield's rules leave free, or set enable_exclusive_rules = true for the apply to remove them."
