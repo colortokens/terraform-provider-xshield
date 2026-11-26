@@ -115,6 +115,9 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"`reason`: why, such as `NO_FREE_LEVEL` when the workload's network interfaces carry a network security group of " +
 					"yours and it has no subnet Xshield can use, which its message names, `INTERFACES_IN_SEVERAL_SUBNETS` when its network interfaces " +
 					"are in more than one subnet and one carries a group of yours, so no one subnet would cover them all, " +
+					"`SUBNET_IN_ANOTHER_REGION` when it is enforced on a subnet whose virtual network is in another region than the " +
+					"workload, as a private endpoint's subnet can be, so none of its rules is written in the snapshot of the " +
+					"workload's region, which its message names, " +
 					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, " +
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds, " +

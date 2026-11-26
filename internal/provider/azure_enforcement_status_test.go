@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
@@ -90,5 +93,22 @@ func TestAzureStatusWithNoObservationIsNotEvaluated(t *testing.T) {
 	m, _ := readAzureStatus(t, cannedResponse{http.StatusNotFound, xshieldNotPublished})
 	if m.DriftEvaluated.ValueBool() || !m.DriftObservedAt.IsNull() || m.DriftFindings == nil || len(m.DriftFindings) != 0 {
 		t.Fatalf("unexpected drift: %+v", m)
+	}
+}
+
+func TestAzureStatusNoticesDescribeEveryRefusalReason(t *testing.T) {
+	t.Parallel()
+	var resp datasource.SchemaResponse
+	(&azureEnforcementStatusDataSource{}).Schema(context.Background(), datasource.SchemaRequest{}, &resp)
+	description := resp.Schema.Attributes["notices"].GetMarkdownDescription()
+	for _, reason := range []string{
+		"NO_FREE_LEVEL", "INTERFACES_IN_SEVERAL_SUBNETS", "SUBNET_IN_ANOTHER_REGION", "DISCOVER_FAILED:NO_SUBNET",
+		"NOT_EXPRESSIBLE_ON_AZURE", "RULE_BUDGET", "ENDPOINT_NETWORK_POLICIES_OFF", "NO_PRIVATE_INBOUND",
+		"INTEGRATION_SUBNET_SHARED", "DISCOVER_FAILED:NO_INTEGRATION_SUBNET_RANGE", "CONNECTOR_GROUP_UNRECORDED",
+		"RULE_BEYOND_WORKLOAD", "NO_FREE_PRIORITY",
+	} {
+		if !strings.Contains(description, "`"+reason) {
+			t.Errorf("the notices description does not describe refusal reason %s", reason)
+		}
 	}
 }
