@@ -25,6 +25,12 @@ data "xshield_azure_security_rules" "app" {
   region                    = "eastus2"
   network_security_group_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-app"
   declared_security_rules   = local.app_rules
+  version                   = data.xshield_azure_enforcement_status.this.applied_version
+}
+
+data "xshield_azure_enforcement_status" "this" {
+  cloud_account_id = "00000000-0000-0000-0000-000000000000"
+  region           = "eastus2"
 }
 
 resource "azurerm_network_security_group" "app" {

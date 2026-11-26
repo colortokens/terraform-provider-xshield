@@ -227,7 +227,9 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"`resource_group_name`: resource group the group is created in, that of its network interface or subnet. "+
 				"`location`: region the group is created in. "+
 				"`tags`: `ct:delivery` and `ct:level`, which let the cloud connector recognise the group as Xshield's, never as one of yours. "+
-				"`security_rules`: the group's whole rule set, which replaces any rule the group holds that it does not list. "+
+				"`security_rules`: the group's whole rule set. With the `azure` enforcement module's `enable_exclusive_rules` "+
+				"on, the default, it replaces any rule the group holds that it does not list; with it off, a rule not named as "+
+				"Xshield's stays alongside. "+
 				"Each rule has Azure's fields: `name`, `priority`, `direction`, `access` and `protocol`, and the source and "+
 				"destination as `source_address_prefix` or `source_address_prefixes`, `destination_address_prefix` or "+
 				"`destination_address_prefixes`, `source_port_range` or `source_port_ranges`, and `destination_port_range` or "+
@@ -272,7 +274,7 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"in: read them through `xshield_azure_security_rules`, which numbers them ahead of your rules. "+
 				"`subnets`: each subnet whose workloads the rules are for, by resource ID, with the Xshield asset IDs of those workloads."),
 			"held_interface_associations": objects(azHeldAssociationType, "Associations an earlier apply made whose network "+
-				"interface now carries a network security group of yours in place of Xshield's, keyed by Xshield's group name. "+
+				"interface now carries a network security group of yours in place of Xshield's, keyed by the group's key. "+
 				"Azure removes an association by taking whatever group its network interface carries off it, so removing one of "+
 				"these would remove your group. The `azure` enforcement module keeps each in its state unchanged while the "+
 				"network interface carries a group other than Xshield's, and Xshield drops it once the interface carries none. "+
@@ -283,14 +285,14 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 				"`network_security_group_id`: resource ID of the group the apply associated. azurerm reads a subnet "+
 				"association's group back from the subnet, so the module gives a held one the group the subnet carries now."),
 			"released_interface_associations": schema.MapAttribute{Computed: true, ElementType: types.StringType,
-				MarkdownDescription: "Associations an earlier apply made that this version removes, keyed by Xshield's group " +
-					"name, each with its network interface's resource ID. The `azure` enforcement module reads each network " +
+				MarkdownDescription: "Associations an earlier apply made that this version removes, keyed by the group's " +
+					"key, each with its network interface's resource ID. The `azure` enforcement module reads each network " +
 					"interface before it plans the removal, and fails the plan when the interface carries a group other than " +
 					"Xshield's, so a group of yours put there since Xshield last observed the subscription is never removed."},
 			"released_subnet_associations": schema.MapAttribute{Computed: true, ElementType: types.StringType,
 				MarkdownDescription: "As `released_interface_associations`, for a subnet, with the subnet's resource ID."},
 			"contained_interface_associations": objects(azHeldAssociationType, "Associations of a workload Xshield's cloud "+
-				"connector contains, keyed by Xshield's group name. The connector contains a workload by putting a network security "+
+				"connector contains, keyed by the group's key. The connector contains a workload by putting a network security "+
 				"group of its own on the network interface in place of Xshield's, and puts Xshield's back when the containment is "+
 				"reverted, so the `azure` enforcement module keeps each association in its state unchanged and creates none: "+
 				"either would take the connector's group off. An association no earlier apply made is left out until the "+
