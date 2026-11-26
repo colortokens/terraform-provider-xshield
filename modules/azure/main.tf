@@ -135,7 +135,7 @@ resource "azurerm_network_security_group" "this" {
   lifecycle {
     precondition {
       condition     = !contains(keys(local.network_security_group_name_holders), each.key)
-      error_message = "Network security group ${each.value.name} already exists in resource group ${each.value.resource_group_name} (${try(local.network_security_group_name_holders[each.key].id, "")}) and is not Xshield's, so Azure would refuse Xshield's group ${each.key} under that name. The plan stopped and nothing was applied. Do not import the existing group: this module would replace its rules with Xshield's. Xshield gives its group another name once the cloud connector's next observation of ${local.subscription_id}/${var.region} shows yours, so plan again then. If a later plan still stops here, rename your group or move it to another resource group."
+      error_message = "Network security group ${each.value.name} already exists in resource group ${each.value.resource_group_name} (${try(local.network_security_group_name_holders[each.key].id, "")}) and is not Xshield's, so Azure would refuse Xshield's group ${each.key} under that name. The plan stopped and nothing was applied. Do not import the existing group: this module would replace its rules with Xshield's. Xshield gives its group another name once the cloud connector's next observation of ${local.subscription_id}/${var.region} shows yours, so plan again then. If a later plan still stops here, move your group to another resource group, or replace it with a group under another name, as Azure cannot rename a network security group."
     }
     precondition {
       condition     = length(try(local.kept_rule_conflicts[each.key], [])) == 0
