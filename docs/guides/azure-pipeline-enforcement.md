@@ -108,7 +108,7 @@ provider "azurerm" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v26.4.1"
 
   region = var.region
 }

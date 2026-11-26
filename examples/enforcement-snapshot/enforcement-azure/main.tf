@@ -29,7 +29,7 @@ provider "xshield" {}
 module "xshield_enforcement" {
   # ../../../modules/azure exists only inside the provider's repository. In your copy, use the address at the tag
   # of the provider release you run, or terraform init cannot find the module:
-  #   source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v0.2.0"
+  #   source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v26.4.1"
   source = "../../../modules/azure"
 
   region = var.region

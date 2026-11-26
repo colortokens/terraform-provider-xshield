@@ -13,7 +13,7 @@ terraform {
   required_providers {
     xshield = {
       source  = "colortokens/xshield"
-      version = "0.2.0"
+      version = "26.4.1"
     }
   }
 }
