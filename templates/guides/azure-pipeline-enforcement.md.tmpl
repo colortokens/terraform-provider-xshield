@@ -80,6 +80,12 @@ data "xshield_azure_security_rules" "app" {
   region                    = "eastus2"
   network_security_group_id = "/subscriptions/<subscription ID>/resourceGroups/network/providers/Microsoft.Network/networkSecurityGroups/app"
   declared_security_rules   = local.app_rules
+  version                   = data.xshield_azure_enforcement_status.this.applied_version
+}
+
+data "xshield_azure_enforcement_status" "this" {
+  cloud_account_id = "<subscription ID>"
+  region           = "eastus2"
 }
 
 resource "azurerm_network_security_group" "app" {
@@ -89,6 +95,8 @@ resource "azurerm_network_security_group" "app" {
   security_rule       = data.xshield_azure_security_rules.app.security_rules
 }
 ```
+
+The enforcement apply leaves a group listed in `customer_network_security_groups_in_code` to that workspace: only its apply writes Xshield's rules into the group, or puts them back after drift. Run it after each enforcement apply. `version` reads the version the enforcement workspace last applied, so the group gets the rules of the version the subscription's other groups hold; until that workspace applies, the group keeps the previous version's rules.
 
 That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing.
 
