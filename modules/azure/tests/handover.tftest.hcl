@@ -144,6 +144,11 @@ run "a_level_the_connector_has_handed_over_is_imported" {
     target = data.azurerm_subnet.handover["ct-policy-bbbbbbbbbbbb"]
     values = { name = "snet-app", network_security_group_id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/ct-policy-bbbbbbbbbbbb" }
   }
+  override_resource {
+    target          = azurerm_network_security_group.this["ct-policy-aaaaaaaaaaaa"]
+    override_during = plan
+    values          = { id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/sg-prod-aaaaaaaaaaaa" }
+  }
 
   assert {
     condition     = keys(azurerm_network_interface_security_group_association.this) == ["ct-policy-aaaaaaaaaaaa"] && keys(azurerm_subnet_network_security_group_association.this) == ["ct-policy-bbbbbbbbbbbb"]
@@ -151,9 +156,9 @@ run "a_level_the_connector_has_handed_over_is_imported" {
   }
   assert {
     condition = output.handover_interface_association_imports == {
-      "ct-policy-aaaaaaaaaaaa" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-app|/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/RG-APP/providers/Microsoft.Network/networkSecurityGroups/sg-prod-aaaaaaaaaaaa"
+      "ct-policy-aaaaaaaaaaaa" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-app|/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/sg-prod-aaaaaaaaaaaa"
     }
-    error_message = "A network interface association's import ID is the interface's ID and the ID of the group it carries, as Azure gives it."
+    error_message = "A network interface association's import ID is the interface's ID and the ID of Xshield's group as its state holds it: azurerm keeps the import ID as given, so another case would plan the association's replacement."
   }
   assert {
     condition = output.handover_subnet_association_imports == {

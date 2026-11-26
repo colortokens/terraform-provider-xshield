@@ -43,7 +43,7 @@ output "interface_association_keys" {
 output "handover_interface_association_imports" {
   description = "The import ID of each network interface association the cloud connector has handed over, by snapshot key: where the connector has put Xshield's group in place of its own. The import blocks of handover.tf take them into the state."
   value = {
-    for key, association in local.handed_over_interfaces : key => "${association.network_interface_id}|${data.azurerm_network_interface.handover[key].network_security_group_id}"
+    for key, association in local.handed_over_interfaces : key => "${association.network_interface_id}|${local.network_security_group_ids[association.network_security_group]}"
     if local.handover_interface_groups[key] != "-"
   }
 }
