@@ -370,7 +370,19 @@ resource "azurerm_subnet_network_security_group_association" "this" {
 # xshield_azure_security_rules, as its next apply would remove rules it does not declare.
 locals {
   customer_network_security_groups_in_code = toset([for id in var.customer_network_security_groups_in_code : lower(id)])
-  customer_network_security_groups         = { for key, group in local.snap.customer_network_security_groups : key => group if !contains(local.customer_network_security_groups_in_code, lower(group.id)) }
+  customer_network_security_groups_wanted  = { for key, group in local.snap.customer_network_security_groups : key => group if !contains(local.customer_network_security_groups_in_code, lower(group.id)) }
+}
+
+# A group of yours can be deleted before discovery tells Xshield, so it is read, and given rules, only while Azure lists it.
+data "azurerm_resources" "customer_network_security_groups" {
+  count = length(local.customer_network_security_groups_wanted) > 0 ? 1 : 0
+
+  type = "Microsoft.Network/networkSecurityGroups"
+}
+
+locals {
+  present_customer_network_security_groups = toset([for group in try(data.azurerm_resources.customer_network_security_groups[0].resources, []) : lower(group.id)])
+  customer_network_security_groups         = { for key, group in local.customer_network_security_groups_wanted : key => group if contains(local.present_customer_network_security_groups, lower(group.id)) }
 }
 
 data "azurerm_network_security_group" "customer" {

@@ -51,6 +51,23 @@ override_data {
   }
 }
 
+# Your group exists: Azure lists it in the subscription.
+override_data {
+  target = data.azurerm_resources.customer_network_security_groups
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-snet-owner"
+        name                = "nsg-snet-owner"
+        type                = "Microsoft.Network/networkSecurityGroups"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
+}
+
 mock_provider "xshield" {
   mock_data "xshield_azure_enforcement_snapshot" {
     defaults = {
@@ -197,5 +214,19 @@ run "nothing_for_your_groups_writes_no_rule_and_keeps_no_record" {
   assert {
     condition     = length(azurerm_network_security_rule.customer) == 0 && length(terraform_data.xshield_applied_customer_rules) == 0
     error_message = "A version that writes nothing into your groups must remove the rules an earlier one wrote, and keep no record of them."
+  }
+}
+
+run "a_group_of_yours_deleted_before_xshield_observes_it_fails_no_plan" {
+  command = plan
+
+  override_data {
+    target = data.azurerm_resources.customer_network_security_groups
+    values = { resources = [] }
+  }
+
+  assert {
+    condition     = length(data.azurerm_network_security_group.customer) == 0 && length(azurerm_network_security_rule.customer) == 0
+    error_message = "A group of yours that Azure no longer lists must be neither read, which fails the plan, nor given rules."
   }
 }
