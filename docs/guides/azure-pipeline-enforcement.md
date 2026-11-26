@@ -14,7 +14,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 - An Xshield administrator has set the subscription to pipeline delivery through the Xshield API, which needs its cloud connector to be Read-Only. Xshield keeps it Read-Only while the subscription stays on pipeline delivery, so the connector never writes beside your pipeline.
 - An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the subscription.
-- Terraform 1.7 or later, and the azurerm provider 4.81.0 or later.
+- Terraform 1.7 or later, and the azurerm provider 4.81.0 or a later 4.x release.
 
 Xshield's group goes on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. Where every network interface and subnet of a workload carries a group of yours, Xshield adds the workload's rules to your subnet's group instead, ahead of your rules and naming only that workload's addresses, and leaves your rules as they are. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network, or the rules of such a group inline (step 3).
 

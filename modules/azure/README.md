@@ -102,4 +102,4 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `handover_interface_association_imports` | The import ID of each network interface association the cloud connector has handed over, by snapshot key. |
 | `handover_subnet_association_imports` | The import ID of each subnet association the cloud connector has handed over, by snapshot key. |
 
-Requires Terraform 1.7 and the azurerm provider 4.81.0 or later. `terraform test` runs the tests in `tests/` offline, with both providers mocked.
+Requires Terraform 1.7 and the azurerm provider 4.81.0 or a later 4.x release. `terraform test` runs the tests in `tests/` offline, with both providers mocked.
