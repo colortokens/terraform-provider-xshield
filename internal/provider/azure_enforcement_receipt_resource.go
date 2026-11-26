@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -84,7 +85,8 @@ func (r *azureEnforcementReceiptResource) Schema(ctx context.Context, req resour
 			"restores one changes no ID: `resend_trigger` is how such an apply still sends the receipt, so Xshield observes the " +
 			"subscription and region at once rather than at its next drift interval. If Xshield's latest " +
 			"receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan " +
-			"that creates the receipt while Xshield already holds one warns.\n\n" +
+			"that creates the receipt while Xshield already holds one warns. An imported receipt is not sent again when only " +
+			"`resend_trigger`, which an import cannot know, is new.\n\n" +
 			"Destroying it removes it from state and leaves the receipt history in Xshield.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true, Description: "Receipt identifier assigned by Xshield."},
@@ -204,9 +206,15 @@ func (r *azureEnforcementReceiptResource) Create(ctx context.Context, req resour
 }
 
 func (r *azureEnforcementReceiptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data azureEnforcementReceiptResourceModel
+	var data, prior azureEnforcementReceiptResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if onlyGainsResendTrigger(ctx, prior, data) {
+		data.ID, data.RunID, data.AppliedAt = prior.ID, prior.RunID, prior.AppliedAt
+		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
 	r.send(ctx, &data, &resp.Diagnostics)
@@ -275,6 +283,17 @@ func (r *azureEnforcementReceiptResource) ModifyPlan(ctx context.Context, req re
 		"not manage what that apply created. If another workspace applies to this subscription and region, only one should: "+
 		"do not apply this one. If this workspace's state was lost, import what that receipt names before applying.",
 		where, status.Applied.Workspace, appliedOn(*status.Applied)))
+}
+
+// onlyGainsResendTrigger is the first apply after an import: the import adopted the receipt Xshield holds but could not know
+// the configured trigger, so sending the same receipt again would record an apply that never happened.
+func onlyGainsResendTrigger(ctx context.Context, prior, planned azureEnforcementReceiptResourceModel) bool {
+	if !prior.ResendTrigger.IsNull() || planned.ResendTrigger.IsNull() {
+		return false
+	}
+	held, heldDiags := azureReceiptRequest(ctx, &prior, "")
+	sent, sentDiags := azureReceiptRequest(ctx, &planned, "")
+	return !heldDiags.HasError() && !sentDiags.HasError() && reflect.DeepEqual(held, sent)
 }
 
 func plansHeldAzureReceipt(ctx context.Context, held wireReceipt, planned azureEnforcementReceiptResourceModel) bool {

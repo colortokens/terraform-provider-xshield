@@ -167,3 +167,45 @@ func TestAzureReceiptDoesNotSendItsResendTrigger(t *testing.T) {
 		t.Errorf("resend_trigger changed the body:\n%s\nwant\n%s", with, without)
 	}
 }
+
+// The module always sets resend_trigger, which an import cannot know, so the first apply after an import sees it change.
+// That apply sends nothing when the receipt is otherwise the one imported, and does send one that changes anything else.
+func TestAzureReceiptGainingAResendTriggerAfterAnImportIsNotSentAgain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := azureReceiptSchema(ctx)
+	imported := azureReceiptObject(t, s, nil)
+	trigger := map[string]tftypes.Value{"resend_trigger": tftypes.NewValue(tftypes.String, "run-2")}
+	newVersion := map[string]tftypes.Value{"resend_trigger": tftypes.NewValue(tftypes.String, "run-2"),
+		"snapshot_version": tftypes.NewValue(tftypes.String, "v2")}
+	for name, test := range map[string]struct {
+		planned  map[string]tftypes.Value
+		wantSent bool
+	}{
+		"only the trigger is new":             {planned: trigger},
+		"the trigger and the version are new": {planned: newVersion, wantSent: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			api, requested := newRoutedSnapshotAPI(t, map[string]cannedResponse{
+				"/receipts": {http.StatusCreated, `{"receiptId":"rcpt-2","appliedAt":"2026-11-18T23:00:00Z"}`},
+			})
+			planned := tfsdk.Plan{Schema: s, Raw: azureReceiptObject(t, s, test.planned)}
+			updated := resource.UpdateResponse{State: tfsdk.State{Schema: s, Raw: imported}}
+			(&azureEnforcementReceiptResource{api: api}).Update(ctx, resource.UpdateRequest{Plan: planned,
+				State: tfsdk.State{Schema: s, Raw: imported}}, &updated)
+			if updated.Diagnostics.HasError() {
+				t.Fatal(updated.Diagnostics)
+			}
+			var id, trigger string
+			updated.State.GetAttribute(ctx, path.Root("id"), &id)
+			updated.State.GetAttribute(ctx, path.Root("resend_trigger"), &trigger)
+			if sent := len(*requested) > 0; sent != test.wantSent || trigger != "run-2" {
+				t.Errorf("requested %v, resend_trigger %q; want sent %v and the planned trigger kept", *requested, trigger, test.wantSent)
+			}
+			if wantID := map[bool]string{true: "rcpt-2", false: "rcpt-1"}[test.wantSent]; id != wantID {
+				t.Errorf("id %q, want %q", id, wantID)
+			}
+		})
+	}
+}

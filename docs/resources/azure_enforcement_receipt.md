@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Reports to Xshield that an Azure enforcement snapshot has been applied, and which Azure resource was created for each key in it. The azure enforcement module sends it for you.
   Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose version it did not publish, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged. An interface association may be left out once its network interface is gone.
-  A new receipt is sent only when the applied version, a resource ID, exclusive_rules or resend_trigger changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: resend_trigger is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
+  A new receipt is sent only when the applied version, a resource ID, exclusive_rules or resend_trigger changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: resend_trigger is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns. An imported receipt is not sent again when only resend_trigger, which an import cannot know, is new.
   Destroying it removes it from state and leaves the receipt history in Xshield.
 ---
 
@@ -15,11 +15,29 @@ Reports to Xshield that an Azure enforcement snapshot has been applied, and whic
 
 Place it in the same configuration as the snapshot's resources and reference their IDs, so it is only sent once they all exist. Xshield rejects a receipt whose version it did not publish, or whose resources omit or add to the snapshot's, so a partial or altered apply is never recorded as converged. An interface association may be left out once its network interface is gone.
 
-A new receipt is sent only when the applied version, a resource ID, `exclusive_rules` or `resend_trigger` changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: `resend_trigger` is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns.
+A new receipt is sent only when the applied version, a resource ID, `exclusive_rules` or `resend_trigger` changes. Azure gives a network security group or association recreated under the same name its old ID, so an apply that restores one changes no ID: `resend_trigger` is how such an apply still sends the receipt, so Xshield observes the subscription and region at once rather than at its next drift interval. If Xshield's latest receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan that creates the receipt while Xshield already holds one warns. An imported receipt is not sent again when only `resend_trigger`, which an import cannot know, is new.
 
 Destroying it removes it from state and leaves the receipt history in Xshield.
 
+## Example Usage
 
+```terraform
+# The azure enforcement module sends this for you. Written by hand, it must list
+# the ID of every resource the snapshot asks for, and reference them, so it is
+# sent only once they all exist.
+resource "xshield_azure_enforcement_receipt" "this" {
+  cloud_account_id = data.xshield_azure_enforcement_snapshot.this.cloud_account_id
+  region           = data.xshield_azure_enforcement_snapshot.this.region
+  workspace        = "xshield-enforcement-eastus2"
+  snapshot_version = data.xshield_azure_enforcement_snapshot.this.version
+
+  network_security_groups = { for key, group in azurerm_network_security_group.this : key => group.id }
+  subnet_associations     = { for key, association in azurerm_subnet_network_security_group_association.this : key => association.id }
+  interface_associations  = { for key, association in azurerm_network_interface_security_group_association.this : key => association.id }
+  # Changes whenever the apply recreates a group or association, which Azure gives its old ID.
+  resend_trigger = join(",", [for key in sort(keys(terraform_data.applied)) : terraform_data.applied[key].id])
+}
+```
 
 <!-- schema generated by tfplugindocs -->
 ## Schema
@@ -44,3 +62,15 @@ Destroying it removes it from state and leaves the receipt history in Xshield.
 - `applied_at` (String) When Xshield recorded the receipt.
 - `id` (String) Receipt identifier assigned by Xshield.
 - `run_id` (String) Run that sent the receipt, taken from `TFC_RUN_ID` when running in HCP Terraform or Terraform Enterprise.
+
+## Import
+
+Import is supported using the following syntax:
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# Import an Azure subscription's receipt by subscription ID and region. This adopts the receipt Xshield currently holds,
+# which recovers a lost state file without recording a new apply.
+terraform import xshield_azure_enforcement_receipt.this "00000000-0000-0000-0000-000000000000/eastus2"
+```
