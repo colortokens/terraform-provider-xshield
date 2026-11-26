@@ -100,6 +100,15 @@ The enforcement apply leaves a group listed in `customer_network_security_groups
 
 That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing.
 
+A group the module has already written rules into holds them in the enforcement workspace's state, and listing it makes the next enforcement apply delete them from the group. Before you list it, take them out of that state:
+
+```shell
+terraform state list | grep 'azurerm_network_security_rule.customer\["<group key>/'
+terraform state rm 'module.xshield_enforcement.azurerm_network_security_rule.customer["<group key>/<rule name>"]'
+```
+
+`<group key>` is the group's key in the snapshot's `customer_network_security_groups`. Remove each rule the list shows.
+
 **Done when** a plan of each such workspace shows only Xshield's rules added to the group.
 
 ## Step 4: Create the enforcement workspace and apply it, once per subscription and region
