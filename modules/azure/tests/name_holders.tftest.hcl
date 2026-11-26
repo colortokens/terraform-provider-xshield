@@ -9,6 +9,42 @@ mock_provider "azurerm" {
   mock_data "azurerm_resources" {
     defaults = { resources = [] }
   }
+  mock_data "azurerm_virtual_network" {
+    defaults = { subnets = ["snet-app", "snet-old", "snet-db"] }
+  }
+}
+
+# Every subnet the snapshots below name exists, in a virtual network Azure lists.
+override_data {
+  target = data.azurerm_resources.virtual_networks
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-b"
+        name                = "vnet-b"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
 }
 
 mock_provider "xshield" {
@@ -142,5 +178,15 @@ run "a_group_the_last_receipt_holds_is_not_looked_up" {
   assert {
     condition     = length(data.azurerm_resources.network_security_groups) == 0
     error_message = "with exclusive rules and every group applied, the module listed the subscription's groups"
+  }
+}
+
+run "groups_are_listed_only_in_the_snapshots_resource_groups" {
+  command = plan
+
+  assert {
+    condition = (toset(keys(data.azurerm_resources.network_security_groups)) == toset([for group in values(data.xshield_azure_enforcement_snapshot.this.network_security_groups) : lower(group.resource_group_name)]) &&
+    alltrue([for resource_group, read in data.azurerm_resources.network_security_groups : read.resource_group_name == resource_group]))
+    error_message = "Each resource group of the snapshot's groups is listed on its own, rather than every group in the subscription."
   }
 }

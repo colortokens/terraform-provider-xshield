@@ -18,6 +18,42 @@ mock_provider "azurerm" {
       }]
     }
   }
+  mock_data "azurerm_virtual_network" {
+    defaults = { subnets = ["snet-app", "snet-old", "snet-db"] }
+  }
+}
+
+# Every subnet the snapshots below name exists, in a virtual network Azure lists.
+override_data {
+  target = data.azurerm_resources.virtual_networks
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-b"
+        name                = "vnet-b"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
 }
 
 mock_provider "xshield" {
@@ -295,5 +331,31 @@ run "a_held_association_whose_interface_is_deleted_is_dropped_without_a_read" {
   assert {
     condition     = length(data.azurerm_network_interface.leaving) == 0 && length(azurerm_network_interface_security_group_association.this) == 0
     error_message = "A held association on a deleted interface must be neither read nor kept."
+  }
+}
+
+run "a_released_subnet_association_whose_subnet_is_gone_is_dropped_without_a_read" {
+  command = plan
+
+  override_data {
+    target = data.xshield_azure_enforcement_snapshot.this
+    values = {
+      published                    = true
+      version                      = "v43"
+      released_subnet_associations = { "ct-policy-ffffffffffff" = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a/subnets/snet-old" }
+      held_subnet_associations = { "ct-policy-eeeeeeeeeeee" = {
+        level_id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a/subnets/snet-old"
+        network_security_group_id = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/yours"
+      } }
+    }
+  }
+  override_data {
+    target = data.azurerm_virtual_network.subnet_levels
+    values = { subnets = ["snet-other"] }
+  }
+
+  assert {
+    condition     = length(data.azurerm_subnet.leaving) == 0 && length(azurerm_subnet_network_security_group_association.this) == 0
+    error_message = "A subnet deleted from its virtual network must not be read, as the read would fail the plan."
   }
 }

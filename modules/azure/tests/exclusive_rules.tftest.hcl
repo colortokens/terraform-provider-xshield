@@ -10,6 +10,42 @@ mock_provider "azurerm" {
   mock_data "azurerm_resources" {
     defaults = { resources = [] }
   }
+  mock_data "azurerm_virtual_network" {
+    defaults = { subnets = ["snet-app", "snet-old", "snet-db"] }
+  }
+}
+
+# Every subnet the snapshots below name exists, in a virtual network Azure lists.
+override_data {
+  target = data.azurerm_resources.virtual_networks
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-b"
+        name                = "vnet-b"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
 }
 
 mock_provider "xshield" {

@@ -7,6 +7,8 @@ locals {
   subscription_id = coalesce(var.cloud_account_id, data.azurerm_client_config.current.subscription_id)
   snap            = data.xshield_azure_enforcement_snapshot.this
   workspace       = coalesce(var.workspace, "xshield-enforcement-${local.subscription_id}-${var.region}")
+  # The tag Xshield and its cloud connector mark a pipeline's network security groups with.
+  xshield_delivery_tag = { "ct:delivery" = "pipeline" }
 }
 
 data "xshield_azure_enforcement_snapshot" "this" {
@@ -30,7 +32,7 @@ data "azurerm_resources" "rendered" {
   count = local.snap.published ? 0 : 1
 
   type          = "Microsoft.Network/networkSecurityGroups"
-  required_tags = { "ct:delivery" = "pipeline" }
+  required_tags = local.xshield_delivery_tag
 
   lifecycle {
     postcondition {
@@ -69,17 +71,22 @@ locals {
 # resources, and using both on one group makes each overwrite the other's rules. So with enable_exclusive_rules off,
 # the rules a group already holds that are not Xshield's are read back and given again with Xshield's. Xshield names
 # its rules CT-Rule- or CT-Test-Rule-, as the cloud connector does, so a rule named otherwise is someone else's.
+# Read by resource group: Xshield's groups are created in these, so an apply needs them anyway.
 data "azurerm_resources" "network_security_groups" {
-  count = length(local.new_network_security_groups) > 0 || !var.enable_exclusive_rules && length(local.snap.network_security_groups) > 0 ? 1 : 0
+  for_each = length(local.new_network_security_groups) > 0 || !var.enable_exclusive_rules && length(local.snap.network_security_groups) > 0 ? toset([for group in local.snap.network_security_groups : lower(group.resource_group_name)]) : toset([])
 
-  type = "Microsoft.Network/networkSecurityGroups"
+  type                = "Microsoft.Network/networkSecurityGroups"
+  resource_group_name = each.key
 }
 
 locals {
-  present_network_security_groups = { for group in try(data.azurerm_resources.network_security_groups[0].resources, []) : lower("${group.resource_group_name}/${group.name}") => group }
+  present_network_security_groups = {
+    for group in flatten([for resource_group, read in data.azurerm_resources.network_security_groups : [for group in read.resources : group if lower(group.resource_group_name) == resource_group]]) :
+    lower("${group.resource_group_name}/${group.name}") => group
+  }
   network_security_group_name_holders = {
     for key, group in local.new_network_security_groups : key => local.present_network_security_groups[lower("${group.resource_group_name}/${group.name}")]
-    if contains(keys(local.present_network_security_groups), lower("${group.resource_group_name}/${group.name}")) && try(local.present_network_security_groups[lower("${group.resource_group_name}/${group.name}")].tags["ct:delivery"], "") != "pipeline"
+    if contains(keys(local.present_network_security_groups), lower("${group.resource_group_name}/${group.name}")) && try(local.present_network_security_groups[lower("${group.resource_group_name}/${group.name}")].tags["ct:delivery"], "") != local.xshield_delivery_tag["ct:delivery"]
   }
 }
 
@@ -160,9 +167,42 @@ locals {
     { for key, held in local.snap.held_interface_associations : key => held.level_id if lookup(local.present_interfaces, lower(held.level_id), false) },
   )
   leaving_subnets = merge(
-    local.snap.released_subnet_associations,
-    { for key, held in local.snap.held_subnet_associations : key => held.level_id },
+    { for key, subnet_id in local.snap.released_subnet_associations : key => subnet_id if contains(local.present_subnets, lower(subnet_id)) },
+    { for key, held in local.snap.held_subnet_associations : key => held.level_id if contains(local.present_subnets, lower(held.level_id)) },
   )
+}
+
+# A subnet can go too, with its virtual network once its workloads are gone, so an association is planned, and a subnet
+# read, only while its subnet exists. Azure lists no subnet on its own: they are read from the virtual networks that exist.
+locals {
+  subnet_levels = toset([for id in concat(
+    [for association in local.snap.subnet_associations : association.subnet_id],
+    values(local.snap.released_subnet_associations),
+    [for held in local.snap.held_subnet_associations : held.level_id],
+    [for contained in local.snap.contained_subnet_associations : contained.level_id],
+    [for association in local.snap.handover_subnet_associations : association.subnet_id],
+  ) : lower(id)])
+  subnet_virtual_networks = toset([for id in local.subnet_levels : join("/", slice(split("/", id), 0, 9))])
+}
+
+data "azurerm_resources" "virtual_networks" {
+  count = length(local.subnet_levels) > 0 ? 1 : 0
+
+  type = "Microsoft.Network/virtualNetworks"
+}
+
+data "azurerm_virtual_network" "subnet_levels" {
+  for_each = { for network in try(data.azurerm_resources.virtual_networks[0].resources, []) : lower(network.id) => network if contains(local.subnet_virtual_networks, lower(network.id)) }
+
+  name                = each.value.name
+  resource_group_name = each.value.resource_group_name
+}
+
+locals {
+  present_subnets     = toset(flatten([for id, network in data.azurerm_virtual_network.subnet_levels : [for name in network.subnets : lower("${id}/subnets/${name}")]]))
+  subnet_associations = { for key, association in local.snap.subnet_associations : key => association if contains(local.present_subnets, lower(association.subnet_id)) }
+  contained_levels    = { for key, contained in local.snap.contained_subnet_associations : key => contained if contains(local.present_subnets, lower(contained.level_id)) }
+  handover_subnets    = { for key, association in local.snap.handover_subnet_associations : key => association if contains(local.present_subnets, lower(association.subnet_id)) }
 }
 
 # Xshield's groups are the ones tagged for a pipeline. Their names are no guide, as a name template can name them anything.
@@ -170,7 +210,7 @@ data "azurerm_resources" "xshield_network_security_groups" {
   count = length(local.leaving_interfaces) + length(local.leaving_subnets) > 0 ? 1 : 0
 
   type          = "Microsoft.Network/networkSecurityGroups"
-  required_tags = { "ct:delivery" = "pipeline" }
+  required_tags = local.xshield_delivery_tag
 }
 
 locals {
@@ -220,14 +260,14 @@ locals {
   # association is given the group the subnet carries now, which its state then holds.
   held_subnets = {
     for key, held in local.snap.held_subnet_associations : key => { level_id = held.level_id, network_security_group_id = data.azurerm_subnet.leaving[key].network_security_group_id }
-    if !lookup(local.xshields_or_no_group, lower(coalesce(try(data.azurerm_subnet.leaving[key].network_security_group_id, null), "-")), false)
+    if contains(keys(local.leaving_subnets), key) && !lookup(local.xshields_or_no_group, lower(coalesce(try(data.azurerm_subnet.leaving[key].network_security_group_id, null), "-")), false)
   }
 }
 
 # Xshield's cloud connector contains a workload by putting a group of its own on the level in place of Xshield's, and puts
 # Xshield's back when it reverts, so an association of a contained workload stays in the state unchanged and none is created.
 data "azurerm_subnet" "contained" {
-  for_each = local.snap.contained_subnet_associations
+  for_each = local.contained_levels
 
   name                 = split("/", each.value.level_id)[10]
   virtual_network_name = split("/", each.value.level_id)[8]
@@ -240,7 +280,7 @@ locals {
     if lookup(local.present_interfaces, lower(contained.level_id), false)
   }
   contained_subnets = {
-    for key, contained in local.snap.contained_subnet_associations : key => {
+    for key, contained in local.contained_levels : key => {
       level_id                  = contained.level_id
       network_security_group_id = coalesce(data.azurerm_subnet.contained[key].network_security_group_id, contained.network_security_group_id)
     }
@@ -268,7 +308,7 @@ data "azurerm_network_interface" "handover" {
 }
 
 data "azurerm_subnet" "handover" {
-  for_each = local.snap.handover_subnet_associations
+  for_each = local.handover_subnets
 
   name                 = split("/", each.value.subnet_id)[10]
   virtual_network_name = split("/", each.value.subnet_id)[8]
@@ -284,12 +324,12 @@ locals {
     if contains(["-", local.planned_network_security_group_ids[association.network_security_group]], local.handover_interface_groups[key])
   }
   handed_over_subnets = {
-    for key, association in local.snap.handover_subnet_associations : key => association
+    for key, association in local.handover_subnets : key => association
     if contains(["-", local.planned_network_security_group_ids[association.network_security_group]], local.handover_subnet_groups[key])
   }
   awaiting_handover = concat(
     [for key, association in local.handover_interfaces : split("/", association.network_interface_id)[8] if !contains(keys(local.handed_over_interfaces), key)],
-    [for key, association in local.snap.handover_subnet_associations : split("/", association.subnet_id)[10] if !contains(keys(local.handed_over_subnets), key)],
+    [for key, association in local.handover_subnets : split("/", association.subnet_id)[10] if !contains(keys(local.handed_over_subnets), key)],
   )
 }
 
@@ -314,7 +354,7 @@ resource "azurerm_network_interface_security_group_association" "this" {
 
 resource "azurerm_subnet_network_security_group_association" "this" {
   for_each = merge(
-    { for key, association in local.snap.subnet_associations : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
+    { for key, association in local.subnet_associations : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     { for key, association in local.handed_over_subnets : key => { level_id = association.subnet_id, network_security_group_id = local.network_security_group_ids[association.network_security_group] } },
     local.held_subnets,
     local.contained_subnets,

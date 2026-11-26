@@ -78,8 +78,8 @@ resource "azurerm_role_definition" "enforcement" {
 
   permissions {
     actions = [
-      # The module lists the subscription's network security groups and network interfaces, and polls Azure's long-running
-      # operations.
+      # The module lists the subscription's network interfaces and virtual networks, and the network security groups of the
+      # snapshot's resource groups, and polls Azure's long-running operations.
       "Microsoft.Resources/subscriptions/resources/read",
       "Microsoft.Network/locations/operations/read",
 

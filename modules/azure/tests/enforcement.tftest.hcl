@@ -8,6 +8,42 @@ mock_provider "azurerm" {
   mock_data "azurerm_resources" {
     defaults = { resources = [] }
   }
+  mock_data "azurerm_virtual_network" {
+    defaults = { subnets = ["snet-app", "snet-old", "snet-db"] }
+  }
+}
+
+# Every subnet the snapshots below name exists, in a virtual network Azure lists.
+override_data {
+  target = data.azurerm_resources.virtual_networks
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-b"
+        name                = "vnet-b"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
 }
 
 mock_provider "xshield" {
@@ -374,4 +410,20 @@ run "a_region_by_its_display_name_is_refused" {
   }
 
   expect_failures = [var.region]
+}
+
+run "an_association_whose_virtual_network_is_gone_is_left_out" {
+  override_data {
+    target = data.azurerm_resources.virtual_networks
+    values = { resources = [] }
+  }
+
+  assert {
+    condition     = length(azurerm_subnet_network_security_group_association.this) == 0 && length(azurerm_network_interface_security_group_association.this) == 1
+    error_message = "An association on a subnet that went with its virtual network would fail the apply."
+  }
+  assert {
+    condition     = length(xshield_azure_enforcement_receipt.this[0].subnet_associations) == 0
+    error_message = "The receipt leaves out the association it did not create."
+  }
 }

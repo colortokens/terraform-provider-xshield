@@ -18,6 +18,42 @@ mock_provider "azurerm" {
       }]
     }
   }
+  mock_data "azurerm_virtual_network" {
+    defaults = { subnets = ["snet-app", "snet-old", "snet-db"] }
+  }
+}
+
+# Every subnet the snapshots below name exists, in a virtual network Azure lists.
+override_data {
+  target = data.azurerm_resources.virtual_networks
+  values = {
+    resources = [
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-a"
+        name                = "vnet-a"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+      {
+        id                  = "/subscriptions/sub-a/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-b"
+        name                = "vnet-b"
+        type                = "Microsoft.Network/virtualNetworks"
+        location            = "eastus2"
+        resource_group_name = "rg-net"
+        tags                = {}
+      },
+    ]
+  }
 }
 
 mock_provider "xshield" {
@@ -188,5 +224,23 @@ run "an_interface_that_no_longer_exists_is_not_read" {
   assert {
     condition     = length(data.azurerm_network_interface.handover) == 0 && length(azurerm_network_interface_security_group_association.this) == 0
     error_message = "A deleted network interface must not fail the plan."
+  }
+}
+
+run "a_subnet_that_no_longer_exists_is_not_read" {
+  command = plan
+
+  override_data {
+    target = data.azurerm_network_interface.handover["ct-policy-aaaaaaaaaaaa"]
+    values = { name = "nic-app", network_security_group_id = null }
+  }
+  override_data {
+    target = data.azurerm_virtual_network.subnet_levels
+    values = { subnets = [] }
+  }
+
+  assert {
+    condition     = length(data.azurerm_subnet.handover) == 0 && length(azurerm_subnet_network_security_group_association.this) == 0
+    error_message = "A handover subnet deleted from its virtual network must not be read, as the read would fail the plan."
   }
 }
