@@ -244,6 +244,87 @@ run "an_association_the_module_no_longer_declares_is_not_imported" {
   }
 }
 
+run "an_association_the_connector_handed_over_is_imported_from_the_receipt" {
+  command = plan
+
+  override_data {
+    target = module.xshield_enforcement.data.azurerm_resources.network_interfaces
+    values = { resources = [
+      for nic in ["nic-web", "nic-old", "nic-handed"] : {
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/${nic}"
+        name                = nic
+        type                = "Microsoft.Network/networkInterfaces"
+        location            = "eastus2"
+        resource_group_name = "rg-app"
+        tags                = {}
+      }
+    ] }
+  }
+  override_data {
+    target = module.xshield_enforcement.data.xshield_azure_enforcement_snapshot.this
+    values = {
+      cloud_account_id = "11111111-2222-3333-4444-555555555555"
+      region           = "eastus2"
+      published        = true
+      version          = "v7"
+      network_security_groups = {
+        "ct-policy-eeeeeeeeeeee" = { name = "ct-policy-eeeeeeeeeeee", resource_group_name = "rg-app", location = "eastus2", tags = { "ct:delivery" = "pipeline" }, security_rules = [] }
+      }
+      interface_associations = {}
+      subnet_associations    = {}
+      handover_interface_associations = {
+        "ct-policy-eeeeeeeeeeee" = { network_security_group = "ct-policy-eeeeeeeeeeee", network_interface_id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-handed" }
+      }
+      handover_subnet_associations     = {}
+      held_interface_associations      = {}
+      held_subnet_associations         = {}
+      contained_interface_associations = {}
+      contained_subnet_associations    = {}
+      released_interface_associations  = {}
+      released_subnet_associations     = {}
+      assets                           = {}
+      customer_network_security_groups = {}
+    }
+  }
+  override_data {
+    target = module.xshield_enforcement.data.azurerm_network_interface.handover["ct-policy-eeeeeeeeeeee"]
+    values = { name = "nic-handed", network_security_group_id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee" }
+  }
+  override_data {
+    target = data.xshield_azure_enforcement_status.recover
+    values = {
+      cloud_account_id = "11111111-2222-3333-4444-555555555555"
+      region           = "eastus2"
+      applied_version  = "v7"
+      applied_network_security_groups = {
+        "ct-policy-eeeeeeeeeeee" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee"
+      }
+      applied_interface_associations = {
+        "ct-policy-eeeeeeeeeeee" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-handed|/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee"
+      }
+      applied_subnet_associations = {}
+      notices                     = []
+      drift_findings              = []
+    }
+  }
+  override_resource {
+    target = module.xshield_enforcement.azurerm_network_security_group.this["ct-policy-eeeeeeeeeeee"]
+    values = { id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee" }
+  }
+  override_resource {
+    target          = module.xshield_enforcement.azurerm_network_interface_security_group_association.this["ct-policy-eeeeeeeeeeee"]
+    override_during = plan
+    values          = { id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-handed|/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee" }
+  }
+
+  assert {
+    condition = local.recovered_interface_associations == {
+      "ct-policy-eeeeeeeeeeee" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-handed|/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/ct-policy-eeeeeeeeeeee"
+    }
+    error_message = "An association the cloud connector handed over, which the receipt holds and the version still lists as a handover association, must be imported, or the apply tries to create it on a level that already carries the group."
+  }
+}
+
 run "a_skipped_import_is_left_to_the_apply" {
   command = plan
 

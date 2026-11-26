@@ -36,13 +36,13 @@ output "network_security_group_ids" {
 }
 
 output "interface_association_keys" {
-  description = "The network interface associations this run declares, by snapshot key: the snapshot's, less any whose network interface no longer exists."
-  value       = keys(local.interface_associations)
+  description = "The network interface associations this run declares, by snapshot key: the snapshot's and those the cloud connector has handed over, less any whose network interface no longer exists."
+  value       = concat(keys(local.interface_associations), keys(local.handed_over_interfaces))
 }
 
 output "subnet_association_keys" {
-  description = "As interface_association_keys, for subnet associations: the snapshot's, less any whose subnet no longer exists."
-  value       = keys(local.subnet_associations)
+  description = "As interface_association_keys, for subnet associations: the snapshot's and those the cloud connector has handed over, less any whose subnet no longer exists."
+  value       = concat(keys(local.subnet_associations), keys(local.handed_over_subnets))
 }
 
 output "kept_interface_association_imports" {

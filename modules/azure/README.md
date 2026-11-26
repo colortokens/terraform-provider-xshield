@@ -100,8 +100,8 @@ While Xshield has published nothing, the output is one sentence that says so. Fo
 | `summary` | Counts of network security groups, rules, and network interface and subnet associations. |
 | `review` | What the applied version holds, as sentences: where each group is associated and for which assets, what its rules allow and deny in the order Azure applies them, and a closing count. |
 | `network_security_group_ids` | The IDs of each Xshield asset's network security groups, keyed by Xshield asset ID. |
-| `interface_association_keys` | The network interface associations this run declares, by snapshot key: the snapshot's, less any whose network interface no longer exists. |
-| `subnet_association_keys` | As `interface_association_keys`, for subnet associations: the snapshot's, less any whose subnet no longer exists. |
+| `interface_association_keys` | The network interface associations this run declares, by snapshot key: the snapshot's and those the cloud connector has handed over, less any whose network interface no longer exists. |
+| `subnet_association_keys` | As `interface_association_keys`, for subnet associations: the snapshot's and those the cloud connector has handed over, less any whose subnet no longer exists. |
 | `kept_interface_association_imports` | The import ID of each network interface association kept for a group of yours or the cloud connector's, held or contained, by snapshot key. The receipt leaves them out, so [`recovery-azure/`](../../examples/enforcement-snapshot/recovery-azure/recovery.tf) imports them from here. |
 | `kept_subnet_association_imports` | As `kept_interface_association_imports`, for subnet associations, whose import ID is the subnet's ID. |
 | `customer_security_rule_imports` | The import ID of each of Xshield's rules the module adds to a group of yours, `<group ID>/securityRules/<rule name>`, by its key in `azurerm_network_security_rule.customer`. |

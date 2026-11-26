@@ -1,7 +1,9 @@
 # Rebuilds a lost Azure enforcement state from the last receipt. Add this file to the enforcement workspace, set
 # snapshot_version = data.xshield_azure_enforcement_status.recover.applied_version on the module, apply once, then
-# delete this file and the pin. An object deleted outside Terraform since stops the plan with "Cannot import
-# non-existent remote object": add its key to skipped_imports, under its kind, and the apply creates it again.
+# delete this file and the pin. Delete handover.tf first if the workspace still has it: this file imports the
+# associations it would, and two imports to one address fail the plan. An object deleted outside Terraform since stops
+# the plan with "Cannot import non-existent remote object": add its key to skipped_imports, under its kind, and the
+# apply creates it again.
 data "azurerm_client_config" "recover" {}
 
 data "xshield_azure_enforcement_status" "recover" {
