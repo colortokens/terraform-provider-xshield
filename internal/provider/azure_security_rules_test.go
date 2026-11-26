@@ -230,8 +230,8 @@ func TestADeclaredRuleNamedAsXshieldNamesItsOwnFailsThePlan(t *testing.T) {
 func TestYourRuleAtTheLowestPriorityFailsThePlanNamingTheGroup(t *testing.T) {
 	t.Parallel()
 	_, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, yourAllowRule("allow-ssh", 100)))
-	if ok || !strings.Contains(errs, "nsg-snet-owner") || !strings.Contains(errs, "priority 100") {
-		t.Errorf("ok %v errors %q, want the plan to fail naming the group and your rule's priority", ok, errs)
+	if ok || !strings.Contains(errs, "nsg-snet-owner") || !strings.Contains(errs, "priority 100") || !strings.Contains(errs, "NO_FREE_PRIORITY") {
+		t.Errorf("ok %v errors %q, want the plan to fail naming the group, your rule's priority and the refusal reason Xshield gives such a workload", ok, errs)
 	}
 }
 

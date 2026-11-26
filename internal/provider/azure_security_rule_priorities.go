@@ -80,7 +80,9 @@ func (room azureRoom) tooFullError(groupName, direction string, rules int) error
 			groupName, rules, direction, azureLowestRulePriority, azureHighestRulePriority)
 	}
 	return fmt.Errorf("network security group %s has no room for Xshield's %d %s rules ahead of yours: Azure numbers rules from %d, and your "+
-		"first %s rule is at priority %d. Move your %s rules up to leave at least %d priorities below your first one that no rule holds",
+		"first %s rule is at priority %d. Move your %s rules up to leave at least %d priorities below your first one that no rule holds. "+
+		"Once the cloud connector observes the group, Xshield refuses each workload whose rules go there, with reason NO_FREE_PRIORITY in "+
+		"xshield_azure_enforcement_status, and the rest of the subscription and region applies; until then this check stops the plan",
 		groupName, rules, direction, azureLowestRulePriority, direction, room.ceiling, direction, rules)
 }
 
