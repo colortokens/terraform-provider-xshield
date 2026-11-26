@@ -93,10 +93,12 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"`memberUnattached` when a workload's network interface or subnet no longer carries its group, and " +
 					"`groupUnmanaged` when a network security group carries the pipeline's tags but the applied state does not hold it. " +
 					"`severity`: `high` where access may be wider than approved or a workload is unenforced, otherwise `medium`. " +
-					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` for `groupUnmanaged`, " +
-					"which Terraform cannot see and must be removed by hand. " +
+					"`restoration`: `pipeline` when the next enforcement apply restores it, `manual` when a person must: for " +
+					"`groupUnmanaged`, which Terraform cannot see and must be removed by hand, for `ruleUnmanaged` on a rule not named as " +
+					"Xshield's while the latest receipt did not set `exclusive_rules`, and for `groupMissing` and `memberUnattached` on a group of yours. " +
 					"`resource`: Azure resource ID of the affected group or rule, or the Xshield asset ID for `memberUnattached`. " +
-					"`resource_name`: the group's key for `groupMissing`, the rule's name for a rule finding, the group's name for `groupUnmanaged`. " +
+					"`resource_name`: the name of what `resource` identifies: the workload for `memberUnattached`, the group for a group " +
+					"finding, and the rule for a rule finding. " +
 					"`key`: snapshot key involved: the group's key in `xshield_azure_enforcement_snapshot`, or `<group key>/<rule name>` for a missing or changed rule. " +
 					"`detail`: human-readable explanation. " +
 					"`detected_at`: when Xshield recorded the finding, which stays recorded until an observation shows it gone; null " +
@@ -110,8 +112,8 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 				}},
 				MarkdownDescription: "What Xshield could not enforce in the expected version, and why. A refused workload gets no " +
 					"network security group of Xshield's and keeps the groups it has, until the cause is fixed. " +
-					"`reason`: why, such as `NO_FREE_LEVEL` when the workload's network interface and subnet both carry a network " +
-					"security group of yours, which its message names, `INTERFACES_IN_SEVERAL_SUBNETS` when its network interfaces " +
+					"`reason`: why, such as `NO_FREE_LEVEL` when the workload's network interfaces carry a network security group of " +
+					"yours and it has no subnet Xshield can use, which its message names, `INTERFACES_IN_SEVERAL_SUBNETS` when its network interfaces " +
 					"are in more than one subnet and one carries a group of yours, so no one subnet would cover them all, " +
 					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, " +
@@ -120,16 +122,27 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"network policies are neither `Enabled` nor `NetworkSecurityGroupEnabled`, so a group there would not filter its " +
 					"traffic, `NO_PRIVATE_INBOUND` when a Function App with inbound policy has no private endpoint, " +
 					"`INTEGRATION_SUBNET_SHARED` when a Function App with outbound policy shares its VNet integration subnet with " +
-					"other apps, or `DISCOVER_FAILED:NO_INTEGRATION_SUBNET_RANGE` when discovery gives no address range of that subnet. " +
+					"other apps, `DISCOVER_FAILED:NO_INTEGRATION_SUBNET_RANGE` when discovery gives no address range of that subnet, " +
+					"`CONNECTOR_GROUP_UNRECORDED` when the cloud connector's own group is on the workload and the connector holds no " +
+					"record of the group it displaced, so it cannot hand the workload over and its group goes on enforcing it, " +
+					"`RULE_BEYOND_WORKLOAD` when its rules would go into a group of yours and one names a service tag where it names the " +
+					"workload, so it cannot be held to the workload's own addresses, or `NO_FREE_PRIORITY` when the first rule of the " +
+					"group of yours its rules would go into leaves too few priorities below it, in a direction, for Xshield's rules " +
+					"there, which its message names: move your rules up, and Xshield writes the workload's rules once the cloud " +
+					"connector observes the group. " +
 					"An `observationStale` notice is about the subscription and region: the cloud connector has not observed them for three " +
 					"observation intervals since the last apply or observation, so a change made in Azure since is not shown as drift. " +
 					"An `associationHeld` notice names a group of Xshield's that this version no longer places, whose network " +
 					"interface or subnet the cloud connector has shown carrying a network security group of yours since the last " +
 					"apply. Azure removes an association by clearing its level's group, so removing Xshield's would remove yours: " +
 					"the `azure` enforcement module keeps it in its state, unchanged, until the level carries no group of yours. " +
-					"An `assetContained` notice names a workload the cloud connector contains: its group is on the workload's network " +
+					"An `assetContained` notice, with reason `BREACH_ACTIVE`, names a workload the cloud connector contains under a " +
+					"breach response: its group is on the workload's network " +
 					"interface or subnet in place of Xshield's, and the module keeps Xshield's association as it is until the " +
-					"containment is reverted. A `levelSharedWithContained` notice names a workload whose subnet a contained workload " +
+					"containment is reverted. An `associationKept` notice names a workload that this version places at another " +
+					"network interface or subnet: Xshield keeps the association it leaves, with that group and its rules, until a " +
+					"receipt shows the new placement applied, so a workload moving between its network interface and its subnet " +
+					"keeps its old group for one more apply. A `levelSharedWithContained` notice names a workload whose subnet a contained workload " +
 					"shares, so the connector's group covers it too and it is not synchronized until the containment is reverted. " +
 					"A `customerGroupWritten` notice names a workload whose every network interface and subnet carries a group of " +
 					"yours, so Xshield writes its rules into your subnet's group, which `group` names. A `connectorHandsOver` notice " +
@@ -137,11 +150,12 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"applied, the connector puts Xshield's group, or the group of yours its own displaced, in place of its group, and " +
 					"then removes its group. " +
 					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `connectorHandsOver`, " +
-					"`associationHeld` or `observationStale`. " +
+					"`associationHeld`, `associationKept` or `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group`: for `associationHeld`, the group by its key in the snapshot; for `customerGroupWritten`, the name of your " +
-					"group; for `connectorHandsOver`, the name of the cloud connector's group; null for every other code. " +
+					"`group`: for `associationHeld` and `associationKept`, the group by its key in the snapshot; for `customerGroupWritten`, the name of your " +
+					"group; for `connectorHandsOver`, the name of the cloud connector's group; null for `assetRefused`, `assetContained`, " +
+					"`levelSharedWithContained` and `observationStale`. " +
 					"`since`: for `observationStale`, the last apply or observation it counts from; null for every other code. " +
 					"`message`: what happened and what to do about it.",
 			},
