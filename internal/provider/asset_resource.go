@@ -308,8 +308,13 @@ func resolveAssetImportID(ctx context.Context, client *sdk.Xshield, id string) (
 	if err != nil {
 		return "", fmt.Errorf("look up asset %q by ID: %w", id, err)
 	}
-	if res == nil || res.StatusCode != http.StatusOK {
+	switch {
+	case res == nil:
+		return "", fmt.Errorf("look up asset %q by ID: no response", id)
+	case res.StatusCode == http.StatusNotFound:
 		return "", notFound
+	case res.StatusCode != http.StatusOK:
+		return "", fmt.Errorf("look up asset %q by ID: unexpected response code %d: %s", id, res.StatusCode, debugResponse(res.RawResponse))
 	}
 	return id, nil
 }

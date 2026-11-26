@@ -14,6 +14,8 @@ import (
 
 // A cloud connector names its assets by an ID that is not a UUID: a hash of the Azure resource ID, or the AWS ARN in
 // URL-safe base64.
+const assetIDTheAPIFailsOn = "fedcba9876543210fedcba9876543210"
+
 func newAssetImportClient(t *testing.T, namedAssets map[string]string, assetIDs ...string) *sdk.Xshield {
 	t.Helper()
 	newLookupClient(t, "{}")
@@ -35,6 +37,11 @@ func newAssetImportClient(t *testing.T, namedAssets map[string]string, assetIDs 
 			_, _ = io.WriteString(w, `{"items":[`+strings.Join(items, ",")+`]}`)
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/assets/"):
 			id := strings.TrimPrefix(r.URL.Path, "/api/assets/")
+			if id == assetIDTheAPIFailsOn {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"message":"malformed asset id"}`)
+				return
+			}
 			if !known[id] {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = io.WriteString(w, `{"message":"not found"}`)
@@ -66,6 +73,7 @@ func TestAssetImportResolvesCloudAssetIDs(t *testing.T) {
 		"an asset by its name":     {id: "prod-crm-app", want: azureID},
 		"a UUID as given":          {id: uuid, want: uuid},
 		"neither a name nor an ID": {id: "no-such-asset", wantErr: `no asset named or with the ID "no-such-asset"`},
+		"an ID the API fails on":   {id: assetIDTheAPIFailsOn, wantErr: "400"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
