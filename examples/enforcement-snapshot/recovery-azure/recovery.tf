@@ -3,7 +3,9 @@
 # delete this file and the pin. Delete handover.tf first if the workspace still has it: this file imports the
 # associations it would, and two imports to one address fail the plan. An object deleted outside Terraform since stops
 # the plan with "Cannot import non-existent remote object": add its key to skipped_imports, under its kind, and the
-# apply creates it again.
+# apply creates it again. A plan stop that says Xshield clears it at its next observation stays while the pin does, as a
+# pinned version never changes: once Xshield shows a newer version, pin that one or remove the pin, and add to
+# skipped_imports any key the plan then says has no configuration.
 data "azurerm_client_config" "recover" {}
 
 data "xshield_azure_enforcement_status" "recover" {

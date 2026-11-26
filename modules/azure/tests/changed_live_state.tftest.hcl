@@ -200,6 +200,30 @@ run "a_group_of_yours_put_on_the_subnet_since_stops_the_plan" {
   }
 
   expect_failures = [data.azurerm_subnet.associated]
+
+  assert {
+    condition     = local.next_observation_advice == ": plan again after that."
+    error_message = "Unpinned, the stop clears once Xshield publishes the version its next observation gives, so the plan says to plan again then."
+  }
+}
+
+run "under_a_pinned_version_the_stop_says_the_pin_keeps_it" {
+  command = plan
+
+  variables {
+    snapshot_version = "v2"
+  }
+  override_data {
+    target = data.azurerm_subnet.associated["ct-policy-aaaaaaaaaaaa"]
+    values = { name = "snet-app", network_security_group_id = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-yours" }
+  }
+
+  expect_failures = [data.azurerm_subnet.associated]
+
+  assert {
+    condition     = strcontains(local.next_observation_advice, "snapshot_version pins (v2), so this stop stays until you pin that newer version or remove the pin")
+    error_message = "A pinned version never changes, so the stop must say the pin keeps it and to move or remove the pin, not to plan again after the next observation."
+  }
 }
 
 run "the_subnet_carrying_the_group_the_association_wants_plans" {

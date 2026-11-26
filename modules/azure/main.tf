@@ -217,6 +217,8 @@ locals {
   # A level that carries no group reads back as "" or null, which coalesce turns to "-": taking the association off it takes
   # nothing of yours.
   xshields_or_no_group = merge({ "-" = true }, { for group in try(data.azurerm_resources.xshield_network_security_groups[0].resources, []) : lower(group.id) => true })
+
+  next_observation_advice = var.snapshot_version == null ? ": plan again after that." : ", in a version newer than the one snapshot_version pins (${var.snapshot_version}), so this stop stays until you pin that newer version or remove the pin."
 }
 
 # Azure removes an association by taking whatever group its network interface or subnet carries off it. So each one
@@ -231,7 +233,7 @@ data "azurerm_network_interface" "leaving" {
   lifecycle {
     postcondition {
       condition     = contains(keys(local.snap.held_interface_associations), each.key) || lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false)
-      error_message = "Network interface ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the interface's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
+      error_message = "Network interface ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the interface's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription${local.next_observation_advice}"
     }
   }
 }
@@ -246,7 +248,7 @@ data "azurerm_subnet" "leaving" {
   lifecycle {
     postcondition {
       condition     = contains(keys(local.snap.held_subnet_associations), each.key) || lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false)
-      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the subnet's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
+      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the subnet's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription${local.next_observation_advice}"
     }
   }
 }
@@ -264,7 +266,7 @@ data "azurerm_subnet" "associated" {
   lifecycle {
     postcondition {
       condition     = lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false) || lower(coalesce(self.network_security_group_id, "-")) == local.planned_network_security_group_ids[each.value.network_security_group]
-      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.value.network_security_group}. azurerm would replace the association, and Azure replaces one by clearing the subnet's group, so applying would take yours off it. The plan stopped and nothing was applied. Xshield takes the change into account once the cloud connector next observes the subscription: plan again after that."
+      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.value.network_security_group}. azurerm would replace the association, and Azure replaces one by clearing the subnet's group, so applying would take yours off it. The plan stopped and nothing was applied. Xshield takes the change into account once the cloud connector next observes the subscription${local.next_observation_advice}"
     }
   }
 }
