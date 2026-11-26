@@ -127,10 +127,21 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"interface or subnet the cloud connector has shown carrying a network security group of yours since the last " +
 					"apply. Azure removes an association by clearing its level's group, so removing Xshield's would remove yours: " +
 					"the `azure` enforcement module keeps it in its state, unchanged, until the level carries no group of yours. " +
-					"`code`: `assetRefused`, `associationHeld` or `observationStale`. " +
+					"An `assetContained` notice names a workload the cloud connector contains: its group is on the workload's network " +
+					"interface or subnet in place of Xshield's, and the module keeps Xshield's association as it is until the " +
+					"containment is reverted. A `levelSharedWithContained` notice names a workload whose subnet a contained workload " +
+					"shares, so the connector's group covers it too and it is not synchronized until the containment is reverted. " +
+					"A `customerGroupWritten` notice names a workload whose every network interface and subnet carries a group of " +
+					"yours, so Xshield writes its rules into your subnet's group, which `group` names. A `connectorHandsOver` notice " +
+					"names a workload the cloud connector enforced with a group of its own, which `group` names: once this version is " +
+					"applied, the connector puts Xshield's group, or the group of yours its own displaced, in place of its group, and " +
+					"then removes its group. " +
+					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `connectorHandsOver`, " +
+					"`associationHeld` or `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group`: for `associationHeld`, the group by its key in the snapshot; null for every other code. " +
+					"`group`: for `associationHeld`, the group by its key in the snapshot; for `customerGroupWritten`, the name of your " +
+					"group; for `connectorHandsOver`, the name of the cloud connector's group; null for every other code. " +
 					"`since`: for `observationStale`, the last apply or observation it counts from; null for every other code. " +
 					"`message`: what happened and what to do about it.",
 			},
