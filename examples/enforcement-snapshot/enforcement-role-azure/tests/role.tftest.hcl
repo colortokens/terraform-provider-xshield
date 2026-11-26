@@ -37,8 +37,12 @@ run "network_actions_only" {
   command = plan
 
   assert {
-    condition     = alltrue([for action in one(azurerm_role_definition.enforcement.permissions).actions : startswith(action, "Microsoft.Network/") || action == "Microsoft.Resources/subscriptions/resources/read"])
-    error_message = "The role grants network actions, and the listing of the subscription's resources, and nothing else."
+    condition     = alltrue([for action in one(azurerm_role_definition.enforcement.permissions).actions : startswith(action, "Microsoft.Network/") || contains(["Microsoft.Resources/subscriptions/resources/read", "Microsoft.Resources/subscriptions/resourceGroups/resources/read"], action)])
+    error_message = "The role grants network actions, and the listing of the subscription's and its resource groups' resources, and nothing else."
+  }
+  assert {
+    condition     = contains(one(azurerm_role_definition.enforcement.permissions).actions, "Microsoft.Resources/subscriptions/resourceGroups/resources/read")
+    error_message = "The module lists the network security groups of each of the snapshot's resource groups, which Azure checks as a resource group's resources read."
   }
   assert {
     condition     = !anytrue([for action in one(azurerm_role_definition.enforcement.permissions).actions : strcontains(action, "*")])
