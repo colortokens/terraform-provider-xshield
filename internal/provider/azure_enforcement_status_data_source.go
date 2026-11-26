@@ -148,12 +148,14 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"yours, so Xshield writes its rules into your subnet's group, which `group` names. A `connectorHandsOver` notice " +
 					"names a workload the cloud connector enforced with a group of its own, which `group` names: once this version is " +
 					"applied, the connector puts Xshield's group, or the group of yours its own displaced, in place of its group, and " +
-					"then removes its group. " +
-					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `connectorHandsOver`, " +
+					"then removes its group. A `testAllowsCarried` notice names a workload whose Test mode allows Xshield keeps in the group " +
+					"of yours that `group` names, as its subnet already let that traffic through one; a group of yours otherwise gets " +
+					"no Test mode allow, which would let through traffic your rules deny. They go once the workload leaves Test mode. " +
+					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `testAllowsCarried`, `connectorHandsOver`, " +
 					"`associationHeld`, `associationKept` or `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group`: for `associationHeld` and `associationKept`, the group by its key in the snapshot; for `customerGroupWritten`, the name of your " +
+					"`group`: for `associationHeld` and `associationKept`, the group by its key in the snapshot; for `customerGroupWritten` and `testAllowsCarried`, the name of your " +
 					"group; for `connectorHandsOver`, the name of the cloud connector's group; null for `assetRefused`, `assetContained`, " +
 					"`levelSharedWithContained` and `observationStale`. " +
 					"`since`: for `observationStale`, the last apply or observation it counts from; null for every other code. " +
