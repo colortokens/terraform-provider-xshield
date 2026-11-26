@@ -835,7 +835,7 @@ func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, r
 		data.TemplatePorts = reorderToStateOrder(data.TemplatePorts, existingPorts, templatePortKey)
 	}
 	if len(existingPaths) > 0 && len(data.TemplatePaths) > 0 {
-		data.TemplatePaths = reorderToStateOrder(data.TemplatePaths, existingPaths, templatePathKey)
+		data.TemplatePaths = reorderToStateOrder(data.TemplatePaths, existingPaths, templatePathID, templatePathKey)
 	}
 
 	// Save updated data into Terraform state
@@ -863,8 +863,10 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	// Convert to models
 	var planData TemplateResourceModel
 	var stateData TemplateResourceModel
+	var configData TemplateResourceModel
 	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{})...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &configData)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -977,9 +979,11 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 
 	// Then, create a map of plan paths by port, protocol, and direction
 	planPathsByKey := make(map[string]tfTypes.MetadataPath)
-	for _, planPath := range planData.TemplatePaths {
+	planPathIndexByKey := make(map[string]int)
+	for i, planPath := range planData.TemplatePaths {
 		key := templatePathKey(planPath)
 		planPathsByKey[key] = planPath
+		planPathIndexByKey[key] = i
 	}
 
 	// Check for paths that exist in both state and plan but have different attributes
@@ -1074,7 +1078,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			if pathChanged {
 				pathsChanged = true
 				pathsToRemove = append(pathsToRemove, statePath)
-				pathsToAdd = append(pathsToAdd, planPath)
+				pathsToAdd = append(pathsToAdd, withConfiguredPeers(planPath, configData.TemplatePaths, planPathIndexByKey[key]))
 				removedPathIDs = append(removedPathIDs, statePath.ID.ValueString())
 			}
 		}
@@ -1095,7 +1099,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 		if _, ok := statePathsByKey[key]; !ok {
 			// This path exists in plan but not in state, it's being added
 			pathsAdded = true
-			pathsToAdd = append(pathsToAdd, planPath)
+			pathsToAdd = append(pathsToAdd, withConfiguredPeers(planPath, configData.TemplatePaths, planPathIndexByKey[key]))
 		}
 	}
 
@@ -1626,9 +1630,12 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			// that no longer existed, and the next deduct then sent that stale hash
 			// and removed nothing.
 			if len(refreshedData.TemplatePaths) > 0 {
-				for _, planPath := range planData.TemplatePaths {
+				for i, planPath := range planData.TemplatePaths {
 					key := templatePathKey(planPath)
-					apiPath, hasAPIPath := apiPathsByPathKey[key]
+					apiPath, hasAPIPath := apiPathsByPathKey[templatePathKey(withConfiguredPeers(planPath, configData.TemplatePaths, i))]
+					if !hasAPIPath {
+						apiPath, hasAPIPath = apiPathsByPathKey[key]
+					}
 					if !hasAPIPath {
 						tflog.Warn(ctx, fmt.Sprintf("path %s is absent from the template after update", key))
 						continue
@@ -1732,4 +1739,37 @@ func appendedTemplatePaths(pathsToAdd []tfTypes.MetadataPath) []shared.MetadataP
 		sharedPaths[i].ID = nil
 	}
 	return sharedPaths
+}
+
+// withConfiguredPeers gives a path the peers its configuration sets and no other: for a peer the configuration leaves null,
+// SuppressDiff plans the peer state holds at the same index, which would re-add the path with its old peer as well.
+func withConfiguredPeers(planned tfTypes.MetadataPath, configured []tfTypes.MetadataPath, index int) tfTypes.MetadataPath {
+	if index < 0 || index >= len(configured) {
+		return planned
+	}
+	config := configured[index]
+	nullIfUnset := func(planned, configured types.String) types.String {
+		if configured.IsNull() {
+			return types.StringNull()
+		}
+		return planned
+	}
+	planned.SourceAssetID = nullIfUnset(planned.SourceAssetID, config.SourceAssetID)
+	planned.SrcIP = nullIfUnset(planned.SrcIP, config.SrcIP)
+	planned.DestinationAssetID = nullIfUnset(planned.DestinationAssetID, config.DestinationAssetID)
+	planned.DstIP = nullIfUnset(planned.DstIP, config.DstIP)
+	planned.Domain = nullIfUnset(planned.Domain, config.Domain)
+	if config.SourceNamedNetwork == nil {
+		planned.SourceNamedNetwork = nil
+	}
+	if config.DestinationNamedNetwork == nil {
+		planned.DestinationNamedNetwork = nil
+	}
+	if config.SourceTagBasedPolicy == nil {
+		planned.SourceTagBasedPolicy = nil
+	}
+	if config.DestinationTagBasedPolicy == nil {
+		planned.DestinationTagBasedPolicy = nil
+	}
+	return planned
 }
