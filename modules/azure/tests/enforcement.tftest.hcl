@@ -2,6 +2,9 @@
 # what Xshield serves: web enforced on its network interface, api on its subnet, and db refused.
 
 mock_provider "azurerm" {
+  mock_data "azurerm_subnet" {
+    defaults = { network_security_group_id = "" }
+  }
   mock_data "azurerm_client_config" {
     defaults = { subscription_id = "11111111-2222-3333-4444-555555555555" }
   }

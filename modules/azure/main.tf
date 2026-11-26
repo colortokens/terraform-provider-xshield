@@ -207,7 +207,7 @@ locals {
 
 # Xshield's groups are the ones tagged for a pipeline. Their names are no guide, as a name template can name them anything.
 data "azurerm_resources" "xshield_network_security_groups" {
-  count = length(local.leaving_interfaces) + length(local.leaving_subnets) > 0 ? 1 : 0
+  count = length(local.leaving_interfaces) + length(local.leaving_subnets) + length(local.subnet_associations) > 0 ? 1 : 0
 
   type          = "Microsoft.Network/networkSecurityGroups"
   required_tags = local.xshield_delivery_tag
@@ -247,6 +247,24 @@ data "azurerm_subnet" "leaving" {
     postcondition {
       condition     = contains(keys(local.snap.held_subnet_associations), each.key) || lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false)
       error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.key}. Azure removes an association by clearing the subnet's group, so removing Xshield's would take yours off it. Xshield holds the association once it next observes the subscription: plan again after that."
+    }
+  }
+}
+
+# azurerm reads a subnet association's group back from the subnet, so one whose subnet now carries another group plans a
+# replacement, and Azure deletes the association by clearing the subnet's group. So each subnet an association wants is read
+# first, and the plan stops while it carries a group that is neither Xshield's nor the one the association wants.
+data "azurerm_subnet" "associated" {
+  for_each = local.subnet_associations
+
+  name                 = split("/", each.value.subnet_id)[10]
+  virtual_network_name = split("/", each.value.subnet_id)[8]
+  resource_group_name  = split("/", each.value.subnet_id)[4]
+
+  lifecycle {
+    postcondition {
+      condition     = lookup(local.xshields_or_no_group, lower(coalesce(self.network_security_group_id, "-")), false) || lower(coalesce(self.network_security_group_id, "-")) == local.planned_network_security_group_ids[each.value.network_security_group]
+      error_message = "Subnet ${self.name} now carries network security group ${element(split("/", coalesce(self.network_security_group_id, "-")), -1)} in place of Xshield's ${each.value.network_security_group}. azurerm would replace the association, and Azure replaces one by clearing the subnet's group, so applying would take yours off it. The plan stopped and nothing was applied. Xshield takes the change into account once the cloud connector next observes the subscription: plan again after that."
     }
   }
 }

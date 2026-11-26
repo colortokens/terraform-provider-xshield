@@ -3,6 +3,9 @@
 # ports and addresses, listed out of priority order. Later runs override the snapshot with another version.
 
 mock_provider "azurerm" {
+  mock_data "azurerm_subnet" {
+    defaults = { network_security_group_id = "" }
+  }
   mock_data "azurerm_client_config" {
     defaults = { subscription_id = "11111111-2222-3333-4444-555555555555" }
   }
