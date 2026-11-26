@@ -35,6 +35,7 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | `handover-azure/` | An Azure subscription moves from cloud connector delivery to pipeline delivery. Delete it once a plan imports nothing. |
 | `leave/` | An account moves back to cloud connector delivery. |
 | `recovery/` | The enforcement workspace's state is lost. |
+| `recovery-azure/` | An Azure enforcement workspace's state is lost. |
 
 **Examples of workspaces you already have**, after the change Xshield needs. In each, `xshield.tf` holds what the team adds, and `main.tf` marks each changed line.
 

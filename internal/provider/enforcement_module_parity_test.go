@@ -24,6 +24,13 @@ var enforcementModuleDifferences = map[string]string{
 		"xshield_aws_enforcement_status. On Azure the connector puts Xshield's group on each level it enforced at, and only a read " +
 		"of the level shows when it has, so the azure module names what to import.",
 	"output handover_subnet_association_imports": "See handover_interface_association_imports.",
+	"output subnet_association_keys": "The aws module attaches groups to network interfaces only. The azure module also associates " +
+		"groups with subnets, and recovery-azure imports only the subnet associations it still declares.",
+	"output kept_interface_association_imports": "The azure module keeps an association for a group of yours or the cloud connector's, " +
+		"which the receipt leaves out, so recovery-azure imports it from here. On AWS recovery reads every attachment it imports from the receipt.",
+	"output kept_subnet_association_imports": "See kept_interface_association_imports.",
+	"output customer_security_rule_imports": "The azure module writes Xshield's rules into a group of yours, which the receipt leaves out, " +
+		"so recovery-azure imports them from here. The aws module writes rules only into Xshield's own groups.",
 	"output network_acl_entry_keys": "The aws module blocks malicious addresses in network ACLs. The azure module blocks them with deny rules " +
 		"in the group itself, ahead of its allows.",
 	"output directory_entries": "On AWS the workspace that owns a database attaches its group, through a directory parameter. On Azure a " +

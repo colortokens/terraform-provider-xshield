@@ -40,6 +40,26 @@ output "interface_association_keys" {
   value       = keys(local.interface_associations)
 }
 
+output "subnet_association_keys" {
+  description = "As interface_association_keys, for subnet associations: the snapshot's, less any whose subnet no longer exists."
+  value       = keys(local.subnet_associations)
+}
+
+output "kept_interface_association_imports" {
+  description = "The import ID of each network interface association the module keeps for a group of yours or the cloud connector's, by snapshot key: one Xshield holds, or one of a contained workload, on an interface that still exists. The receipt leaves them out, so the recovery-azure example imports them from here."
+  value       = { for key, association in merge(local.held_interfaces, local.contained_interfaces) : key => "${association.level_id}|${association.network_security_group_id}" }
+}
+
+output "kept_subnet_association_imports" {
+  description = "As kept_interface_association_imports, for a subnet association, whose import ID is the subnet's ID."
+  value       = { for key, association in merge(local.held_subnets, local.contained_subnets) : key => association.level_id }
+}
+
+output "customer_security_rule_imports" {
+  description = "The import ID of each of Xshield's rules the module adds to a group of yours, `<group ID>/securityRules/<rule name>`, by its key in `azurerm_network_security_rule.customer`. The receipt leaves them out, so the recovery-azure example imports them from here."
+  value       = { for key, rule in local.customer_security_rules : key => "${local.customer_network_security_groups[split("/", key)[0]].id}/securityRules/${rule.name}" }
+}
+
 output "handover_interface_association_imports" {
   description = "The import ID of each network interface association the cloud connector has handed over, by snapshot key: where the connector has put Xshield's group in place of its own. The import blocks of handover.tf take them into the state."
   value = {
