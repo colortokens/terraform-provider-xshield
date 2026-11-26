@@ -192,14 +192,15 @@ func TestAzureNothingPublishedReadsAsAnEmptySnapshot(t *testing.T) {
 	}
 }
 
-// The Azure connector takes over none of the pipeline's groups, so the advice is to delete them, never to keep them.
-func TestAzureHandedOverSaysToRemoveTheModule(t *testing.T) {
+// What an Azure workspace still holds once Xshield hands back is associations kept for a group of yours or the connector's,
+// which a destroy would clear, so the advice is to forget them.
+func TestAzureHandedOverSaysToForgetTheModule(t *testing.T) {
 	t.Parallel()
 	_, ok, errs, _ := readAzureSnapshot(t, map[string]cannedResponse{
 		"/expected": {http.StatusConflict, `{"status":409,"code":"handedOver","message":"handed over"}`},
 	})
 	if ok || !strings.Contains(errs, "moved "+azureTestSubscription+"/eastus2 to connector delivery") ||
-		!strings.Contains(errs, "takes over none") || strings.Contains(errs, "destroy = false") {
+		!strings.Contains(errs, "destroy = false") || strings.Contains(errs, "Remove the module block and apply") {
 		t.Errorf("ok=%v %q, want the hand-over refused with the Azure advice", ok, errs)
 	}
 }

@@ -381,7 +381,7 @@ func (d *awsEnforcementSnapshotDataSource) Read(ctx context.Context, req datasou
 }
 
 // handedOverAdvice says, per cloud, what to do with this workspace's resources once Xshield hands its account back to
-// the cloud connector: the AWS connector keeps them, while the Azure connector takes over none of them.
+// the cloud connector: the AWS connector keeps them, and an Azure workspace holds only associations a destroy would clear.
 var handedOverAdvice = map[string]string{
 	cloudAWS: "The cloud connector now keeps the groups, rules and attachments this workspace created, so applying would remove " +
 		"what it enforces. Unless it was done before the switch, first stop the runs of each workspace that looks its " +
@@ -389,10 +389,10 @@ var handedOverAdvice = map[string]string{
 		"enforcement-snapshot/leave example says: its lookup would put back the groups the connector takes off. Then " +
 		"replace the module block with removed blocks that keep them (lifecycle { destroy = false }), as that example " +
 		"shows, and stop running this workspace.",
-	cloudAzure: "The cloud connector takes over none of the network security groups this workspace created, and Xshield " +
-		"switches an account back only once the version it expects holds none. Remove the module block and apply, which " +
-		"deletes any group and association this workspace still holds, as when the last version was not applied, then stop " +
-		"running this workspace.",
+	cloudAzure: "Xshield switches a subscription back only once the last apply removed every network security group of " +
+		"Xshield's, so this workspace holds only associations kept for a group of yours or the cloud connector's, which a " +
+		"destroy would clear. Replace the module block with a removed block that forgets them (lifecycle { destroy = false }), " +
+		"apply once, and stop running this workspace.",
 }
 
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
