@@ -403,6 +403,17 @@ data "azurerm_resources" "customer_network_security_groups" {
 locals {
   present_customer_network_security_groups = toset([for group in try(data.azurerm_resources.customer_network_security_groups[0].resources, []) : lower(group.id)])
   customer_network_security_groups         = { for key, group in local.customer_network_security_groups_wanted : key => group if contains(local.present_customer_network_security_groups, lower(group.id)) }
+  unlisted_customer_network_security_groups = [
+    for key, group in local.customer_network_security_groups_wanted : "${group.name} in resource group ${group.resource_group_name}"
+    if !contains(keys(local.customer_network_security_groups), key)
+  ]
+}
+
+check "xshield_customer_groups_listed" {
+  assert {
+    condition     = length(local.unlisted_customer_network_security_groups) == 0
+    error_message = "Xshield writes workload rules into network security groups of yours that Azure does not list to this run's identity: ${join(", ", local.unlisted_customer_network_security_groups)}. Each was deleted, or the identity cannot read it, so this apply adds no rule to it. If a group exists, give the run's identity read access to it."
+  }
 }
 
 data "azurerm_network_security_group" "customer" {

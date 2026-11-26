@@ -225,8 +225,23 @@ run "a_group_of_yours_deleted_before_xshield_observes_it_fails_no_plan" {
     values = { resources = [] }
   }
 
+  expect_failures = [check.xshield_customer_groups_listed]
+
   assert {
     condition     = length(data.azurerm_network_security_group.customer) == 0 && length(azurerm_network_security_rule.customer) == 0
     error_message = "A group of yours that Azure no longer lists must be neither read, which fails the plan, nor given rules."
+  }
+  assert {
+    condition     = local.unlisted_customer_network_security_groups == ["nsg-snet-owner in resource group rg-net"]
+    error_message = "The run must warn, naming the group, that it adds no rule to a group of yours Azure does not list, as nothing else says those rules are missing."
+  }
+}
+
+run "a_group_of_yours_azure_lists_raises_no_warning" {
+  command = plan
+
+  assert {
+    condition     = length(local.unlisted_customer_network_security_groups) == 0
+    error_message = "A group of yours that Azure lists gets its rules, so the run must not warn about it."
   }
 }

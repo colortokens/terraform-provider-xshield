@@ -326,6 +326,8 @@ run "a_group_of_yours_deleted_since_plans_the_removal_of_its_rules_without_readi
     values = { resources = [] }
   }
 
+  expect_failures = [check.xshield_customer_groups_listed]
+
   assert {
     condition     = length(data.azurerm_network_security_group.customer) == 0 && length(azurerm_network_security_rule.customer) == 0
     error_message = "A group of yours deleted before Xshield observes it must not be read, which fails the plan, and its rules must leave the configuration."
