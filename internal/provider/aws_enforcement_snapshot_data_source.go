@@ -409,6 +409,9 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, cloud, account, re
 		case isAPIRefusal(err, http.StatusConflict, codeHandedOver):
 			diags.AddError("Xshield moved "+account+"/"+region+" to connector delivery", handedOverAdvice[cloud])
 			return nil, false
+		case cloud == cloudAzure && isAzureAccountUnknown(err):
+			addAzureAccountUnknownError(diags, account, err)
+			return nil, false
 		case err != nil:
 			diags.AddError("Cannot resolve the snapshot Xshield expects for "+account+"/"+region,
 				err.Error()+"\n\nCheck the provider's endpoint, and that the API key's user may read cloud snapshots.")
@@ -422,6 +425,10 @@ func fetchSnapshot(ctx context.Context, api cloudSnapshotAPI, cloud, account, re
 	}
 	var snap wireSnapshot
 	if err := api.get(ctx, api.endpoint(cloud, account, region, "versions", version), &snap); err != nil {
+		if cloud == cloudAzure && isAzureAccountUnknown(err) {
+			addAzureAccountUnknownError(diags, account, err)
+			return nil, false
+		}
 		diags.AddError(fmt.Sprintf("Cannot fetch snapshot version %s for %s/%s", version, account, region), err.Error())
 		return nil, false
 	}

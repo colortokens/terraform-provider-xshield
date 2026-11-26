@@ -185,6 +185,10 @@ func (r *azureEnforcementReceiptResource) send(ctx context.Context, data *azureE
 	}
 	endpoint := r.api.endpoint(cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), "receipts")
 	if err := r.api.post(ctx, endpoint, body, http.StatusCreated, &created); err != nil {
+		if isAzureAccountUnknown(err) {
+			addAzureAccountUnknownError(diags, data.CloudAccountID.ValueString(), err)
+			return
+		}
 		diags.AddError("Xshield did not accept the apply receipt", err.Error()+"\n\n"+azureReceiptAdvice(err))
 		return
 	}
@@ -232,6 +236,10 @@ func (r *azureEnforcementReceiptResource) Read(ctx context.Context, req resource
 	var status wireConvergence
 	endpoint := r.api.endpoint(cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
+		if isAzureAccountUnknown(err) {
+			addAzureAccountUnknownError(&resp.Diagnostics, data.CloudAccountID.ValueString(), err)
+			return
+		}
 		resp.Diagnostics.AddWarning("Cannot confirm Xshield still holds this apply receipt", err.Error())
 		return
 	}
@@ -265,6 +273,10 @@ func (r *azureEnforcementReceiptResource) ModifyPlan(ctx context.Context, req re
 	var status wireConvergence
 	endpoint := r.api.endpoint(cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status")
 	if err := r.api.get(ctx, endpoint, &status); err != nil {
+		if isAzureAccountUnknown(err) {
+			addAzureAccountUnknownError(&resp.Diagnostics, data.CloudAccountID.ValueString(), err)
+			return
+		}
 		resp.Diagnostics.AddWarning("Cannot check whether Xshield already holds an apply receipt", err.Error())
 		return
 	}

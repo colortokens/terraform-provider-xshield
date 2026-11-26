@@ -174,6 +174,9 @@ func (d *azureEnforcementStatusDataSource) Read(ctx context.Context, req datasou
 	var st wireStatus
 	err := d.api.get(ctx, d.api.endpoint(cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), "status"), &st)
 	switch {
+	case isAzureAccountUnknown(err):
+		addAzureAccountUnknownError(&resp.Diagnostics, data.CloudAccountID.ValueString(), err)
+		return
 	case isAPIRefusal(err, http.StatusNotFound, codeNotPublished):
 		st = wireStatus{State: "unpublished"}
 		data.Published, data.ExpectedVersion = types.BoolValue(false), types.StringNull()
