@@ -98,6 +98,8 @@ resource "azurerm_network_security_group" "app" {
 
 The enforcement apply leaves a group listed in `customer_network_security_groups_in_code` to that workspace: only its apply writes Xshield's rules into the group, or puts them back after drift. Run it after each enforcement apply. `version` reads the version the enforcement workspace last applied, so the group gets the rules of the version the subscription's other groups hold; until that workspace applies, the group keeps the previous version's rules.
 
+Xshield's rules go ahead of yours, one each at the priority numbers below your group's first rule in each direction. Where your first rule leaves too few, the plan of a workspace that reads the group's rules, yours or the enforcement workspace, stops with an error that names the group. Once the cloud connector observes the group, Xshield refuses each workload whose rules go there, with reason `NO_FREE_PRIORITY` in `xshield_azure_enforcement_status`, whose message names the group, and the rest of the subscription and region applies. Move your rules to higher priority numbers to leave room, and Xshield writes the workloads' rules once the connector observes the group again.
+
 That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing.
 
 A group the module has already written rules into holds them in the enforcement workspace's state, and listing it makes the next enforcement apply delete them from the group. Before you list it, take them out of that state:
