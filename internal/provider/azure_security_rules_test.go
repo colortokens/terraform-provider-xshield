@@ -29,8 +29,14 @@ func yourAllowRule(name string, priority int64) azInlineSecurityRuleModel {
 
 func readAzureSecurityRules(t *testing.T, routes map[string]cannedResponse, in azureSecurityRulesDataSourceModel) (azureSecurityRulesDataSourceModel, bool, string, []string) {
 	t.Helper()
-	ctx := context.Background()
 	api, requested := newRoutedSnapshotAPI(t, routes)
+	out, ok, errs := readAzureSecurityRulesFrom(t, api, in)
+	return out, ok, errs, *requested
+}
+
+func readAzureSecurityRulesFrom(t *testing.T, api cloudSnapshotAPI, in azureSecurityRulesDataSourceModel) (azureSecurityRulesDataSourceModel, bool, string) {
+	t.Helper()
+	ctx := context.Background()
 	ds := &azureSecurityRulesDataSource{api: api}
 	var schemaResp datasource.SchemaResponse
 	ds.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
@@ -46,13 +52,13 @@ func readAzureSecurityRules(t *testing.T, routes map[string]cannedResponse, in a
 		for _, d := range resp.Diagnostics.Errors() {
 			sb.WriteString(d.Summary() + ": " + d.Detail() + "\n")
 		}
-		return azureSecurityRulesDataSourceModel{}, false, sb.String(), *requested
+		return azureSecurityRulesDataSourceModel{}, false, sb.String()
 	}
 	var out azureSecurityRulesDataSourceModel
 	if diags := resp.State.Get(ctx, &out); diags.HasError() {
 		t.Fatalf("reading state back: %v", diags)
 	}
-	return out, true, "", *requested
+	return out, true, ""
 }
 
 func customerGroupRead(groupID string, declared ...azInlineSecurityRuleModel) azureSecurityRulesDataSourceModel {
@@ -240,5 +246,23 @@ func TestAPinnedVersionIsReadWithoutAskingWhichXshieldExpects(t *testing.T) {
 	}
 	if m.Version.ValueString() != version || len(m.XshieldSecurityRules) != 4 || len(requested) != 1 {
 		t.Errorf("version %v rules %d requested %v, want the pinned version's alone", m.Version, len(m.XshieldSecurityRules), requested)
+	}
+}
+
+func TestEveryGroupsSecurityRulesShareOneReadOfTheSnapshot(t *testing.T) {
+	t.Parallel()
+	api, requested := newRoutedSnapshotAPI(t, publishedCustomerGroupSnapshot(t))
+	yours, ok, errs := readAzureSecurityRulesFrom(t, api, customerGroupRead(azureTestCustomerGroupID))
+	if !ok {
+		t.Fatal(errs)
+	}
+	another, ok, errs := readAzureSecurityRulesFrom(t, api, customerGroupRead(strings.Replace(azureTestCustomerGroupID, "nsg-snet-owner", "nsg-other", 1)))
+	if !ok {
+		t.Fatal(errs)
+	}
+	versionReads := slices.DeleteFunc(slices.Clone(*requested), func(path string) bool { return !strings.Contains(path, "/versions/") })
+	if len(yours.XshieldSecurityRules) == 0 || len(another.XshieldSecurityRules) != 0 || yours.Version != another.Version || len(versionReads) != 1 {
+		t.Errorf("xshield rules %d and %d, versions %v and %v, over requests %v: want one read of the snapshot giving both groups one version",
+			len(yours.XshieldSecurityRules), len(another.XshieldSecurityRules), yours.Version, another.Version, *requested)
 	}
 }

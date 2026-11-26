@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -182,15 +184,16 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 		}
 		declared = append(declared, asAzureReadsBack(r))
 	}
-	snap, ok := fetchSnapshot(ctx, d.api, cloudAzure, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version, false, &resp.Diagnostics)
-	if !ok {
+	read := d.api.azureCustomerGroups(ctx, data.CloudAccountID.ValueString(), data.Region.ValueString(), data.Version)
+	resp.Diagnostics.Append(read.diags...)
+	if !read.ok {
 		return
 	}
-	data.Published, data.Version = types.BoolValue(snap != nil), types.StringNull()
+	data.Published, data.Version = types.BoolValue(read.published), types.StringNull()
 	xshield := []azInlineSecurityRuleModel{}
-	if snap != nil {
-		data.Version = types.StringValue(snap.Version)
-		group, found := customerGroupWithID(snap.Azure, data.NetworkSecurityGroupID.ValueString())
+	if read.published {
+		data.Version = types.StringValue(read.version)
+		group, found := customerGroupWithID(read.groups, data.NetworkSecurityGroupID.ValueString())
 		if found {
 			numbered, err := numberAheadOfYours(group.Name, group.SecurityRules, priorityHolders(data.DeclaredSecurityRules), currentPriorityHolders(data.CurrentSecurityRules))
 			if err != nil {
@@ -207,8 +210,43 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 	resp.Diagnostics.Append(resp.State.Set(ctx, data)...)
 }
 
-func customerGroupWithID(plan *wireAzurePlan, id string) (wireAzureCustomerNetworkSecurityGroup, bool) {
-	for _, g := range plan.CustomerNetworkSecurityGroups {
+// azureCustomerGroupsReads holds one snapshot read per provider configuration, subscription, region and pinned version for the
+// run: every customer group's data source in a workspace reads the same snapshot, and one read gives them all one version.
+var azureCustomerGroupsReads sync.Map
+
+type azureCustomerGroupsKey struct {
+	client                   *sdk.Xshield
+	account, region, version string
+}
+
+type azureCustomerGroupsRead struct {
+	once      sync.Once
+	ok        bool
+	diags     diag.Diagnostics
+	published bool
+	version   string
+	groups    map[string]wireAzureCustomerNetworkSecurityGroup
+}
+
+func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, region string, pinned types.String) *azureCustomerGroupsRead {
+	key := azureCustomerGroupsKey{client: a.client, account: account, region: region}
+	if !pinned.IsNull() && !pinned.IsUnknown() {
+		key.version = pinned.ValueString()
+	}
+	value, _ := azureCustomerGroupsReads.LoadOrStore(key, &azureCustomerGroupsRead{})
+	read := value.(*azureCustomerGroupsRead)
+	read.once.Do(func() {
+		snap, ok := fetchSnapshot(ctx, a, cloudAzure, account, region, pinned, false, &read.diags)
+		read.ok = ok
+		if snap != nil {
+			read.published, read.version, read.groups = true, snap.Version, snap.Azure.CustomerNetworkSecurityGroups
+		}
+	})
+	return read
+}
+
+func customerGroupWithID(groups map[string]wireAzureCustomerNetworkSecurityGroup, id string) (wireAzureCustomerNetworkSecurityGroup, bool) {
+	for _, g := range groups {
 		if strings.EqualFold(g.ID, id) {
 			return g, true
 		}
