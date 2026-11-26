@@ -86,7 +86,9 @@ func (r *azureEnforcementReceiptResource) Schema(ctx context.Context, req resour
 			"subscription and region at once rather than at its next drift interval. If Xshield's latest " +
 			"receipt for the subscription and region is no longer this one, the next plan proposes sending it again, and a plan " +
 			"that creates the receipt while Xshield already holds one warns. An imported receipt is not sent again when only " +
-			"`resend_trigger`, which an import cannot know, is new.\n\n" +
+			"`resend_trigger`, which an import cannot know, is new, so an apply right after an import that restores a group or " +
+			"association under the same ID sends no receipt, and Xshield observes the subscription and region at its next drift " +
+			"interval.\n\n" +
 			"Destroying it removes it from state and leaves the receipt history in Xshield.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true, Description: "Receipt identifier assigned by Xshield."},
