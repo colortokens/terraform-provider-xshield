@@ -181,7 +181,13 @@ func (r *PolicyDeploymentResource) ValidateConfig(ctx context.Context, req resou
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("mode"), &mode)...)
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("reviewed"), &reviewed)...)
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("unreviewed"), &unreviewed)...)
-	if resp.Diagnostics.HasError() || mode.IsUnknown() || reviewed.IsUnknown() || unreviewed.IsUnknown() {
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !unreviewed.IsUnknown() {
+		refuseUnreviewedKeysButTheWildcard(unreviewed, &resp.Diagnostics)
+	}
+	if mode.IsUnknown() || reviewed.IsUnknown() || unreviewed.IsUnknown() {
 		return
 	}
 
@@ -199,12 +205,14 @@ func (r *PolicyDeploymentResource) ValidateConfig(ctx context.Context, req resou
 			"Nothing to deploy",
 			"Set mode to deploy the whole asset, or set reviewed and unreviewed to deploy individual ports.")
 	}
+}
 
-	// Only the wildcard key means anything on the unreviewed side, and a key that
-	// is quietly ignored is worse than one that is refused.
+// Only the wildcard key means anything on the unreviewed side, and a key that is quietly ignored is worse than one that is
+// refused.
+func refuseUnreviewedKeysButTheWildcard(unreviewed types.Map, diags *diag.Diagnostics) {
 	for key := range unreviewed.Elements() {
 		if key != "*" {
-			resp.Diagnostics.AddAttributeError(
+			diags.AddAttributeError(
 				path.Root("unreviewed").AtMapKey(key),
 				"Only the \"*\" key is honoured for unreviewed ports",
 				"An unreviewed port has no decision to deploy per port, so the backend reads only the "+

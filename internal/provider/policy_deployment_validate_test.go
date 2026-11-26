@@ -81,6 +81,14 @@ func TestPolicyDeploymentValidateConfigWaitsForValuesFromVariables(t *testing.T)
 			},
 			wantErr: "Set either mode or the port maps, not both",
 		},
+		"an unreviewed key other than the wildcard while mode comes from a variable": {
+			set:     map[string]tftypes.Value{"mode": unknownMode, "unreviewed": planEntriesValue(t, map[string]string{"TCP:22": "test"})},
+			wantErr: "Only the \"*\" key is honoured for unreviewed ports",
+		},
+		"an unreviewed key other than the wildcard while reviewed comes from a variable": {
+			set:     map[string]tftypes.Value{"reviewed": planEntriesValue(t, nil), "unreviewed": planEntriesValue(t, map[string]string{"TCP:22": "test"})},
+			wantErr: "Only the \"*\" key is honoured for unreviewed ports",
+		},
 		"an unreviewed key other than the wildcard": {
 			set:     map[string]tftypes.Value{"unreviewed": planEntriesValue(t, map[string]string{"TCP:22": "test"})},
 			wantErr: "Only the \"*\" key is honoured for unreviewed ports",
