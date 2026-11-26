@@ -316,24 +316,25 @@ func setStatus(data *awsEnforcementStatusDataSourceModel, st wireStatus) {
 		data.PendingGroups = toStrList(st.PendingDelta.SecurityGroupsAdded)
 		data.PendingAttachments = toStrList(st.PendingDelta.AttachmentsAdded)
 	}
-	data.Notices = []noticeModel{}
-	for _, n := range st.Notices {
-		data.Notices = append(data.Notices, noticeModel{Code: types.StringValue(n.Code), Reason: optionalString(n.Reason),
-			AssetID: optionalString(n.AssetID), AssetName: optionalString(n.AssetName), Group: optionalString(n.Group), Since: optionalString(n.Since),
-			Message: types.StringValue(n.Message)})
-	}
+	data.Notices = noticesOf(st.Notices)
 }
 
 func setDrift(data *awsEnforcementStatusDataSourceModel, drift wireDrift) {
 	data.DriftEvaluated = types.BoolValue(!drift.ObservationStale)
 	data.DriftObservedAt = optionalString(drift.ObservedAt)
+	data.DriftFindings = driftFindingsOf(drift)
+}
+
+func driftFindingsOf(drift wireDrift) []driftFindingModel {
+	findings := make([]driftFindingModel, 0, len(drift.Findings))
 	for _, f := range drift.Findings {
-		data.DriftFindings = append(data.DriftFindings, driftFindingModel{
+		findings = append(findings, driftFindingModel{
 			Kind: types.StringValue(f.Kind), Severity: types.StringValue(f.Severity), Restoration: types.StringValue(f.Restoration),
 			Resource: types.StringValue(f.Resource), ResourceName: optionalString(f.ResourceName), Key: optionalString(f.Key), Detail: types.StringValue(f.Detail),
 			DetectedAt: optionalString(f.DetectedAt),
 		})
 	}
+	return findings
 }
 
 func optionalString(s string) types.String {

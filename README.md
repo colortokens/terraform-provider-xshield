@@ -13,7 +13,7 @@ terraform {
   required_providers {
     xshield = {
       source  = "colortokens/xshield"
-      version = "0.2.0"
+      version = "26.4.1"
     }
   }
 }
@@ -99,17 +99,39 @@ groups Xshield renders instead of the cloud connector. Start with the step-by-st
 holds workspaces to copy. The [Xshield documentation](https://docs.xshield.colortokens.com/developer-tools/terraform/pipeline-delivery-aws)
 covers pipeline delivery in depth. The modules live in [modules/](modules/) and use these:
 
-| Resource or data source | Does |
+| Resource | What it manages |
 | --- | --- |
-| [`xshield_aws_enforcement_snapshot`](docs/data-sources/aws_enforcement_snapshot.md) | Fetches the groups, rules and attachments Xshield expects in one account and region. |
-| [`xshield_aws_enforcement_receipt`](docs/resources/aws_enforcement_receipt.md) | Reports which AWS resource was created for each key in the snapshot. |
-| [`xshield_aws_enforcement_status`](docs/data-sources/aws_enforcement_status.md) | Says whether the account has converged, and what drift the cloud connector sees. |
-| [`xshield_aws_security_group_changes`](docs/data-sources/aws_security_group_changes.md) | Lists your own groups that an approved Full control change applies to. |
-| [`xshield_aws_security_group_rules`](docs/data-sources/aws_security_group_rules.md) | Returns the rules to declare for one of those groups, with the approved change applied. |
+| [`xshield_aws_enforcement_receipt`](docs/resources/aws_enforcement_receipt.md) | The report of which AWS resource was created for each key in a snapshot. |
+| [`xshield_aws_security_group_changes_receipt`](docs/resources/aws_security_group_changes_receipt.md) | The report of which Full control changes a workspace applied to its own groups. |
+
+| Data source | Returns |
+| --- | --- |
+| [`xshield_aws_enforcement_snapshot`](docs/data-sources/aws_enforcement_snapshot.md) | The groups, rules and attachments Xshield expects in one account and region. |
+| [`xshield_aws_enforcement_status`](docs/data-sources/aws_enforcement_status.md) | Whether the account has converged, and the drift the cloud connector sees. |
+| [`xshield_aws_security_group_changes`](docs/data-sources/aws_security_group_changes.md) | Your own groups that an approved Full control change applies to. |
+| [`xshield_aws_security_group_rules`](docs/data-sources/aws_security_group_rules.md) | The rules to declare for one of those groups, with the change applied. |
 
 [examples/enforcement-snapshot/policies](examples/enforcement-snapshot/policies/README.md) holds an example
 Sentinel and OPA policy for the workspace that runs the [monitor](examples/enforcement-snapshot/monitor).
 Policies for groups under Full control are provided by ColorTokens separately.
+
+## Enforcing Azure policy through your own pipeline
+
+When an Azure subscription's policy delivery is Terraform pipeline, your pipeline creates the network security
+groups Xshield renders instead of the cloud connector. Start with the step-by-step
+[guide](docs/guides/azure-pipeline-enforcement.md). The workspace applies them through the
+[azure enforcement module](modules/azure/README.md), and
+[enforcement-azure](examples/enforcement-snapshot/enforcement-azure) is a workspace that calls it, ready to copy.
+The module reads the snapshot and sends the receipt; the status runs in `check` blocks of a workspace of its own:
+
+| Resource | What it manages |
+| --- | --- |
+| [`xshield_azure_enforcement_receipt`](docs/resources/azure_enforcement_receipt.md) | The report of which Azure resource was created for each key in a snapshot. |
+
+| Data source | Returns |
+| --- | --- |
+| [`xshield_azure_enforcement_snapshot`](docs/data-sources/azure_enforcement_snapshot.md) | The network security groups Xshield expects in one subscription and region, and where each goes. |
+| [`xshield_azure_enforcement_status`](docs/data-sources/azure_enforcement_status.md) | Whether the subscription has converged, the workloads Xshield refuses, and the drift the cloud connector sees. |
 
 ## Running the provider locally
 

@@ -144,6 +144,10 @@ type wireRenderedResources struct {
 	Rules             map[string]string `json:"rules"`
 	Attachments       map[string]string `json:"attachments"`
 	NetworkACLEntries map[string]string `json:"networkAclEntries,omitempty"`
+	// Read from an Azure point's status; an AWS receipt never sends them.
+	NetworkSecurityGroups map[string]string `json:"networkSecurityGroups,omitempty"`
+	SubnetAssociations    map[string]string `json:"subnetAssociations,omitempty"`
+	InterfaceAssociations map[string]string `json:"interfaceAssociations,omitempty"`
 }
 
 type wireReceipt struct {

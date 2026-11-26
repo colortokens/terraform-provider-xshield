@@ -2,7 +2,7 @@
 # Runs terraform test in every module and example that has tests, against a provider built from this
 # checkout. Both providers are mocked, so no tenant or AWS account is needed.
 #
-# recovery/, handover/ and modules/aws/apply-order/ hold files for a workspace rather than a workspace,
+# recovery/, recovery-azure/, handover/, handover-azure/ and modules/aws/apply-order/ hold files for a workspace rather than a workspace,
 # so each runs in a copy set up as its test file says. modules/aws/apply-order/upgrade needs the module
 # version upgraded from, which is not in this repository, so it is left to run by hand.
 set -euo pipefail
@@ -44,11 +44,13 @@ copy_beside() {
 dirs=()
 for d in modules/*/ "$snapshot"/*/; do
   d=${d%/}
-  case $(basename "$d") in recovery | handover) continue ;; esac
+  case $(basename "$d") in recovery | recovery-azure | handover | handover-azure) continue ;; esac
   [ -d "$d/tests" ] && dirs+=("$d")
 done
 dirs+=("$(copy_beside recovery "$snapshot/enforcement/main.tf" "$snapshot/recovery/recovery.tf" "$snapshot/recovery/tests")")
+dirs+=("$(copy_beside recovery-azure "$snapshot/enforcement-azure/main.tf" "$snapshot/recovery-azure/recovery.tf" "$snapshot/recovery-azure/tests")")
 dirs+=("$(copy_beside handover "$snapshot/enforcement/main.tf" "$snapshot/handover/handover.tf" "$snapshot/handover/tests")")
+dirs+=("$(copy_beside handover-azure "$snapshot/enforcement-azure/main.tf" "$snapshot/handover-azure/handover.tf" "$snapshot/handover-azure/tests")")
 
 apply_order="$scratch/apply-order"
 mkdir -p "$apply_order"

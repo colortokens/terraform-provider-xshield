@@ -33,6 +33,19 @@ workflow.
 `templates/guides/` by `make docs`. Change the schema, example or guide template,
 then regenerate; do not edit a page by hand.
 
+### Generated files edited by hand
+
+Some files still carry Speakeasy's `DO NOT EDIT` header but hold hand edits that
+regenerating them would drop. Before regenerating any of them, carry each edit
+over, and keep the test that guards it passing:
+
+| File | Hand edit | Test that guards it |
+|--|--|--|
+| `internal/sdk/internal/utils/json.go` | Reads a timestamp the API writes as `""` as unset | `internal/sdk/empty_timestamp_test.go` |
+| `internal/sdk/models/shared/metadatapath.go` | `SourceAsset` and `DestinationAsset`, declared in `xshield_oas3.yaml` | `TestTemplateReadKeepsThePathsAssetPeers` |
+| `internal/provider/template_resource_sdk.go` | `RefreshFromSharedTemplate` takes a path's peer ID from its asset summary when the ID is absent | `TestTemplateReadKeepsThePathsAssetPeers` |
+| `internal/provider/template_resource.go` | Update re-adds an edited path with only the peers its configuration sets, and Read keeps paths and ports in state order through `reorderToStateOrder`, matching a path by its ID before its key | `internal/provider/template_path_peer_test.go`, `internal/provider/template_identity_test.go` |
+
 The Terraform modules the AWS pipeline guide (`docs/guides`) calls live in `modules/`. The
 workspaces under `examples/enforcement-snapshot` call them by a relative path,
 and the docs call them by a GitHub `source` pinned with `?ref=`.

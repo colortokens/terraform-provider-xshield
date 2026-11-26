@@ -174,14 +174,25 @@ func (r *PolicyDeploymentResource) Configure(ctx context.Context, req resource.C
 }
 
 func (r *PolicyDeploymentResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data PolicyDeploymentResourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	// A value from a variable or another resource is unknown while Terraform validates the configuration, and known
+	// when it validates again during plan, so a check waits for every value it reads.
+	var mode types.String
+	var reviewed, unreviewed types.Map
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("mode"), &mode)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("reviewed"), &reviewed)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("unreviewed"), &unreviewed)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if !unreviewed.IsUnknown() {
+		refuseUnreviewedKeysButTheWildcard(unreviewed, &resp.Diagnostics)
+	}
+	if mode.IsUnknown() || reviewed.IsUnknown() || unreviewed.IsUnknown() {
+		return
+	}
 
-	hasMode := !data.Mode.IsNull() && !data.Mode.IsUnknown()
-	hasPlan := len(data.Reviewed) > 0 || len(data.Unreviewed) > 0
+	hasMode := !mode.IsNull()
+	hasPlan := len(reviewed.Elements()) > 0 || len(unreviewed.Elements()) > 0
 
 	switch {
 	case hasMode && hasPlan:
@@ -194,12 +205,14 @@ func (r *PolicyDeploymentResource) ValidateConfig(ctx context.Context, req resou
 			"Nothing to deploy",
 			"Set mode to deploy the whole asset, or set reviewed and unreviewed to deploy individual ports.")
 	}
+}
 
-	// Only the wildcard key means anything on the unreviewed side, and a key that
-	// is quietly ignored is worse than one that is refused.
-	for key := range data.Unreviewed {
+// Only the wildcard key means anything on the unreviewed side, and a key that is quietly ignored is worse than one that is
+// refused.
+func refuseUnreviewedKeysButTheWildcard(unreviewed types.Map, diags *diag.Diagnostics) {
+	for key := range unreviewed.Elements() {
 		if key != "*" {
-			resp.Diagnostics.AddAttributeError(
+			diags.AddAttributeError(
 				path.Root("unreviewed").AtMapKey(key),
 				"Only the \"*\" key is honoured for unreviewed ports",
 				"An unreviewed port has no decision to deploy per port, so the backend reads only the "+

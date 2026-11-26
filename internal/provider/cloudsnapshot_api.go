@@ -36,8 +36,10 @@ type cloudSnapshotAPI struct {
 	client *sdk.Xshield
 }
 
-// cloudAWS is the only cloud whose snapshot this provider applies yet.
-const cloudAWS = "aws"
+const (
+	cloudAWS   = "aws"
+	cloudAzure = "azure"
+)
 
 func (a cloudSnapshotAPI) endpoint(cloud, account, region string, path ...string) string {
 	parts := []string{
