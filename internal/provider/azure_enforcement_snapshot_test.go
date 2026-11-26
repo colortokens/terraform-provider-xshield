@@ -200,7 +200,8 @@ func TestAzureHandedOverSaysToForgetTheModule(t *testing.T) {
 		"/expected": {http.StatusConflict, `{"status":409,"code":"handedOver","message":"handed over"}`},
 	})
 	if ok || !strings.Contains(errs, "moved "+azureTestSubscription+"/eastus2 to connector delivery") ||
-		!strings.Contains(errs, "destroy = false") || strings.Contains(errs, "Remove the module block and apply") {
+		!strings.Contains(errs, "destroy = false") || strings.Contains(errs, "Remove the module block and apply") ||
+		!strings.Contains(errs, "xshield_review") || !strings.Contains(errs, "Reference to undeclared module") {
 		t.Errorf("ok=%v %q, want the hand-over refused with the Azure advice", ok, errs)
 	}
 }

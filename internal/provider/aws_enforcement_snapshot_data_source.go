@@ -392,7 +392,9 @@ var handedOverAdvice = map[string]string{
 	cloudAzure: "Xshield switches a subscription back only once the last apply removed every network security group of " +
 		"Xshield's, so this workspace holds only associations kept for a group of yours or the cloud connector's, which a " +
 		"destroy would clear. Replace the module block with a removed block that forgets them (lifecycle { destroy = false }), " +
-		"apply once, and stop running this workspace.",
+		"and in the same change remove everything else that refers to module.xshield_enforcement, such as the summary and " +
+		"xshield_review outputs of the enforcement-azure example, handover.tf and recovery.tf, as a reference left behind " +
+		"fails the plan with \"Reference to undeclared module\". Apply once, and stop running this workspace.",
 }
 
 // fetchSnapshot returns a nil snapshot, and no error, only when Xshield says
