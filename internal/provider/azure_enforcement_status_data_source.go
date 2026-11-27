@@ -159,8 +159,11 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"configuration carries the new ones at its next apply. Either way the enforcement apply goes on writing the rules. " +
 					"A `connectorHandsOver` notice " +
 					"names a workload the cloud connector enforced with a group of its own, which `group` names: once this version is " +
-					"applied, the connector puts Xshield's group, or the group of yours its own displaced, in place of its group, and " +
-					"then removes its group. A `testAllowsCarried` notice names a workload whose Test mode allows Xshield keeps in the group " +
+					"applied, the connector puts Xshield's group in place of its group in one change. Where its group displaced one of " +
+					"yours, Xshield writes the workload's rules into your group first, and the connector puts your group back only once " +
+					"an observation shows it holding every one of them; until then the connector's group goes on enforcing the workload, " +
+					"which is no drift. Its group then stays in the subscription, detached, for you to delete, unless the connector's " +
+					"role lets it delete the group itself. A `testAllowsCarried` notice names a workload whose Test mode allows Xshield keeps in the group " +
 					"of yours that `group` names, as its subnet already let that traffic through one; a group of yours otherwise gets " +
 					"no Test mode allow, which would let through traffic your rules deny. They go once the workload leaves Test mode. " +
 					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `levelFallback`, `customerGroupRulesRemoved`, " +

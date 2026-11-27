@@ -214,6 +214,95 @@ run "a_level_that_carries_a_group_of_yours_is_left_alone" {
   }
 }
 
+# The connector swapped its group onto nic-app in place of nsg-app-owner, yours. Xshield writes web's rules into your group
+# while it is off the interface; once an observation shows it holding them, the connector puts it back in one change.
+run "your_group_the_connector_displaced_takes_xshields_rules_before_it_goes_back" {
+  command = plan
+
+  override_data {
+    target = data.xshield_azure_enforcement_snapshot.this
+    values = {
+      published                       = true
+      version                         = "v45"
+      network_security_groups         = {}
+      interface_associations          = {}
+      subnet_associations             = {}
+      handover_interface_associations = {}
+      handover_subnet_associations    = {}
+      held_interface_associations     = {}
+      held_subnet_associations        = {}
+      released_interface_associations = {}
+      released_subnet_associations    = {}
+      assets = {
+        "web" = { level = "networkInterface", network_security_groups = [], customer_network_security_groups = ["customer-nsg-0a1b2c3d4e5f"] }
+      }
+      customer_network_security_groups = {
+        "customer-nsg-0a1b2c3d4e5f" = {
+          id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/nsg-app-owner"
+          resource_group_name = "rg-app"
+          name                = "nsg-app-owner"
+          security_rules      = []
+          subnets             = {}
+          network_interfaces  = { "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-app" = ["web"] }
+        }
+      }
+      customer_network_security_groups_awaiting_room = {}
+    }
+  }
+  override_data {
+    target = data.azurerm_resources.customer_network_security_groups[0]
+    values = {
+      resources = [{
+        id                  = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-app/providers/Microsoft.Network/networkSecurityGroups/nsg-app-owner"
+        name                = "nsg-app-owner"
+        type                = "Microsoft.Network/networkSecurityGroups"
+        location            = "eastus2"
+        resource_group_name = "rg-app"
+        tags                = {}
+      }]
+    }
+  }
+  override_data {
+    target = data.azurerm_network_security_group.customer["customer-nsg-0a1b2c3d4e5f"]
+    values = {
+      security_rule = [
+        { name = "allow-ssh", priority = 300, direction = "Inbound", access = "Allow", protocol = "Tcp", description = "", source_port_range = "*", source_port_ranges = [], destination_port_range = "22", destination_port_ranges = [], source_address_prefix = "VirtualNetwork", source_address_prefixes = [], destination_address_prefix = "*", destination_address_prefixes = [], source_application_security_group_ids = [], destination_application_security_group_ids = [] },
+      ]
+    }
+  }
+  override_data {
+    target = data.xshield_azure_security_rules.customer["customer-nsg-0a1b2c3d4e5f"]
+    values = {
+      published = true
+      xshield_security_rules = [
+        { name = "CT-Rule-Allow-64c02cd7face", description = "", priority = 100, direction = "Inbound", access = "Allow", protocol = "*", source_address_prefix = "AzureLoadBalancer", source_address_prefixes = [], source_application_security_group_ids = [], destination_address_prefix = "10.1.0.4/32", destination_address_prefixes = [], destination_application_security_group_ids = [], source_port_range = "*", source_port_ranges = [], destination_port_range = "*", destination_port_ranges = [] },
+        { name = "CT-Rule-Deny-93ef773b5a07", description = "", priority = 100, direction = "Outbound", access = "Deny", protocol = "*", source_address_prefix = "10.1.0.4/32", source_address_prefixes = [], source_application_security_group_ids = [], destination_address_prefix = "0.0.0.0/0", destination_address_prefixes = [], destination_application_security_group_ids = [], source_port_range = "*", source_port_ranges = [], destination_port_range = "*", destination_port_ranges = [] },
+      ]
+      security_rules = []
+    }
+  }
+
+  assert {
+    condition = sort(keys(azurerm_network_security_rule.customer)) == tolist([
+      "customer-nsg-0a1b2c3d4e5f/CT-Rule-Allow-64c02cd7face",
+      "customer-nsg-0a1b2c3d4e5f/CT-Rule-Deny-93ef773b5a07",
+    ]) && alltrue([for rule in azurerm_network_security_rule.customer : rule.network_security_group_name == "nsg-app-owner" && rule.resource_group_name == "rg-app"])
+    error_message = "Your group must take each of Xshield's rules while the connector's group is still on the interface, so it holds them before it goes back."
+  }
+  assert {
+    condition     = length(azurerm_network_interface_security_group_association.this) == 0 && length(azurerm_subnet_network_security_group_association.this) == 0
+    error_message = "The apply must not associate your group: that would clear the connector's group from the interface before your group holds Xshield's rules."
+  }
+  assert {
+    condition     = output.handover_interface_association_imports == {} && output.handover_subnet_association_imports == {}
+    error_message = "The connector puts your group back itself, so there is no association to import."
+  }
+  assert {
+    condition     = length(terraform_data.xshield_applied_customer_rules) == 1 && length(xshield_azure_enforcement_receipt.this) == 1
+    error_message = "The receipt must follow the rules written into your group, so Xshield asks for the observation that shows your group holding them."
+  }
+}
+
 run "an_interface_that_no_longer_exists_is_not_read" {
   command = plan
 

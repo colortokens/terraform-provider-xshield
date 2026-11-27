@@ -6,6 +6,10 @@
 # apply creates it again. A plan stop that says Xshield clears it at its next observation stays while the pin does, as a
 # pinned version never changes: once Xshield shows a newer version, pin that one or remove the pin, and add to
 # skipped_imports any key the plan then says has no configuration.
+terraform {
+  required_version = ">= 1.7.0"
+}
+
 data "azurerm_client_config" "recover" {}
 
 data "xshield_azure_enforcement_status" "recover" {
