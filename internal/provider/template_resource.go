@@ -74,6 +74,7 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 			}
 		}
 		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, unknownObjects, &resp.Diagnostics)
+		validateTemplatePathSelectorID(path.Root("template_paths").AtListIndex(i), p, &resp.Diagnostics)
 	}
 }
 
@@ -603,6 +604,13 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	// The plan holds an unset Optional and Computed selector ID as unknown even
+	// when the configuration resolved it to null, so check the configuration.
+	validateTemplatePathSelectorIDs(config.TemplatePaths, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	request := *data.ToSharedTemplate()
 	res, err := r.client.Templates.CreateTemplate(ctx, request)
 	if err != nil {
@@ -812,6 +820,43 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 	}
 }
 
+// validateTemplatePathSelectorIDs reports a named-network or tag-based-policy
+// selector that names no network or segment. The API looks a selector up by
+// its ID alone, so an object without one, such as {} or only a name, selects
+// nothing and the API rejects the path. An ID unknown until apply is skipped
+// here; create and update check the configuration once it is known.
+func validateTemplatePathSelectorIDs(paths []tfTypes.MetadataPath, diags *diag.Diagnostics) {
+	for i, p := range paths {
+		validateTemplatePathSelectorID(path.Root("template_paths").AtListIndex(i), p, diags)
+	}
+}
+
+func validateTemplatePathSelectorID(pathRoot path.Path, p tfTypes.MetadataPath, diags *diag.Diagnostics) {
+	check := func(selector, idAttribute string, id types.String) {
+		if id.IsUnknown() || isStringSet(id) {
+			return
+		}
+		at := pathRoot.AtName(selector)
+		diags.AddAttributeError(
+			at,
+			"Invalid template path configuration - empty selector",
+			fmt.Sprintf("%s must set %s. Without it the selector matches nothing, and the API rejects the path.", at, idAttribute),
+		)
+	}
+	if p.SourceNamedNetwork != nil {
+		check("source_named_network", "named_network_id", p.SourceNamedNetwork.NamedNetworkID)
+	}
+	if p.SourceTagBasedPolicy != nil {
+		check("source_tag_based_policy", "tag_based_policy_id", p.SourceTagBasedPolicy.TagBasedPolicyID)
+	}
+	if p.DestinationNamedNetwork != nil {
+		check("destination_named_network", "named_network_id", p.DestinationNamedNetwork.NamedNetworkID)
+	}
+	if p.DestinationTagBasedPolicy != nil {
+		check("destination_tag_based_policy", "tag_based_policy_id", p.DestinationTagBasedPolicy.TagBasedPolicyID)
+	}
+}
+
 func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data *TemplateResourceModel
 	var item types.Object
@@ -909,6 +954,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 	validateTemplatePaths(ctx, &configData, &resp.Diagnostics)
+	validateTemplatePathSelectorIDs(configData.TemplatePaths, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
