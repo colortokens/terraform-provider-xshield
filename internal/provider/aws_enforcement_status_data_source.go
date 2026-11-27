@@ -134,7 +134,7 @@ func (d *awsEnforcementStatusDataSource) Schema(ctx context.Context, req datasou
 					"last applied, and one that carries none gets none until the cause is fixed. Each notice's `message` says what " +
 					"happened and what to do; the [Xshield documentation](" + pipelineDeliveryDocs + ") describes every code. " +
 					"`code`: `assetRefused`, `assetContained`, `groupRefused`, `withdrawing`, `asgPolicyDiffers`, `changeSetHeld`, " +
-					"`changeSetServesNoWorkload`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, " +
+					"`changeSetServesNoWorkload`, `changeSetNotReverted`, `portNotNarrowed`, `prefixListSizeUnknown`, `assetPolicyInTest`, `carriersNotAcknowledged`, " +
 					"`revertEnded`, `blockRuleNotEnforced`, `networkAclEntryRefused`, `networkAclNotObserved`, `networkAclEntryShadowed`, " +
 					"`networkAclReach`, `awaitingAttach` or `observationStale`. " +
 					"`reason`: a short code qualifying the notice, such as the refusal code `NO_FREE_SLOT`, a change set's ID, or a " +
