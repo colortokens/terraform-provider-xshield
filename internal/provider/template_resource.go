@@ -46,15 +46,35 @@ type TemplateResource struct {
 // ValidateConfig runs during terraform plan/apply config validation and
 // ensures template_paths obey the direction-specific rules (inbound src-*,
 // outbound dst-* and optional domain).
+//
+// The paths are read as framework values rather than into
+// TemplateResourceModel: its nested selectors are Go pointers and cannot hold
+// a value that is unknown until apply, such as a whole object from a variable.
 func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data TemplateResourceModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
+	var paths types.List
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_paths"), &paths)...)
+	if resp.Diagnostics.HasError() || paths.IsNull() || paths.IsUnknown() {
 		return
 	}
 
-	validateTemplatePaths(ctx, &data, &resp.Diagnostics)
+	for i, element := range paths.Elements() {
+		object, ok := element.(types.Object)
+		if !ok || object.IsNull() || object.IsUnknown() {
+			continue
+		}
+		var p tfTypes.MetadataPath
+		resp.Diagnostics.Append(object.As(ctx, &p, basetypes.ObjectAsOptions{UnhandledUnknownAsEmpty: true})...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		unknownObjects := map[string]bool{}
+		for name, value := range object.Attributes() {
+			if _, nested := value.(types.Object); nested && value.IsUnknown() {
+				unknownObjects[name] = true
+			}
+		}
+		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, unknownObjects, &resp.Diagnostics)
+	}
 }
 
 // TemplateResourceModel describes the resource data model.
@@ -571,7 +591,14 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 
 	// Validate template paths before creating the template to ensure a valid
 	// combination of source/destination fields for inbound and outbound paths.
-	validateTemplatePaths(ctx, data, &resp.Diagnostics)
+	// The config, not the plan: every config value is known at apply, while an
+	// unset Optional and Computed selector is still unknown in the plan.
+	var config TemplateResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePaths(ctx, &config, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -622,154 +649,165 @@ func isStringSet(v types.String) bool {
 //   - For inbound paths (direction = "inbound"), exactly one of the
 //     following must be set: src_ip, source_asset_id, source_named_network,
 //     source_tag_based_policy. Domain must not be set for inbound paths.
+//
+// A selector that is unknown until apply may be the one, so it satisfies
+// "at least one" but never counts towards "more than one".
 func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, diags *diag.Diagnostics) {
 	for i, p := range data.TemplatePaths {
-		pathRoot := path.Root("template_paths").AtListIndex(i)
-		direction := p.Direction.ValueString()
+		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, nil, diags)
+	}
+}
 
-		// Skip validation if direction is unknown or empty
-		if direction == "" {
-			continue
+// validateTemplatePath checks one template_paths element. unknownObjects names
+// the nested selector objects (named network, tag-based policy) that are
+// unknown as a whole, which p itself can only show as nil.
+func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObjects map[string]bool, diags *diag.Diagnostics) {
+	direction := p.Direction.ValueString()
+
+	// Skip validation if direction is unknown or empty
+	if direction == "" {
+		return
+	}
+
+	// Helper to add an attribute error for this path
+	addError := func(summary, detail string) {
+		diags.AddAttributeError(pathRoot, summary, detail)
+	}
+
+	switch direction {
+	case "outbound":
+		// Outbound: exactly one of dst_ip, destination_asset_id,
+		// destination_named_network, destination_tag_based_policy, domain
+		count := 0
+		setFields := []string{}
+		badSourceFields := []string{}
+
+		if isStringSet(p.DstIP) {
+			count++
+			setFields = append(setFields, "dst_ip")
+		}
+		if isStringSet(p.DestinationAssetID) {
+			count++
+			setFields = append(setFields, "destination_asset_id")
+		}
+		if p.DestinationNamedNetwork != nil {
+			count++
+			setFields = append(setFields, "destination_named_network")
+		}
+		if p.DestinationTagBasedPolicy != nil {
+			count++
+			setFields = append(setFields, "destination_tag_based_policy")
+		}
+		if isStringSet(p.Domain) {
+			count++
+			setFields = append(setFields, "domain")
 		}
 
-		// Helper to add an attribute error for this path
-		addError := func(summary, detail string) {
-			diags.AddAttributeError(pathRoot, summary, detail)
+		// Track source-side fields that are not allowed for outbound paths
+		if isStringSet(p.SrcIP) {
+			badSourceFields = append(badSourceFields, "src_ip")
+		}
+		if isStringSet(p.SourceAssetID) {
+			badSourceFields = append(badSourceFields, "source_asset_id")
+		}
+		if p.SourceNamedNetwork != nil {
+			badSourceFields = append(badSourceFields, "source_named_network")
+		}
+		if p.SourceTagBasedPolicy != nil {
+			badSourceFields = append(badSourceFields, "source_tag_based_policy")
 		}
 
-		switch direction {
-		case "outbound":
-			// Outbound: exactly one of dst_ip, destination_asset_id,
-			// destination_named_network, destination_tag_based_policy, domain
-			count := 0
-			setFields := []string{}
-			badSourceFields := []string{}
-
-			if isStringSet(p.DstIP) {
-				count++
-				setFields = append(setFields, "dst_ip")
-			}
-			if isStringSet(p.DestinationAssetID) {
-				count++
-				setFields = append(setFields, "destination_asset_id")
-			}
-			if p.DestinationNamedNetwork != nil {
-				count++
-				setFields = append(setFields, "destination_named_network")
-			}
-			if p.DestinationTagBasedPolicy != nil {
-				count++
-				setFields = append(setFields, "destination_tag_based_policy")
-			}
-			if isStringSet(p.Domain) {
-				count++
-				setFields = append(setFields, "domain")
-			}
-
-			// Track source-side fields that are not allowed for outbound paths
-			if isStringSet(p.SrcIP) {
-				badSourceFields = append(badSourceFields, "src_ip")
-			}
-			if isStringSet(p.SourceAssetID) {
-				badSourceFields = append(badSourceFields, "source_asset_id")
-			}
-			if p.SourceNamedNetwork != nil {
-				badSourceFields = append(badSourceFields, "source_named_network")
-			}
-			if p.SourceTagBasedPolicy != nil {
-				badSourceFields = append(badSourceFields, "source_tag_based_policy")
-			}
-
-			// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
-			pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown()
-			if (count == 0 && !pendingSelector) || count > 1 {
-				detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
-				if count > 1 {
-					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
-				}
-				addError(
-					"Invalid outbound template path configuration - selector fields",
-					detail,
-				)
-			}
-
-			// Report direction misuse (source-side fields on outbound)
-			if len(badSourceFields) > 0 {
-				addError(
-					"Invalid outbound template path configuration - direction",
-					fmt.Sprintf("For outbound template_paths elements, source-side fields must not be set. The following source-side fields are set: %v.", badSourceFields),
-				)
-			}
-
-		case "inbound":
-			// Inbound: exactly one of src_ip, source_asset_id, source_named_network,
-			// source_tag_based_policy. Domain must not be set.
-			count := 0
-			setFields := []string{}
-			badDestFields := []string{}
-
-			if isStringSet(p.SrcIP) {
-				count++
-				setFields = append(setFields, "src_ip")
-			}
-			if isStringSet(p.SourceAssetID) {
-				count++
-				setFields = append(setFields, "source_asset_id")
-			}
-			if p.SourceNamedNetwork != nil {
-				count++
-				setFields = append(setFields, "source_named_network")
-			}
-			if p.SourceTagBasedPolicy != nil {
-				count++
-				setFields = append(setFields, "source_tag_based_policy")
-			}
-
-			if count == 0 {
-				// fall through; we'll build the combined message below
-			}
+		// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
+		pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown() ||
+			unknownObjects["destination_named_network"] || unknownObjects["destination_tag_based_policy"]
+		if (count == 0 && !pendingSelector) || count > 1 {
+			detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
 			if count > 1 {
-				// fall through; we'll build the combined message below
+				detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
 			}
+			addError(
+				"Invalid outbound template path configuration - selector fields",
+				detail,
+			)
+		}
 
-			// Domain is only allowed for outbound paths
-			if isStringSet(p.Domain) {
-				badDestFields = append(badDestFields, "domain")
-			}
+		// Report direction misuse (source-side fields on outbound)
+		if len(badSourceFields) > 0 {
+			addError(
+				"Invalid outbound template path configuration - direction",
+				fmt.Sprintf("For outbound template_paths elements, source-side fields must not be set. The following source-side fields are set: %v.", badSourceFields),
+			)
+		}
 
-			// Track destination-side fields that are not allowed for inbound paths
-			if isStringSet(p.DstIP) {
-				badDestFields = append(badDestFields, "dst_ip")
-			}
-			if isStringSet(p.DestinationAssetID) {
-				badDestFields = append(badDestFields, "destination_asset_id")
-			}
-			if p.DestinationNamedNetwork != nil {
-				badDestFields = append(badDestFields, "destination_named_network")
-			}
-			if p.DestinationTagBasedPolicy != nil {
-				badDestFields = append(badDestFields, "destination_tag_based_policy")
-			}
+	case "inbound":
+		// Inbound: exactly one of src_ip, source_asset_id, source_named_network,
+		// source_tag_based_policy. Domain must not be set.
+		count := 0
+		setFields := []string{}
+		badDestFields := []string{}
 
-			pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown()
-			if (count == 0 && !pendingSelector) || count > 1 {
-				detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
-				if count > 1 {
-					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
-				}
-				addError(
-					"Invalid inbound template path configuration - selector fields",
-					detail,
-				)
-			}
+		if isStringSet(p.SrcIP) {
+			count++
+			setFields = append(setFields, "src_ip")
+		}
+		if isStringSet(p.SourceAssetID) {
+			count++
+			setFields = append(setFields, "source_asset_id")
+		}
+		if p.SourceNamedNetwork != nil {
+			count++
+			setFields = append(setFields, "source_named_network")
+		}
+		if p.SourceTagBasedPolicy != nil {
+			count++
+			setFields = append(setFields, "source_tag_based_policy")
+		}
 
-			// Report direction/domain misuse (destination-side fields or domain on inbound)
-			if len(badDestFields) > 0 {
-				addError(
-					"Invalid inbound template path configuration - direction",
-					fmt.Sprintf("For inbound template_paths elements, destination-side fields must not be set. The following forbidden fields are set: %v.", badDestFields),
-				)
+		if count == 0 {
+			// fall through; we'll build the combined message below
+		}
+		if count > 1 {
+			// fall through; we'll build the combined message below
+		}
+
+		// Domain is only allowed for outbound paths
+		if isStringSet(p.Domain) {
+			badDestFields = append(badDestFields, "domain")
+		}
+
+		// Track destination-side fields that are not allowed for inbound paths
+		if isStringSet(p.DstIP) {
+			badDestFields = append(badDestFields, "dst_ip")
+		}
+		if isStringSet(p.DestinationAssetID) {
+			badDestFields = append(badDestFields, "destination_asset_id")
+		}
+		if p.DestinationNamedNetwork != nil {
+			badDestFields = append(badDestFields, "destination_named_network")
+		}
+		if p.DestinationTagBasedPolicy != nil {
+			badDestFields = append(badDestFields, "destination_tag_based_policy")
+		}
+
+		pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown() ||
+			unknownObjects["source_named_network"] || unknownObjects["source_tag_based_policy"]
+		if (count == 0 && !pendingSelector) || count > 1 {
+			detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
+			if count > 1 {
+				detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
 			}
+			addError(
+				"Invalid inbound template path configuration - selector fields",
+				detail,
+			)
+		}
+
+		// Report direction/domain misuse (destination-side fields or domain on inbound)
+		if len(badDestFields) > 0 {
+			addError(
+				"Invalid inbound template path configuration - direction",
+				fmt.Sprintf("For inbound template_paths elements, destination-side fields must not be set. The following forbidden fields are set: %v.", badDestFields),
+			)
 		}
 	}
 }
@@ -867,6 +905,10 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(req.Config.Get(ctx, &configData)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePaths(ctx, &configData, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
