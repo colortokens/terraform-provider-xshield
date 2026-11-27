@@ -55,6 +55,14 @@ output "kept_subnet_association_imports" {
   value       = { for key, association in merge(local.held_subnets, local.contained_subnets) : key => association.level_id }
 }
 
+output "customer_security_rule_adoptions" {
+  description = "As customer_security_rule_imports, for the rules of Xshield's a group of yours holds now: those a configuration of yours declaring the group's rules inline wrote before this module, which Azure refuses it to create again. The enforcement-azure example imports them from here, which does nothing for a rule this workspace's state holds already."
+  value = {
+    for key, rule in local.customer_security_rules : key => "${local.customer_network_security_groups[split("/", key)[0]].id}/securityRules/${rule.name}"
+    if contains([for held in data.azurerm_network_security_group.customer[split("/", key)[0]].security_rule : lower(held.name)], lower(rule.name))
+  }
+}
+
 output "customer_security_rule_imports" {
   description = "The import ID of each of Xshield's rules the module adds to a group of yours, `<group ID>/securityRules/<rule name>`, by its key in `azurerm_network_security_rule.customer`. The receipt leaves them out, so the recovery-azure example imports them from here."
   value       = { for key, rule in local.customer_security_rules : key => "${local.customer_network_security_groups[split("/", key)[0]].id}/securityRules/${rule.name}" }

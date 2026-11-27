@@ -36,6 +36,15 @@ module "xshield_enforcement" {
   tags   = { "cost-center" = "platform-security" }
 }
 
+# A configuration of yours that declares a group's rules inline, through xshield_azure_security_rules, can write Xshield's
+# rules into the group before this workspace does, and Azure refuses to create a rule that exists. So this workspace adopts
+# each rule of Xshield's the group holds; one its state holds already is left as it is.
+import {
+  for_each = module.xshield_enforcement.customer_security_rule_adoptions
+  to       = module.xshield_enforcement.azurerm_network_security_rule.customer[each.key]
+  id       = each.value
+}
+
 variable "subscription_id" {
   description = "Azure subscription this workspace enforces."
   type        = string

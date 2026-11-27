@@ -16,7 +16,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 - An Xshield API key for a pipeline user, created under **Settings > API Keys**. The user's role needs `READ_ENFORCEMENT_SNAPSHOT` and `CREATE_ENFORCEMENT_RECEIPT`, which the built-in ADMIN and USER roles have, and must cover every workload in the subscription.
 - Terraform 1.7 or later, and the azurerm provider 4.81.0 or a later 4.x release.
 
-Xshield's group goes on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. Where every network interface and subnet of a workload carries a group of yours, Xshield adds the workload's rules to your subnet's group instead, ahead of your rules and naming only that workload's addresses, and leaves your rules as they are. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network, or the rules of such a group inline (step 3).
+Xshield's group goes on a network interface or subnet that carries none of yours, and Azure applies both a network interface's group and its subnet's, so where yours sits beside Xshield's, traffic passes only where both allow it. Where the network interface or subnet a workload's enforcement scope names carries a group of yours, Xshield adds the workload's rules to that group instead, ahead of your rules and naming only that workload's addresses, and leaves your rules as they are; a virtual machine's rules never move to its subnet in place of its network interface. No workspace other than the enforcement workspace changes, except one that declares subnets inline in a virtual network, or the rules of such a group inline (step 3).
 
 The module lives in the [`modules/azure`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the module and the provider match.
 
@@ -72,7 +72,7 @@ resource "azurerm_subnet" "app" {
 
 ### Keep Xshield's rules in groups of yours that your code declares
 
-Where every network interface and subnet of a workload carries a group of yours, the enforcement module adds the workload's rules to your subnet's group as `azurerm_network_security_rule` resources. The enforcement snapshot's `customer_network_security_groups` lists these groups. A workspace of yours that declares one of them with its rules inline, in `security_rule`, removes Xshield's rules at its next apply. For each such group, declare its rules through `xshield_azure_security_rules`, which gives back your rules with Xshield's ahead of them, and list the group's resource ID in the module's `customer_network_security_groups_in_code` in step 4:
+Where the network interface or subnet a workload's enforcement scope names carries a group of yours, the enforcement module adds the workload's rules to that group as `azurerm_network_security_rule` resources. The enforcement snapshot's `customer_network_security_groups` lists these groups. A workspace of yours that declares one of them with its rules inline, in `security_rule`, removes Xshield's rules at each apply, until the next enforcement apply puts them back. For each such group, declare its rules through `xshield_azure_security_rules`, which gives back your rules with Xshield's ahead of them:
 
 ```terraform
 data "xshield_azure_security_rules" "app" {
@@ -80,7 +80,13 @@ data "xshield_azure_security_rules" "app" {
   region                    = "eastus2"
   network_security_group_id = "/subscriptions/<subscription ID>/resourceGroups/network/providers/Microsoft.Network/networkSecurityGroups/app"
   declared_security_rules   = local.app_rules
+  current_security_rules    = [for rule in data.azurerm_network_security_group.app.security_rule : { name = rule.name, priority = rule.priority, direction = rule.direction }]
   version                   = data.xshield_azure_enforcement_status.this.applied_version
+}
+
+data "azurerm_network_security_group" "app" {
+  name                = "app"
+  resource_group_name = "network"
 }
 
 data "xshield_azure_enforcement_status" "this" {
@@ -96,22 +102,15 @@ resource "azurerm_network_security_group" "app" {
 }
 ```
 
-The enforcement apply leaves a group listed in `customer_network_security_groups_in_code` to that workspace: only its apply writes Xshield's rules into the group, or puts them back after drift. Run it after each enforcement apply. `version` reads the version the enforcement workspace last applied, so the group gets the rules of the version the subscription's other groups hold; until that workspace applies, the group keeps the previous version's rules.
+The enforcement apply goes on writing Xshield's rules into the group, so neither workspace's apply leaves a workload without them, and you set nothing to say the group's rules are in your code. Run your workspace after each enforcement apply: `version` reads the version the enforcement workspace last applied, and `current_security_rules` keeps Xshield's rules at the priorities the module gave them, so both workspaces declare the same rules and neither plans a change to the other's. Until your workspace applies, the group holds the new version's rules through the enforcement workspace alone. Your workspace can write Xshield's rules before the enforcement workspace does, and Azure refuses to create a rule that exists, so the enforcement workspace adopts each rule a group holds through the `import` block of step 4's example.
 
-Xshield's rules go ahead of yours, one each at the priority numbers below your group's first rule in each direction. Where your first rule leaves too few, the plan of a workspace that reads the group's rules, yours or the enforcement workspace, stops with an error that names the group. Once the cloud connector observes the group, Xshield refuses each workload whose rules go there, with reason `NO_FREE_PRIORITY` in `xshield_azure_enforcement_status`, whose message names the group, and the rest of the subscription and region applies. Move your rules to higher priority numbers to leave room, and Xshield writes the workloads' rules once the connector observes the group again.
+Xshield infers what your workspace does from the cloud connector's observations and the Activity Log, and says so in `xshield_azure_enforcement_status`. `customerGroupRulesRemoved` names a write of the group as a whole that took Xshield's rules out, and who made it: an apply that declares the group's rules inline without this data source. The enforcement apply puts the rules back, and the notice stays until a later write of the group keeps them all. `customerGroupCarriedByYourCode` says the latest write kept them all, and `customerGroupCarryBehind` that it kept an earlier version's rules: apply your workspace again.
 
-That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing.
+Xshield's rules go ahead of yours, one each at the priority numbers below your group's first rule in each direction. Where your first rule leaves too few, the enforcement plan stops with an error that names the group. Once the cloud connector observes the group, Xshield refuses each workload whose rules go there, with reason `NO_FREE_PRIORITY` in `xshield_azure_enforcement_status`, whose message names the group, and the rest of the subscription and region applies. In your workspace, `xshield_azure_security_rules` then moves your declared rules up, in their order, to leave the room the refused workloads' rules want, which the plan shows, and Xshield writes their rules once the connector observes the group again. It never moves a rule past priority 4096: where the room cannot be made, the workloads stay refused. For a group whose rules no workspace declares inline, move your rules to higher priority numbers yourself.
 
-A group the module has already written rules into holds them in the enforcement workspace's state, and listing it makes the next enforcement apply delete them from the group. Before you list it, take them out of that state:
+That workspace configures the `xshield` provider, so give its runner the API key too (step 1). A group with no inline rules, or whose rules your code declares as `azurerm_network_security_rule` resources, needs nothing. The module's `customer_network_security_groups_in_code` is no longer read: leave it set or remove it.
 
-```shell
-terraform state list | grep 'azurerm_network_security_rule.customer\["<group key>/'
-terraform state rm 'module.xshield_enforcement.azurerm_network_security_rule.customer["<group key>/<rule name>"]'
-```
-
-`<group key>` is the group's key in the snapshot's `customer_network_security_groups`. Remove each rule the list shows.
-
-**Done when** a plan of each such workspace shows only Xshield's rules added to the group.
+**Done when** a plan of each such workspace shows only Xshield's rules added to the group, or no change.
 
 ## Step 4: Create the enforcement workspace and apply it, once per subscription and region
 
@@ -130,6 +129,13 @@ module "xshield_enforcement" {
   source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v26.4.1"
 
   region = var.region
+}
+
+# Adopts each rule of Xshield's a group of yours holds before this workspace wrote it (step 3).
+import {
+  for_each = module.xshield_enforcement.customer_security_rule_adoptions
+  to       = module.xshield_enforcement.azurerm_network_security_rule.customer[each.key]
+  id       = each.value
 }
 
 output "xshield_review" {

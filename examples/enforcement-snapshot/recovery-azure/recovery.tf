@@ -40,7 +40,11 @@ locals {
       module.xshield_enforcement.kept_subnet_association_imports,
     ) : key => id if !contains(var.skipped_imports.subnet_associations, key)
   }
-  recovered_security_rules = { for key, id in module.xshield_enforcement.customer_security_rule_imports : key => id if !contains(var.skipped_imports.security_rules, key) }
+  # The workspace's own import block adopts the rules your groups hold, so this file imports only the rest.
+  recovered_security_rules = {
+    for key, id in module.xshield_enforcement.customer_security_rule_imports : key => id
+    if !contains(var.skipped_imports.security_rules, key) && !contains(keys(module.xshield_enforcement.customer_security_rule_adoptions), key)
+  }
 }
 
 import {

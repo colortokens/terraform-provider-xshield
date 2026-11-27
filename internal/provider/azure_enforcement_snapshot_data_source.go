@@ -73,6 +73,14 @@ type azCustomerNetworkSecurityGroupModel struct {
 	Name              types.String              `tfsdk:"name"`
 	SecurityRules     []azSecurityRuleModel     `tfsdk:"security_rules"`
 	Subnets           map[string][]types.String `tfsdk:"subnets"`
+	NetworkInterfaces map[string][]types.String `tfsdk:"network_interfaces"`
+}
+
+type azCustomerRoomWantedModel struct {
+	ID                types.String           `tfsdk:"id"`
+	ResourceGroupName types.String           `tfsdk:"resource_group_name"`
+	Name              types.String           `tfsdk:"name"`
+	PrioritiesWanted  map[string]types.Int64 `tfsdk:"priorities_wanted"`
 }
 
 type azureEnforcementSnapshotDataSourceModel struct {
@@ -90,7 +98,8 @@ type azureEnforcementSnapshotDataSourceModel struct {
 
 	Assets map[string]azAssetModel `tfsdk:"assets"`
 
-	CustomerNetworkSecurityGroups map[string]azCustomerNetworkSecurityGroupModel `tfsdk:"customer_network_security_groups"`
+	CustomerNetworkSecurityGroups             map[string]azCustomerNetworkSecurityGroupModel `tfsdk:"customer_network_security_groups"`
+	CustomerNetworkSecurityGroupsAwaitingRoom map[string]azCustomerRoomWantedModel           `tfsdk:"customer_network_security_groups_awaiting_room"`
 
 	HeldInterfaceAssociations     map[string]azHeldAssociationModel `tfsdk:"held_interface_associations"`
 	HeldSubnetAssociations        map[string]azHeldAssociationModel `tfsdk:"held_subnet_associations"`
@@ -124,6 +133,7 @@ type wireAzureCustomerNetworkSecurityGroup struct {
 	Name              string                  `json:"name"`
 	SecurityRules     []wireAzureSecurityRule `json:"securityRules"`
 	Subnets           map[string][]string     `json:"subnets"`
+	NetworkInterfaces map[string][]string     `json:"networkInterfaces"`
 }
 
 type wireAzureSubnetAssociation struct {
@@ -153,13 +163,21 @@ type wireAzurePlan struct {
 		NetworkSecurityGroups         []string `json:"networkSecurityGroups"`
 		CustomerNetworkSecurityGroups []string `json:"customerNetworkSecurityGroups"`
 	} `json:"assets"`
-	CustomerNetworkSecurityGroups  map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
-	HeldInterfaceAssociations      map[string]wireAzureHeldAssociation              `json:"heldInterfaceAssociations"`
-	HeldSubnetAssociations         map[string]wireAzureHeldAssociation              `json:"heldSubnetAssociations"`
-	ReleasedInterfaceAssociations  map[string]string                                `json:"releasedInterfaceAssociations"`
-	ReleasedSubnetAssociations     map[string]string                                `json:"releasedSubnetAssociations"`
-	ContainedInterfaceAssociations map[string]wireAzureHeldAssociation              `json:"containedInterfaceAssociations"`
-	ContainedSubnetAssociations    map[string]wireAzureHeldAssociation              `json:"containedSubnetAssociations"`
+	CustomerNetworkSecurityGroups map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
+	// CustomerNetworkSecurityGroupsAwaitingRoom are groups of yours with workloads Xshield refused for want of priorities ahead
+	// of your rules, and the priorities, by direction, Xshield's rules for the group would take with theirs.
+	CustomerNetworkSecurityGroupsAwaitingRoom map[string]struct {
+		ID                string           `json:"id"`
+		ResourceGroupName string           `json:"resourceGroupName"`
+		Name              string           `json:"name"`
+		PrioritiesWanted  map[string]int64 `json:"prioritiesWanted"`
+	} `json:"customerNetworkSecurityGroupsAwaitingRoom"`
+	HeldInterfaceAssociations      map[string]wireAzureHeldAssociation `json:"heldInterfaceAssociations"`
+	HeldSubnetAssociations         map[string]wireAzureHeldAssociation `json:"heldSubnetAssociations"`
+	ReleasedInterfaceAssociations  map[string]string                   `json:"releasedInterfaceAssociations"`
+	ReleasedSubnetAssociations     map[string]string                   `json:"releasedSubnetAssociations"`
+	ContainedInterfaceAssociations map[string]wireAzureHeldAssociation `json:"containedInterfaceAssociations"`
+	ContainedSubnetAssociations    map[string]wireAzureHeldAssociation `json:"containedSubnetAssociations"`
 }
 
 func (d *azureEnforcementSnapshotDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -265,14 +283,24 @@ func (d *azureEnforcementSnapshotDataSource) Schema(ctx context.Context, req dat
 			"customer_network_security_groups": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
 				"id": types.StringType, "resource_group_name": types.StringType, "name": types.StringType,
 				"security_rules": types.ListType{ElemType: azSecurityRuleType}, "subnets": types.MapType{ElemType: azStringsType},
-			}}, "Each network security group of yours that takes Xshield's rules for the workloads in its subnet, because every "+
-				"network interface or subnet of those workloads carries a group of yours, keyed by `customer-nsg-` and a hash of "+
-				"its resource ID. "+
+				"network_interfaces": types.MapType{ElemType: azStringsType},
+			}}, "Each network security group of yours that takes Xshield's rules for workloads, because it is on the network "+
+				"interface or subnet each workload's enforcement scope names, keyed by `customer-nsg-` and a hash of its resource ID. "+
 				"`id`, `resource_group_name` and `name`: the group's resource ID, resource group and name. "+
 				"`security_rules`: Xshield's rules for the group, each naming only its workload's own addresses, with no allow "+
 				"of all traffic, as your rules decide the rest. Their `priority` gives only the order Azure is to evaluate them "+
 				"in: read them through `xshield_azure_security_rules`, which numbers them ahead of your rules. "+
-				"`subnets`: each subnet whose workloads the rules are for, by resource ID, with the Xshield asset IDs of those workloads."),
+				"`subnets`: each subnet carrying the group whose workloads the rules are for, by resource ID, with the Xshield asset IDs of those workloads. "+
+				"`network_interfaces`: the same for each network interface carrying the group."),
+			"customer_network_security_groups_awaiting_room": objects(types.ObjectType{AttrTypes: map[string]attr.Type{
+				"id": types.StringType, "resource_group_name": types.StringType, "name": types.StringType,
+				"priorities_wanted": types.MapType{ElemType: types.Int64Type},
+			}}, "Each network security group of yours on which Xshield refused workloads because your rules leave too few "+
+				"priorities ahead of them, keyed as in `customer_network_security_groups`. "+
+				"`id`, `resource_group_name` and `name`: the group's resource ID, resource group and name. "+
+				"`priorities_wanted`: by direction, `Inbound` or `Outbound`, how many priorities ahead of your rules Xshield's rules "+
+				"for the group would take with the refused workloads'. Where your code declares the group's rules, "+
+				"`xshield_azure_security_rules` moves them up to make that room."),
 			"held_interface_associations": objects(azHeldAssociationType, "Associations an earlier apply made whose network "+
 				"interface now carries a network security group of yours in place of Xshield's, keyed by the group's key. "+
 				"Azure removes an association by taking whatever group its network interface carries off it, so removing one of "+
@@ -358,6 +386,8 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		ReleasedSubnetAssociations:    map[string]types.String{},
 		CustomerNetworkSecurityGroups: map[string]azCustomerNetworkSecurityGroupModel{},
 
+		CustomerNetworkSecurityGroupsAwaitingRoom: map[string]azCustomerRoomWantedModel{},
+
 		ContainedInterfaceAssociations: map[string]azHeldAssociationModel{},
 		ContainedSubnetAssociations:    map[string]azHeldAssociationModel{},
 	}
@@ -375,8 +405,20 @@ func azureSnapshotModel(account, region types.String, snap *wireSnapshot) azureE
 		for subnetID, assetIDs := range g.Subnets {
 			subnets[subnetID] = toStrList(assetIDs)
 		}
+		interfaces := make(map[string][]types.String, len(g.NetworkInterfaces))
+		for interfaceID, assetIDs := range g.NetworkInterfaces {
+			interfaces[interfaceID] = toStrList(assetIDs)
+		}
 		m.CustomerNetworkSecurityGroups[key] = azCustomerNetworkSecurityGroupModel{ID: types.StringValue(g.ID), ResourceGroupName: types.StringValue(g.ResourceGroupName),
-			Name: types.StringValue(g.Name), SecurityRules: azureRuleModels(g.SecurityRules), Subnets: subnets}
+			Name: types.StringValue(g.Name), SecurityRules: azureRuleModels(g.SecurityRules), Subnets: subnets, NetworkInterfaces: interfaces}
+	}
+	for key, g := range plan.CustomerNetworkSecurityGroupsAwaitingRoom {
+		wanted := make(map[string]types.Int64, len(g.PrioritiesWanted))
+		for direction, count := range g.PrioritiesWanted {
+			wanted[direction] = types.Int64Value(count)
+		}
+		m.CustomerNetworkSecurityGroupsAwaitingRoom[key] = azCustomerRoomWantedModel{ID: types.StringValue(g.ID),
+			ResourceGroupName: types.StringValue(g.ResourceGroupName), Name: types.StringValue(g.Name), PrioritiesWanted: wanted}
 	}
 	m.SubnetAssociations = azureSubnetAssociationModels(plan.SubnetAssociations)
 	m.InterfaceAssociations = azureInterfaceAssociationModels(plan.InterfaceAssociations)

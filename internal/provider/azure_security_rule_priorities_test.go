@@ -150,6 +150,24 @@ func TestNoRoomAheadOfYourRulesFailsNamingTheGroupAndThePriority(t *testing.T) {
 	}
 }
 
+// Moving declared rules makes no room a rule your configuration leaves undeclared takes, so such a rule still fails the plan.
+func TestAnUndeclaredRuleInTheWayIsNotWorkedAroundByMovingYourDeclaredRules(t *testing.T) {
+	t.Parallel()
+	moved, _, err := moveYoursUp("nsg-app", workloadRules(), []azurePriorityHolder{yourRule("allow-ssh", "Inbound", 101)},
+		[]azurePriorityHolder{yourRule("allow-lb", "Inbound", 100), yourRule("allow-ssh", "Inbound", 101)})
+	if err == nil || !strings.Contains(err.Error(), "priority 100") {
+		t.Errorf("moved %v, error %v; want the plan to fail on the undeclared rule at 100", moved, err)
+	}
+	moved, numbered, err := moveYoursUp("nsg-app", workloadRules(), []azurePriorityHolder{yourRule("allow-ssh", "Inbound", 101)},
+		[]azurePriorityHolder{yourRule("allow-ssh", "Inbound", 101)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved["allow-ssh"] != 103 || prioritiesOf(t, numbered)["CT-Rule-Deny-in"] != 102 {
+		t.Errorf("moved %v numbered %v, want allow-ssh at 103 and Xshield's three inbound rules from 100: its current priority is its own", moved, prioritiesOf(t, numbered))
+	}
+}
+
 func TestSameAccessRunsSplitWhereTheAccessChanges(t *testing.T) {
 	t.Parallel()
 	rules := []wireAzureSecurityRule{azureTestRule("d", "Inbound", "Deny", 3001), azureTestRule("a", "Inbound", "Allow", 100),

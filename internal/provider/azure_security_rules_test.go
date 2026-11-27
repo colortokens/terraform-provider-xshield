@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -227,11 +229,177 @@ func TestADeclaredRuleNamedAsXshieldNamesItsOwnFailsThePlan(t *testing.T) {
 	}
 }
 
-func TestYourRuleAtTheLowestPriorityFailsThePlanNamingTheGroup(t *testing.T) {
+func TestAnUndeclaredRuleOfYoursAtTheLowestPriorityFailsThePlanNamingTheGroup(t *testing.T) {
 	t.Parallel()
-	_, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, yourAllowRule("allow-ssh", 100)))
+	in := customerGroupRead(azureTestCustomerGroupID)
+	in.CurrentSecurityRules = []azRulePriorityModel{{Name: types.StringValue("allow-lb"), Priority: types.Int64Value(100), Direction: types.StringValue("Inbound")}}
+	_, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), in)
 	if ok || !strings.Contains(errs, "nsg-snet-owner") || !strings.Contains(errs, "priority 100") || !strings.Contains(errs, "NO_FREE_PRIORITY") {
-		t.Errorf("ok %v errors %q, want the plan to fail naming the group, your rule's priority and the refusal reason Xshield gives such a workload", ok, errs)
+		t.Errorf("ok %v errors %q, want the plan to fail naming the group, your rule's priority and the refusal reason Xshield gives such a workload: "+
+			"a rule your configuration does not declare is not this data source's to move", ok, errs)
+	}
+}
+
+func yourRuleFacing(name, direction, access string, priority int64) azInlineSecurityRuleModel {
+	r := yourAllowRule(name, priority)
+	r.Direction, r.Access = types.StringValue(direction), types.StringValue(access)
+	return r
+}
+
+func inlinePriorities(rules []azInlineSecurityRuleModel) map[string]int64 {
+	out := map[string]int64{}
+	for _, r := range rules {
+		out[r.Name.ValueString()] = r.Priority.ValueInt64()
+	}
+	return out
+}
+
+// Without room ahead of your declared rules, they move up in their order, by as few priorities as Xshield's rules need, and
+// Xshield's take the priorities they leave; a rule already clear of them stays.
+func TestYourDeclaredRulesWithoutRoomMoveUpInTheirOrderWithXshieldsAheadOfThem(t *testing.T) {
+	t.Parallel()
+	declared := []azInlineSecurityRuleModel{yourAllowRule("allow-ssh", 100), yourRuleFacing("deny-vnet", "Inbound", "Deny", 101),
+		yourAllowRule("allow-web", 300), yourRuleFacing("allow-dns", "Outbound", "Allow", 100)}
+	m, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if !ok {
+		t.Fatal(errs)
+	}
+	want := map[string]int64{"allow-ssh": 103, "deny-vnet": 104, "allow-web": 300, "allow-dns": 101,
+		"CT-Rule-Allow-64c02cd7face": 100, "CT-Rule-Allow-89dbc7f62dbc": 101, "CT-Rule-Deny-7afbbb662c01": 102, "CT-Rule-Deny-93ef773b5a07": 100}
+	got := inlinePriorities(m.SecurityRules)
+	for name, p := range want {
+		if got[name] != p {
+			t.Errorf("%s at %d, want %d: priorities %v", name, got[name], p, got)
+		}
+	}
+	if len(m.SecurityRules) != 8 {
+		t.Fatalf("security rules %d, want your four and Xshield's four", len(m.SecurityRules))
+	}
+	for i, r := range m.SecurityRules[:4] {
+		if r.Name.ValueString() != declared[i].Name.ValueString() || r.DestinationPortRange.ValueString() != "22" || r.Access != declared[i].Access {
+			t.Errorf("rule %d %+v, want your declared rule %s with only its priority changed", i, r, declared[i].Name.ValueString())
+		}
+	}
+}
+
+// Once applied, the group holds your rules where they moved to; the next plan gives the same priorities, so it changes nothing.
+func TestYourMovedRulesStayWhereTheLastApplyPutThem(t *testing.T) {
+	t.Parallel()
+	in := customerGroupRead(azureTestCustomerGroupID, yourAllowRule("allow-ssh", 100), yourRuleFacing("deny-vnet", "Inbound", "Deny", 101))
+	holding := func(name, direction string, priority int64) azRulePriorityModel {
+		return azRulePriorityModel{Name: types.StringValue(name), Priority: types.Int64Value(priority), Direction: types.StringValue(direction)}
+	}
+	in.CurrentSecurityRules = []azRulePriorityModel{holding("CT-Rule-Allow-64c02cd7face", "Inbound", 100), holding("CT-Rule-Allow-89dbc7f62dbc", "Inbound", 101),
+		holding("CT-Rule-Deny-7afbbb662c01", "Inbound", 102), holding("CT-Rule-Deny-93ef773b5a07", "Outbound", 100),
+		holding("allow-ssh", "Inbound", 103), holding("deny-vnet", "Inbound", 104)}
+	m, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), in)
+	if !ok {
+		t.Fatal(errs)
+	}
+	want := map[string]int64{"allow-ssh": 103, "deny-vnet": 104, "CT-Rule-Allow-64c02cd7face": 100, "CT-Rule-Allow-89dbc7f62dbc": 101,
+		"CT-Rule-Deny-7afbbb662c01": 102, "CT-Rule-Deny-93ef773b5a07": 100}
+	if got := inlinePriorities(m.SecurityRules); !maps.Equal(got, want) {
+		t.Errorf("priorities %v, want %v as the group holds them", got, want)
+	}
+}
+
+// awaitingRoomSnapshot is the customer group snapshot with workloads refused for room in the group, whose rules want the
+// priorities given by direction.
+func awaitingRoomSnapshot(t *testing.T, inbound, outbound int) map[string]cannedResponse {
+	t.Helper()
+	responses := publishedCustomerGroupSnapshot(t)
+	version := loadJSON[wireSnapshot](t, "azure_snapshot_customer_group.json").Version
+	body := strings.Replace(readTestdata(t, "azure_snapshot_customer_group.json"), `"azure": {`, fmt.Sprintf(`"azure": {
+    "customerNetworkSecurityGroupsAwaitingRoom": {"customer-nsg-5b8ff476f40c": {"id": %q, "resourceGroupName": "rg-net", "name": "nsg-snet-owner",
+      "prioritiesWanted": {"Inbound": %d, "Outbound": %d}}},`, strings.ToUpper(azureTestCustomerGroupID), inbound, outbound), 1)
+	responses["/versions/"+version] = cannedResponse{http.StatusOK, body}
+	return responses
+}
+
+// A group of yours on a workload's network interface shows there, not on a subnet, and the room Xshield's rules wait for
+// in a group of yours shows by direction.
+func TestAzureSnapshotMapsYourInterfaceGroupAndTheRoomItAwaits(t *testing.T) {
+	t.Parallel()
+	responses := awaitingRoomSnapshot(t, 5, 1)
+	version := loadJSON[wireSnapshot](t, "azure_snapshot_customer_group.json").Version
+	interfaceID := "/subscriptions/" + azureTestSubscription + "/resourceGroups/rg-app/providers/Microsoft.Network/networkInterfaces/nic-web"
+	body := strings.Replace(responses["/versions/"+version].body, `"subnets": {`, fmt.Sprintf(`"networkInterfaces": {%q: ["web"]}, "subnets": {`, interfaceID), 1)
+	responses["/versions/"+version] = cannedResponse{http.StatusOK, body}
+	m, ok, errs, _ := readAzureSnapshot(t, responses)
+	if !ok {
+		t.Fatal(errs)
+	}
+	g := m.CustomerNetworkSecurityGroups[azureTestCustomerGroupKey]
+	if got := keysOf(g.NetworkInterfaces[interfaceID]); !slices.Equal(got, []string{"web"}) {
+		t.Errorf("network interfaces %v, want nic-web with web", g.NetworkInterfaces)
+	}
+	room, found := m.CustomerNetworkSecurityGroupsAwaitingRoom[azureTestCustomerGroupKey]
+	if !found || room.Name.ValueString() != "nsg-snet-owner" || room.ResourceGroupName.ValueString() != "rg-net" ||
+		room.PrioritiesWanted["Inbound"].ValueInt64() != 5 || room.PrioritiesWanted["Outbound"].ValueInt64() != 1 {
+		t.Errorf("awaiting room %+v (found %v), want nsg-snet-owner in rg-net wanting five inbound and one outbound", room, found)
+	}
+}
+
+// A group whose workloads Xshield refused for room gets the room their rules want ahead of your declared rules, so the
+// observation after your apply finds it and the workloads are no longer refused; Xshield's rules placed now are unchanged.
+func TestYourDeclaredRulesMoveUpForTheRoomOfWorkloadsRefusedForIt(t *testing.T) {
+	t.Parallel()
+	declared := []azInlineSecurityRuleModel{yourAllowRule("allow-ssh", 103), yourRuleFacing("deny-vnet", "Inbound", "Deny", 104),
+		yourAllowRule("allow-web", 300), yourRuleFacing("allow-dns", "Outbound", "Allow", 101)}
+	m, ok, errs, _ := readAzureSecurityRules(t, awaitingRoomSnapshot(t, 5, 1), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if !ok {
+		t.Fatal(errs)
+	}
+	want := map[string]int64{"allow-ssh": 105, "deny-vnet": 106, "allow-web": 300, "allow-dns": 101,
+		"CT-Rule-Allow-64c02cd7face": 100, "CT-Rule-Allow-89dbc7f62dbc": 101, "CT-Rule-Deny-7afbbb662c01": 102, "CT-Rule-Deny-93ef773b5a07": 100}
+	if got := inlinePriorities(m.SecurityRules); !maps.Equal(got, want) {
+		t.Errorf("priorities %v, want %v: room for five inbound rules ahead of yours, and the one outbound rule already fits", got, want)
+	}
+
+	without, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if !ok || inlinePriorities(without.SecurityRules)["allow-ssh"] != 103 {
+		t.Errorf("without workloads awaiting room your rules stay: %v %s", inlinePriorities(without.SecurityRules), errs)
+	}
+}
+
+// Room that cannot be made below priority 4096 is not made, and the plan goes on with what fits now: the workloads stay
+// refused, and nothing Xshield enforces is lost.
+func TestRoomThatCannotBeMadeLeavesYourRulesWhereXshieldsFit(t *testing.T) {
+	t.Parallel()
+	declared := []azInlineSecurityRuleModel{yourAllowRule("allow-ssh", 103), yourAllowRule("allow-top", 4096)}
+	m, ok, errs, _ := readAzureSecurityRules(t, awaitingRoomSnapshot(t, 4000, 1), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if !ok {
+		t.Fatal(errs)
+	}
+	if got := inlinePriorities(m.SecurityRules); got["allow-ssh"] != 103 || got["allow-top"] != 4096 {
+		t.Errorf("priorities %v, want your rules where they are", got)
+	}
+}
+
+// The module declares no rules of yours, so it reads no room for later workloads: its rules take only what is free now.
+func TestRoomAwaitedMovesNothingWhereNoRuleIsDeclared(t *testing.T) {
+	t.Parallel()
+	in := customerGroupRead(azureTestCustomerGroupID)
+	in.CurrentSecurityRules = []azRulePriorityModel{{Name: types.StringValue("allow-ssh"), Priority: types.Int64Value(103), Direction: types.StringValue("Inbound")}}
+	m, ok, errs, _ := readAzureSecurityRules(t, awaitingRoomSnapshot(t, 5, 1), in)
+	if !ok {
+		t.Fatal(errs)
+	}
+	if len(m.XshieldSecurityRules) != 4 {
+		t.Errorf("xshield rules %d, want the four placed now", len(m.XshieldSecurityRules))
+	}
+}
+
+// Your declared rules are never moved past Azure's highest priority: where they would be, the plan fails.
+func TestYourDeclaredRulesThatWouldMovePastPriority4096FailThePlan(t *testing.T) {
+	t.Parallel()
+	declared := []azInlineSecurityRuleModel{}
+	for p := int64(100); p <= 4096; p++ {
+		declared = append(declared, yourAllowRule(fmt.Sprintf("allow-%d", p), p))
+	}
+	_, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if ok || !strings.Contains(errs, "nsg-snet-owner") || !strings.Contains(errs, "4096") || !strings.Contains(errs, "moved up") {
+		t.Errorf("ok %v errors %q, want the plan to fail naming the group and saying moving your rules up would pass 4096", ok, errs)
 	}
 }
 

@@ -1,7 +1,7 @@
 # A network security group whose rules your configuration declares inline holds only
 # the rules it declares. Where Xshield writes a workload's rules into it, declare the
-# group's rules through this data source, and list the group in the azure enforcement
-# module's customer_network_security_groups_in_code so the module leaves it to you.
+# group's rules through this data source, so the group's apply keeps Xshield's. The azure
+# enforcement module writes them into the group all the same.
 locals {
   app_rules = [
     {
@@ -25,7 +25,15 @@ data "xshield_azure_security_rules" "app" {
   region                    = "eastus2"
   network_security_group_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-app"
   declared_security_rules   = local.app_rules
+  current_security_rules    = [for rule in data.azurerm_network_security_group.app.security_rule : { name = rule.name, priority = rule.priority, direction = rule.direction }]
   version                   = data.xshield_azure_enforcement_status.this.applied_version
+}
+
+# The rules the group holds now, Xshield's among them, so Xshield's keep the priorities
+# the enforcement module gives them.
+data "azurerm_network_security_group" "app" {
+  name                = "nsg-app"
+  resource_group_name = "rg-net"
 }
 
 data "xshield_azure_enforcement_status" "this" {

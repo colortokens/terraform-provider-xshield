@@ -384,13 +384,12 @@ resource "azurerm_subnet_network_security_group_association" "this" {
   network_security_group_id = each.value.network_security_group_id
 }
 
-# Xshield writes a workload's rules into a group of yours when every network interface or subnet of the workload carries
-# one. azurerm takes a group's rules either inline or as rule resources, so each such group gets them as rule resources of
-# this module's, except a group whose own configuration declares its rules inline: that configuration passes them through
-# xshield_azure_security_rules, as its next apply would remove rules it does not declare.
+# Xshield writes a workload's rules into the group of yours on the network interface its enforcement scope names, or on its
+# subnet, and each such group gets them as rule resources of this module's. A configuration of yours that declares the
+# group's rules inline passes them through xshield_azure_security_rules, so its apply keeps them; this module writes them
+# all the same, so no apply of that configuration leaves a workload without them, and puts back any it removes.
 locals {
-  customer_network_security_groups_in_code = toset([for id in var.customer_network_security_groups_in_code : lower(id)])
-  customer_network_security_groups_wanted  = { for key, group in local.snap.customer_network_security_groups : key => group if !contains(local.customer_network_security_groups_in_code, lower(group.id)) }
+  customer_network_security_groups_wanted = local.snap.customer_network_security_groups
 }
 
 # A group of yours can be deleted before discovery tells Xshield, so it is read, and given rules, only while Azure lists it.

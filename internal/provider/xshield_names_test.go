@@ -59,6 +59,14 @@ func fieldType(t reflect.Type, name string) reflect.Type {
 	return held
 }
 
+// objectFieldsOf is the fields of the objects the named attribute holds, and none where there is no such attribute.
+func objectFieldsOf(attributes map[string]dsschema.Attribute, name string) map[string]attr.Type {
+	if attribute, ok := attributes[name]; ok {
+		return objectFields(attribute.GetType())
+	}
+	return map[string]attr.Type{}
+}
+
 // A field Xshield adds to what it publishes takes its own name here, in snake case, unless Terraform's naming rules
 // ask for another, and then the difference is written down in one place.
 func TestAttributesTakeXshieldsFieldNamesExceptWhereListed(t *testing.T) {
@@ -96,6 +104,10 @@ func TestAttributesTakeXshieldsFieldNamesExceptWhereListed(t *testing.T) {
 		{"a subnet association of the Azure snapshot", fieldType(azurePublished, "SubnetAssociations"), objectFields(azureSnapshot["subnet_associations"].GetType())},
 		{"an interface association of the Azure snapshot", fieldType(azurePublished, "InterfaceAssociations"), objectFields(azureSnapshot["interface_associations"].GetType())},
 		{"an asset of the Azure snapshot", fieldType(azurePublished, "Assets"), objectFields(azureSnapshot["assets"].GetType())},
+		{"a group of yours of the Azure snapshot", fieldType(azurePublished, "CustomerNetworkSecurityGroups"),
+			objectFieldsOf(azureSnapshot, "customer_network_security_groups")},
+		{"a group of yours awaiting room in the Azure snapshot", fieldType(azurePublished, "CustomerNetworkSecurityGroupsAwaitingRoom"),
+			objectFieldsOf(azureSnapshot, "customer_network_security_groups_awaiting_room")},
 	} {
 		changed := xshieldNamesChangedForTerraform[mirrored.what]
 		used := map[string]bool{}
