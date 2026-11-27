@@ -10,6 +10,7 @@ import (
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -189,6 +190,46 @@ func TestTemplateApplyRejectsAPathWhoseDeferredSelectorResolvedToNull(t *testing
 			t.Errorf("update diagnostics = %v, API requests = %v; want %q and no request", resp.Diagnostics, *requests, want)
 		}
 	})
+}
+
+// Every path is checked, so one plan reports every invalid path, not only the
+// first.
+func TestTemplatePathValidateConfigReportsEveryInvalidPath(t *testing.T) {
+	noSource := func() map[string]any { return inbound(map[string]any{}) }
+	valid := func() map[string]any { return inbound(map[string]any{"src_ip": "10.0.0.1"}) }
+	cases := map[string]struct {
+		paths []map[string]any
+		want  []string
+	}{
+		"two invalid paths": {
+			[]map[string]any{noSource(), outbound(map[string]any{})},
+			[]string{"template_paths[0]", "template_paths[1]"},
+		},
+		"three invalid paths, each breaking a different rule": {
+			[]map[string]any{noSource(), outbound(map[string]any{}), inbound(map[string]any{"src_ip": "10.0.0.1", "source_asset_id": "client-asset"})},
+			[]string{"template_paths[0]", "template_paths[1]", "template_paths[2]"},
+		},
+		"a valid path between two invalid ones": {
+			[]map[string]any{noSource(), valid(), noSource()},
+			[]string{"template_paths[0]", "template_paths[2]"},
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var resp resource.ValidateConfigResponse
+			(&TemplateResource{}).ValidateConfig(context.Background(), resource.ValidateConfigRequest{
+				Config: templateConfigWithPaths(t, pathList(c.paths...))}, &resp)
+			var got []string
+			for _, d := range resp.Diagnostics.Errors() {
+				if d, ok := d.(diag.DiagnosticWithPath); ok {
+					got = append(got, d.Path().String())
+				}
+			}
+			if fmt.Sprint(got) != fmt.Sprint(c.want) || len(resp.Diagnostics.Errors()) != len(c.want) {
+				t.Errorf("errors at %v (%v), want one at each of %v", got, resp.Diagnostics.Errors(), c.want)
+			}
+		})
+	}
 }
 
 // Literal configs keep the errors they have always had.

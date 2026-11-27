@@ -63,9 +63,9 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 			continue
 		}
 		var p tfTypes.MetadataPath
-		resp.Diagnostics.Append(object.As(ctx, &p, basetypes.ObjectAsOptions{UnhandledUnknownAsEmpty: true})...)
-		if resp.Diagnostics.HasError() {
-			return
+		diags := object.As(ctx, &p, basetypes.ObjectAsOptions{UnhandledUnknownAsEmpty: true})
+		if resp.Diagnostics.Append(diags...); diags.HasError() {
+			continue
 		}
 		unknownObjects := map[string]bool{}
 		for name, value := range object.Attributes() {
