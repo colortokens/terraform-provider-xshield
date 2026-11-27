@@ -229,6 +229,67 @@ func TestADeclaredRuleNamedAsXshieldNamesItsOwnFailsThePlan(t *testing.T) {
 	}
 }
 
+func azureFieldEntries(single types.String, many []types.String) int {
+	if single.ValueString() != "" {
+		return len(many) + 1
+	}
+	return len(many)
+}
+
+func testStrings(n int, format func(i int) string) []types.String {
+	out := make([]types.String, 0, n)
+	for i := range n {
+		out = append(out, types.StringValue(format(i)))
+	}
+	return out
+}
+
+// Azure caps a group's source addresses, destination addresses, source port ranges and destination port ranges apart, at
+// 6,000 each, so a declared rule that takes one of them past it beside Xshield's fails the plan rather than the apply part-way.
+func TestYourDeclaredRulesAndXshieldsPastAzuresAddressLimitFailThePlan(t *testing.T) {
+	t.Parallel()
+	base, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID))
+	if !ok {
+		t.Fatalf("reading Xshield's rules: %s", errs)
+	}
+	sources, destinationPorts := 0, 0
+	for _, r := range base.XshieldSecurityRules {
+		sources += azureFieldEntries(r.SourceAddressPrefix, r.SourceAddressPrefixes)
+		destinationPorts += azureFieldEntries(r.DestinationPortRange, r.DestinationPortRanges)
+	}
+	withPrefixes := func(n int) azInlineSecurityRuleModel {
+		r := yourAllowRule("allow-partners", 1000)
+		r.SourceAddressPrefix = types.StringNull()
+		r.SourceAddressPrefixes = testStrings(n, func(i int) string { return fmt.Sprintf("172.16.%d.%d/32", i/256, i%256) })
+		return r
+	}
+	withPorts := func(n int) azInlineSecurityRuleModel {
+		r := yourAllowRule("allow-ports", 1001)
+		r.DestinationPortRange = types.StringNull()
+		r.DestinationPortRanges = testStrings(n, func(i int) string { return fmt.Sprint(10000 + i) })
+		return r
+	}
+
+	if _, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID,
+		withPrefixes(6000-sources-1), withPorts(6000-destinationPorts-1))); !ok {
+		t.Errorf("errors %q, want the rules given at exactly 6000 source addresses and 6000 destination port ranges", errs)
+	}
+	for name, tc := range map[string]struct {
+		rules []azInlineSecurityRuleModel
+		want  string
+	}{
+		"source addresses":        {[]azInlineSecurityRuleModel{withPrefixes(6000 - sources + 1)}, "6001 source addresses"},
+		"destination port ranges": {[]azInlineSecurityRuleModel{withPorts(6000 - destinationPorts + 1)}, "6001 destination port ranges"},
+	} {
+		_, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, tc.rules...))
+		for _, want := range []string{"nsg-snet-owner", tc.want, "Azure's limit of 6000 " + name, "PREFIX_BUDGET"} {
+			if ok || !strings.Contains(errs, want) {
+				t.Errorf("%s: ok %v errors %q, want the plan to fail with %q", name, ok, errs, want)
+			}
+		}
+	}
+}
+
 func TestAnUndeclaredRuleOfYoursAtTheLowestPriorityFailsThePlanNamingTheGroup(t *testing.T) {
 	t.Parallel()
 	in := customerGroupRead(azureTestCustomerGroupID)

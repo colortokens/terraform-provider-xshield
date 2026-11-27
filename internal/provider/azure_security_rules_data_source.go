@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -214,6 +215,14 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 			for _, r := range numbered {
 				xshield = append(xshield, azureInlineRuleModel(r))
 			}
+			if field, n := azureAddressesPast(append(slices.Clone(declared), xshield...)); field != "" {
+				resp.Diagnostics.AddError("Xshield's rules and yours pass what Azure holds in one group", fmt.Sprintf("your network security group "+
+					"%s would hold rules naming %d %s, past Azure's limit of %d %s in a group's rules, so Azure would reject the group "+
+					"part-way through the apply. Xshield refuses such a workload PREFIX_BUDGET once it sees your rules: name fewer "+
+					"addresses or ports in your declared rules, or remove your group so Xshield places one of its own.",
+					group.Name, n, field, azureAddressLimit, field))
+				return
+			}
 		}
 	}
 	data.XshieldSecurityRules = xshield
@@ -260,6 +269,35 @@ func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, regi
 		}
 	})
 	return read
+}
+
+// azureAddressLimit is Azure's limit on the entries of each of a group's source addresses, destination addresses, source port
+// ranges and destination port ranges, summed over its rules. Each field is capped apart, and `*`, a service tag and a single
+// address count one each; the Xshield server holds a group it writes to the same limit.
+const azureAddressLimit = 6000
+
+// azureAddressesPast gives the first field whose entries pass Azure's limit across the rules, and their count.
+func azureAddressesPast(rules []azInlineSecurityRuleModel) (string, int) {
+	count := func(single types.String, many []types.String) int {
+		if single.ValueString() != "" {
+			return len(many) + 1
+		}
+		return len(many)
+	}
+	fields := []string{"source addresses", "destination addresses", "source port ranges", "destination port ranges"}
+	load := make([]int, len(fields))
+	for _, r := range rules {
+		load[0] += count(r.SourceAddressPrefix, r.SourceAddressPrefixes)
+		load[1] += count(r.DestinationAddressPrefix, r.DestinationAddressPrefixes)
+		load[2] += count(r.SourcePortRange, r.SourcePortRanges)
+		load[3] += count(r.DestinationPortRange, r.DestinationPortRanges)
+	}
+	for i, n := range load {
+		if n > azureAddressLimit {
+			return fields[i], n
+		}
+	}
+	return "", 0
 }
 
 func customerGroupWithID(groups map[string]wireAzureCustomerNetworkSecurityGroup, id string) (wireAzureCustomerNetworkSecurityGroup, bool) {
