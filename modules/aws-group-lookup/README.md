@@ -4,7 +4,7 @@ Returns the Xshield security group a database, function or service must attach, 
 
 ```hcl
 module "orders_db_xshield" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v26.4.1"
   handle = "rds/orders-db"
   vpc_id = aws_security_group.orders_db.vpc_id
 }
@@ -27,7 +27,7 @@ Pass the resource's own groups as `own_security_group_ids` and the plan fails, n
 
 ```hcl
 module "orders_db_xshield" {
-  source                 = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
+  source                 = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v26.4.1"
   handle                 = "rds/orders-db"
   vpc_id                 = aws_security_group.orders_db.vpc_id
   own_security_group_ids = [aws_security_group.orders_db.id]

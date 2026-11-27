@@ -33,12 +33,12 @@ A plan shows only a root module's outputs. In each root module that calls this m
 
 ```hcl
 module "web_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v26.4.1"
   # ...
 }
 
 module "db_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v26.4.1"
   # ...
 }
 

@@ -5,6 +5,7 @@ package shared
 type MetadataPath struct {
 	ID                        *string                          `json:"channelHash,omitempty"`
 	DestinationAssetID        *string                          `json:"destinationAssetID,omitempty"`
+	DestinationAsset          *AssetSummary                    `json:"destinationAsset,omitempty"`
 	DestinationNamedNetwork   *MetadataNamedNetworkReference   `json:"destinationNamedNetwork,omitempty"`
 	DestinationTagBasedPolicy *MetadataTagBasedPolicyReference `json:"destinationTagBasedPolicy,omitempty"`
 	Direction                 *string                          `json:"direction,omitempty"`
@@ -17,6 +18,7 @@ type MetadataPath struct {
 	Protocol                  *string                          `json:"protocol,omitempty"`
 	RuleHitMetrics            *TemplateRuleHitMetrics          `json:"ruleHitMetrics,omitempty"`
 	SourceAssetID             *string                          `json:"sourceAssetID,omitempty"`
+	SourceAsset               *AssetSummary                    `json:"sourceAsset,omitempty"`
 	SourceNamedNetwork        *MetadataNamedNetworkReference   `json:"sourceNamedNetwork,omitempty"`
 	SourceTagBasedPolicy      *MetadataTagBasedPolicyReference `json:"sourceTagBasedPolicy,omitempty"`
 	SrcIP                     *string                          `json:"srcIp,omitempty"`

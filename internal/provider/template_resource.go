@@ -680,8 +680,9 @@ func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, dia
 				badSourceFields = append(badSourceFields, "source_tag_based_policy")
 			}
 
-			// Report selector-field rule violations
-			if count == 0 || count > 1 {
+			// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
+			pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown()
+			if (count == 0 && !pendingSelector) || count > 1 {
 				detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
 				if count > 1 {
 					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
@@ -750,8 +751,8 @@ func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, dia
 				badDestFields = append(badDestFields, "destination_tag_based_policy")
 			}
 
-			// Report selector-field rule violations
-			if count == 0 || count > 1 {
+			pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown()
+			if (count == 0 && !pendingSelector) || count > 1 {
 				detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
 				if count > 1 {
 					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
@@ -834,7 +835,7 @@ func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, r
 		data.TemplatePorts = reorderToStateOrder(data.TemplatePorts, existingPorts, templatePortKey)
 	}
 	if len(existingPaths) > 0 && len(data.TemplatePaths) > 0 {
-		data.TemplatePaths = reorderToStateOrder(data.TemplatePaths, existingPaths, templatePathKey)
+		data.TemplatePaths = reorderToStateOrder(data.TemplatePaths, existingPaths, templatePathID, templatePathKey)
 	}
 
 	// Save updated data into Terraform state
@@ -862,8 +863,10 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	// Convert to models
 	var planData TemplateResourceModel
 	var stateData TemplateResourceModel
+	var configData TemplateResourceModel
 	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{})...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &configData)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -976,9 +979,11 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 
 	// Then, create a map of plan paths by port, protocol, and direction
 	planPathsByKey := make(map[string]tfTypes.MetadataPath)
-	for _, planPath := range planData.TemplatePaths {
+	planPathIndexByKey := make(map[string]int)
+	for i, planPath := range planData.TemplatePaths {
 		key := templatePathKey(planPath)
 		planPathsByKey[key] = planPath
+		planPathIndexByKey[key] = i
 	}
 
 	// Check for paths that exist in both state and plan but have different attributes
@@ -1073,7 +1078,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			if pathChanged {
 				pathsChanged = true
 				pathsToRemove = append(pathsToRemove, statePath)
-				pathsToAdd = append(pathsToAdd, planPath)
+				pathsToAdd = append(pathsToAdd, withConfiguredPeers(planPath, configData.TemplatePaths, planPathIndexByKey[key]))
 				removedPathIDs = append(removedPathIDs, statePath.ID.ValueString())
 			}
 		}
@@ -1094,7 +1099,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 		if _, ok := statePathsByKey[key]; !ok {
 			// This path exists in plan but not in state, it's being added
 			pathsAdded = true
-			pathsToAdd = append(pathsToAdd, planPath)
+			pathsToAdd = append(pathsToAdd, withConfiguredPeers(planPath, configData.TemplatePaths, planPathIndexByKey[key]))
 		}
 	}
 
@@ -1425,111 +1430,7 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 				})
 			}
 
-			sharedPaths := make([]shared.MetadataPath, 0, len(pathsToAdd))
-			for _, path := range pathsToAdd {
-				// Create the base path
-				metadataPath := shared.MetadataPath{
-					Direction: path.Direction.ValueStringPointer(),
-					Port:      path.Port.ValueStringPointer(),
-					Protocol:  path.Protocol.ValueStringPointer(),
-					// Other fields will be filled by the API
-				}
-
-				// Add SrcIP if present
-				if !path.SrcIP.IsNull() && !path.SrcIP.IsUnknown() {
-					srcIP := path.SrcIP.ValueString()
-					metadataPath.SrcIP = &srcIP
-				}
-
-				// Add DstIP if present
-				if !path.DstIP.IsNull() && !path.DstIP.IsUnknown() {
-					dstIP := path.DstIP.ValueString()
-					metadataPath.DstIP = &dstIP
-				}
-
-				// Add source_named_network if present
-				if path.SourceNamedNetwork != nil {
-					if !path.SourceNamedNetwork.NamedNetworkID.IsNull() && !path.SourceNamedNetwork.NamedNetworkID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.SourceNamedNetwork.NamedNetworkID.ValueString()
-						metadataPath.SourceNamedNetwork = &shared.MetadataNamedNetworkReference{
-							NamedNetworkID: &id,
-						}
-
-						// If we also have the name, include it
-						if !path.SourceNamedNetwork.NamedNetworkName.IsNull() && !path.SourceNamedNetwork.NamedNetworkName.IsUnknown() {
-							name := path.SourceNamedNetwork.NamedNetworkName.ValueString()
-							metadataPath.SourceNamedNetwork.NamedNetworkName = &name
-						}
-					}
-				}
-
-				// Add destination_named_network if present
-				if path.DestinationNamedNetwork != nil {
-					if !path.DestinationNamedNetwork.NamedNetworkID.IsNull() && !path.DestinationNamedNetwork.NamedNetworkID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.DestinationNamedNetwork.NamedNetworkID.ValueString()
-						metadataPath.DestinationNamedNetwork = &shared.MetadataNamedNetworkReference{
-							NamedNetworkID: &id,
-						}
-
-						// If we also have the name, include it
-						if !path.DestinationNamedNetwork.NamedNetworkName.IsNull() && !path.DestinationNamedNetwork.NamedNetworkName.IsUnknown() {
-							name := path.DestinationNamedNetwork.NamedNetworkName.ValueString()
-							metadataPath.DestinationNamedNetwork.NamedNetworkName = &name
-						}
-					}
-				}
-
-				// Add source_tag_based_policy if present
-				if path.SourceTagBasedPolicy != nil {
-					if !path.SourceTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.SourceTagBasedPolicy.TagBasedPolicyID.ValueString()
-						metadataPath.SourceTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
-							TagBasedPolicyID: &id,
-						}
-
-						// If we also have the criteria, include it
-						if !path.SourceTagBasedPolicy.Criteria.IsNull() && !path.SourceTagBasedPolicy.Criteria.IsUnknown() {
-							criteria := path.SourceTagBasedPolicy.Criteria.ValueString()
-							metadataPath.SourceTagBasedPolicy.Criteria = &criteria
-						}
-
-						// If we also have the name, include it
-						if !path.SourceTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.SourceTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
-							name := path.SourceTagBasedPolicy.TagBasedPolicyName.ValueString()
-							metadataPath.SourceTagBasedPolicy.TagBasedPolicyName = &name
-						}
-					}
-				}
-
-				// Add destination_tag_based_policy if present
-				if path.DestinationTagBasedPolicy != nil {
-					if !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyID.IsUnknown() {
-						// If we have the ID, include it
-						id := path.DestinationTagBasedPolicy.TagBasedPolicyID.ValueString()
-						metadataPath.DestinationTagBasedPolicy = &shared.MetadataTagBasedPolicyReference{
-							TagBasedPolicyID: &id,
-						}
-
-						// If we also have the criteria, include it
-						if !path.DestinationTagBasedPolicy.Criteria.IsNull() && !path.DestinationTagBasedPolicy.Criteria.IsUnknown() {
-							criteria := path.DestinationTagBasedPolicy.Criteria.ValueString()
-							metadataPath.DestinationTagBasedPolicy.Criteria = &criteria
-						}
-
-						// If we also have the name, include it
-						if !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsNull() && !path.DestinationTagBasedPolicy.TagBasedPolicyName.IsUnknown() {
-							name := path.DestinationTagBasedPolicy.TagBasedPolicyName.ValueString()
-							metadataPath.DestinationTagBasedPolicy.TagBasedPolicyName = &name
-						}
-					}
-				}
-
-				// Add the path to the list
-				sharedPaths = append(sharedPaths, metadataPath)
-			}
+			sharedPaths := appendedTemplatePaths(pathsToAdd)
 
 			// Create the append request
 			appendRequest := operations.AppendToTemplateRequest{
@@ -1729,9 +1630,12 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 			// that no longer existed, and the next deduct then sent that stale hash
 			// and removed nothing.
 			if len(refreshedData.TemplatePaths) > 0 {
-				for _, planPath := range planData.TemplatePaths {
+				for i, planPath := range planData.TemplatePaths {
 					key := templatePathKey(planPath)
-					apiPath, hasAPIPath := apiPathsByPathKey[key]
+					apiPath, hasAPIPath := apiPathsByPathKey[templatePathKey(withConfiguredPeers(planPath, configData.TemplatePaths, i))]
+					if !hasAPIPath {
+						apiPath, hasAPIPath = apiPathsByPathKey[key]
+					}
 					if !hasAPIPath {
 						tflog.Warn(ctx, fmt.Sprintf("path %s is absent from the template after update", key))
 						continue
@@ -1825,4 +1729,47 @@ func (r *TemplateResource) ImportState(ctx context.Context, req resource.ImportS
 		id = found
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
+}
+
+// appendedTemplatePaths are the paths an update re-adds after deleting the ones it changed, built as create builds them so no
+// peer or attribute of the path is lost; the API gives each re-added path a new id.
+func appendedTemplatePaths(pathsToAdd []tfTypes.MetadataPath) []shared.MetadataPath {
+	sharedPaths := (&TemplateResourceModel{TemplatePaths: pathsToAdd}).ToSharedTemplate().TemplatePaths
+	for i := range sharedPaths {
+		sharedPaths[i].ID = nil
+	}
+	return sharedPaths
+}
+
+// withConfiguredPeers gives a path the peers its configuration sets and no other: for a peer the configuration leaves null,
+// SuppressDiff plans the peer state holds at the same index, which would re-add the path with its old peer as well.
+func withConfiguredPeers(planned tfTypes.MetadataPath, configured []tfTypes.MetadataPath, index int) tfTypes.MetadataPath {
+	if index < 0 || index >= len(configured) {
+		return planned
+	}
+	config := configured[index]
+	nullIfUnset := func(planned, configured types.String) types.String {
+		if configured.IsNull() {
+			return types.StringNull()
+		}
+		return planned
+	}
+	planned.SourceAssetID = nullIfUnset(planned.SourceAssetID, config.SourceAssetID)
+	planned.SrcIP = nullIfUnset(planned.SrcIP, config.SrcIP)
+	planned.DestinationAssetID = nullIfUnset(planned.DestinationAssetID, config.DestinationAssetID)
+	planned.DstIP = nullIfUnset(planned.DstIP, config.DstIP)
+	planned.Domain = nullIfUnset(planned.Domain, config.Domain)
+	if config.SourceNamedNetwork == nil {
+		planned.SourceNamedNetwork = nil
+	}
+	if config.DestinationNamedNetwork == nil {
+		planned.DestinationNamedNetwork = nil
+	}
+	if config.SourceTagBasedPolicy == nil {
+		planned.SourceTagBasedPolicy = nil
+	}
+	if config.DestinationTagBasedPolicy == nil {
+		planned.DestinationTagBasedPolicy = nil
+	}
+	return planned
 }

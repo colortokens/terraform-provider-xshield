@@ -4,9 +4,12 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
+	sdkerrors "github.com/colortokens/terraform-provider-xshield/internal/sdk/models/errors"
 	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/operations"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -65,7 +68,7 @@ func (r *AssetResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
-				Description: `The asset's UUID, assigned by the platform. Either this or the asset's name works as the terraform import identifier.`,
+				Description: `The asset's ID, assigned by the platform: a UUID, or for a cloud asset the ID its cloud connector gave it. The ID or the asset's name works as the terraform import identifier.`,
 			},
 			"asset_name": schema.StringAttribute{
 				Required:    true,
@@ -279,16 +282,39 @@ func (r *AssetResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 }
 
 func (r *AssetResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	id := req.ID
-	if !isXshieldUUID(id) {
-		found, err := findAssetIDByName(ctx, r.client, id)
-		if err != nil {
-			resp.Diagnostics.AddError("Cannot import asset by name", err.Error())
-			return
-		}
-		id = found
+	id, err := resolveAssetImportID(ctx, r.client, req.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Cannot import asset", err.Error())
+		return
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), id)...)
 }
 
-// Helper to check if a string is a UUID
+// A cloud connector gives its assets IDs that are not UUIDs, so an identifier no asset is named after is tried as an ID.
+func resolveAssetImportID(ctx context.Context, client *sdk.Xshield, id string) (string, error) {
+	if isXshieldUUID(id) {
+		return id, nil
+	}
+	byName, err := findAssetIDByName(ctx, client, id)
+	if !errors.As(err, &noMatchError{}) {
+		return byName, err
+	}
+	notFound := fmt.Errorf("no asset named or with the ID %q", id)
+	res, err := client.Assets.GetAsset(ctx, operations.GetAssetRequest{AssetID: id})
+	var sdkErr *sdkerrors.SDKError
+	if errors.As(err, &sdkErr) && sdkErr.StatusCode == http.StatusNotFound {
+		return "", notFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("look up asset %q by ID: %w", id, err)
+	}
+	switch {
+	case res == nil:
+		return "", fmt.Errorf("look up asset %q by ID: no response", id)
+	case res.StatusCode == http.StatusNotFound:
+		return "", notFound
+	case res.StatusCode != http.StatusOK:
+		return "", fmt.Errorf("look up asset %q by ID: unexpected response code %d: %s", id, res.StatusCode, debugResponse(res.RawResponse))
+	}
+	return id, nil
+}

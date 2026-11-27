@@ -87,32 +87,41 @@ func templatePathKeysMatch(a, b tfTypes.MetadataPath) bool {
 // order already held in state, with anything the API added appended after.
 //
 // Terraform compares lists positionally, so returning the API's order would show
-// a reshuffle as a change. Keying by rule identity is what makes this safe: the
-// previous key collapsed distinct rules onto one entry, so a template with two
-// rules on the same port lost one of them here on every read.
-func reorderToStateOrder[T any](apiItems, stateItems []T, key func(T) string) []T {
-	remaining := make(map[string]T, len(apiItems))
-	apiOrder := make([]string, 0, len(apiItems))
-	for _, item := range apiItems {
-		k := key(item)
-		if _, seen := remaining[k]; !seen {
-			apiOrder = append(apiOrder, k)
+// a reshuffle as a change. Each state item takes the API item its first identity
+// names, or its next where that one names none, so a field a newer read fills in
+// moves no item whose earlier identity still matches.
+func reorderToStateOrder[T any](apiItems, stateItems []T, identities ...func(T) string) []T {
+	firstWith := make([]map[string]int, len(identities))
+	for n, identity := range identities {
+		firstWith[n] = make(map[string]int, len(apiItems))
+		for i, item := range apiItems {
+			if k := identity(item); k != "" {
+				if _, seen := firstWith[n][k]; !seen {
+					firstWith[n][k] = i
+				}
+			}
 		}
-		remaining[k] = item
 	}
 
+	taken := make([]bool, len(apiItems))
 	ordered := make([]T, 0, len(apiItems))
-	take := func(k string) {
-		if item, ok := remaining[k]; ok {
-			ordered = append(ordered, item)
-			delete(remaining, k)
+	for _, stateItem := range stateItems {
+		for n, identity := range identities {
+			if i, ok := firstWith[n][identity(stateItem)]; ok && !taken[i] {
+				taken[i] = true
+				ordered = append(ordered, apiItems[i])
+				break
+			}
 		}
 	}
-	for _, stateItem := range stateItems {
-		take(key(stateItem))
-	}
-	for _, k := range apiOrder {
-		take(k)
+	for i, item := range apiItems {
+		if !taken[i] {
+			ordered = append(ordered, item)
+		}
 	}
 	return ordered
+}
+
+func templatePathID(p tfTypes.MetadataPath) string {
+	return p.ID.ValueString()
 }

@@ -13,13 +13,16 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | [`modules/aws`](../../modules/aws/) | The enforcement module. One block per AWS account and region. |
 | [`modules/aws-group-lookup`](../../modules/aws-group-lookup/) | Gives a database, function or service the group it must attach. Reads only SSM. |
 | [`modules/aws-security-group-rules`](../../modules/aws-security-group-rules/) | Declares one of your own security group's rules under Full control. |
+| [`modules/azure`](../../modules/azure/) | The enforcement module for Azure. One block per subscription and region. |
 
 **Workspaces to copy and fill in.**
 
 | Directory | What it is |
 |--|--|
 | `enforcement/` | An enforcement workspace. |
+| `enforcement-azure/` | An enforcement workspace for an Azure subscription and region. |
 | `enforcement-role/` | The IAM role the enforcement workspace assumes, with only the permissions it needs. |
+| `enforcement-role-azure/` | The Azure role the Azure enforcement workspace runs as, with only the permissions it needs. |
 | `monitor/` | A workspace that reports each enforcement problem as a named check, and can stop a plan on the ones you choose. |
 | `chain/` | A GitHub Actions workflow that runs the owners' workspaces after the enforcement workspace, in order, on a schedule. |
 | `policies/` | An example Sentinel and OPA policy, `xshield-checks`, for the workspace that runs the monitor. |
@@ -29,8 +32,10 @@ To set it up, follow the [step-by-step guide](../../docs/guides/aws-pipeline-enf
 | Directory | When |
 |--|--|
 | `handover/` | An account moves from cloud connector delivery to pipeline delivery. |
+| `handover-azure/` | An Azure subscription moves from cloud connector delivery to pipeline delivery. Delete it once a plan imports nothing. |
 | `leave/` | An account moves back to cloud connector delivery. |
 | `recovery/` | The enforcement workspace's state is lost. |
+| `recovery-azure/` | An Azure enforcement workspace's state is lost. |
 
 **Examples of workspaces you already have**, after the change Xshield needs. In each, `xshield.tf` holds what the team adds, and `main.tf` marks each changed line.
 
@@ -54,7 +59,7 @@ provider "aws" {
 provider "xshield" {} # credentials from XSHIELD_* environment variables
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v26.4.1"
 }
 ```
 

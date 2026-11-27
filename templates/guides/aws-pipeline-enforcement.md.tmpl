@@ -79,7 +79,7 @@ provider "aws" {
 provider "xshield" {}
 
 module "xshield_enforcement" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws?ref=v26.4.1"
 }
 ```
 
@@ -103,7 +103,7 @@ Skip this step if Xshield enforces only on EC2 instances. Terraform has no separ
 
 ```terraform
 module "orders_db_xshield" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-group-lookup?ref=v26.4.1"
 
   handle                 = "rds/orders-db"
   vpc_id                 = aws_security_group.orders_db.vpc_id
@@ -204,7 +204,7 @@ data "xshield_aws_security_group_changes" "this" {
 }
 
 module "web_rules" {
-  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v0.2.0"
+  source = "github.com/colortokens/terraform-provider-xshield//modules/aws-security-group-rules?ref=v26.4.1"
 
   xshield_changes   = data.xshield_aws_security_group_changes.this
   vpc_id            = aws_vpc.main.id
