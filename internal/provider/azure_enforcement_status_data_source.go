@@ -121,6 +121,9 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, " +
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds, " +
+					"`PREFIX_BUDGET` when its group's rules, with those of the workloads sharing it and any of yours there, would name more " +
+					"than Azure's 6,000 source addresses, destination addresses, source port ranges or destination port ranges, each " +
+					"field counted apart, which its message names: name fewer, or remove your group so Xshield places one of its own, " +
 					"`ENDPOINT_NETWORK_POLICIES_OFF` when it is reached through a private endpoint whose subnet's private endpoint " +
 					"network policies are neither `Enabled` nor `NetworkSecurityGroupEnabled`, so a group there would not filter its " +
 					"traffic, `NO_PRIVATE_INBOUND` when a Function App with inbound policy has no private endpoint, " +
