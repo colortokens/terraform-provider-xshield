@@ -200,8 +200,12 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 	if read.published {
 		data.Version = types.StringValue(read.version)
 		group, found := customerGroupWithID(read.groups, data.NetworkSecurityGroupID.ValueString())
-		if found {
-			moved, numbered, err := moveYoursUpForRoom(group.Name, group.SecurityRules, read.roomWanted[strings.ToLower(group.ID)],
+		awaiting, awaits := read.roomWanted[strings.ToLower(data.NetworkSecurityGroupID.ValueString())]
+		if !found {
+			group.Name = awaiting.name
+		}
+		if found || awaits {
+			moved, numbered, err := moveYoursUpForRoom(group.Name, group.SecurityRules, awaiting.priorities,
 				priorityHolders(data.DeclaredSecurityRules), currentPriorityHolders(data.CurrentSecurityRules))
 			if err != nil {
 				resp.Diagnostics.AddError("Xshield's rules do not fit ahead of yours", err.Error())
@@ -223,6 +227,13 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 					group.Name, n, field, azureAddressLimit, field))
 				return
 			}
+			if n := len(declared) + len(xshield); n > azureRuleLimit {
+				resp.Diagnostics.AddError("Xshield's rules and yours pass what Azure holds in one group", fmt.Sprintf("your network security group "+
+					"%s would hold %d rules, past Azure's limit of %d rules in a group, so Azure would reject the group part-way through "+
+					"the apply. Xshield refuses such a workload RULE_BUDGET once it sees your rules: declare fewer rules, or remove your "+
+					"group so Xshield places one of its own.", group.Name, n, azureRuleLimit))
+				return
+			}
 		}
 	}
 	data.XshieldSecurityRules = xshield
@@ -240,14 +251,18 @@ type azureCustomerGroupsKey struct {
 }
 
 type azureCustomerGroupsRead struct {
-	once      sync.Once
-	ok        bool
-	diags     diag.Diagnostics
-	published bool
-	version   string
-	groups    map[string]wireAzureCustomerNetworkSecurityGroup
-	// roomWanted are, by a group's lower-case ID, the priorities by direction its workloads refused for room want.
-	roomWanted map[string]map[string]int64
+	once       sync.Once
+	ok         bool
+	diags      diag.Diagnostics
+	published  bool
+	version    string
+	groups     map[string]wireAzureCustomerNetworkSecurityGroup
+	roomWanted map[string]azureRoomAwaited
+}
+
+type azureRoomAwaited struct {
+	name       string
+	priorities map[string]int64
 }
 
 func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, region string, pinned types.String) *azureCustomerGroupsRead {
@@ -262,21 +277,20 @@ func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, regi
 		read.ok = ok
 		if snap != nil {
 			read.published, read.version, read.groups = true, snap.Version, snap.Azure.CustomerNetworkSecurityGroups
-			read.roomWanted = map[string]map[string]int64{}
+			read.roomWanted = map[string]azureRoomAwaited{}
 			for _, g := range snap.Azure.CustomerNetworkSecurityGroupsAwaitingRoom {
-				read.roomWanted[strings.ToLower(g.ID)] = g.PrioritiesWanted
+				read.roomWanted[strings.ToLower(g.ID)] = azureRoomAwaited{name: g.Name, priorities: g.PrioritiesWanted}
 			}
 		}
 	})
 	return read
 }
 
-// azureAddressLimit is Azure's limit on the entries of each of a group's source addresses, destination addresses, source port
-// ranges and destination port ranges, summed over its rules. Each field is capped apart, and `*`, a service tag and a single
-// address count one each; the Xshield server holds a group it writes to the same limit.
+// Azure caps each address and port field apart over a group's rules, counting `*`, a service tag or a single address as one.
 const azureAddressLimit = 6000
 
-// azureAddressesPast gives the first field whose entries pass Azure's limit across the rules, and their count.
+const azureRuleLimit = 2000
+
 func azureAddressesPast(rules []azInlineSecurityRuleModel) (string, int) {
 	count := func(single types.String, many []types.String) int {
 		if single.ValueString() != "" {

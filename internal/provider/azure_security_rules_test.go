@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
@@ -493,5 +494,74 @@ func TestEveryGroupsSecurityRulesShareOneReadOfTheSnapshot(t *testing.T) {
 	if len(yours.XshieldSecurityRules) == 0 || len(another.XshieldSecurityRules) != 0 || yours.Version != another.Version || len(versionReads) != 1 {
 		t.Errorf("xshield rules %d and %d, versions %v and %v, over requests %v: want one read of the snapshot giving both groups one version",
 			len(yours.XshieldSecurityRules), len(another.XshieldSecurityRules), yours.Version, another.Version, *requested)
+	}
+}
+
+// awaitingOnlySnapshot is the customer group snapshot after Xshield refused web, the group's only workload, for room: the
+// server lists the group only among those awaiting room, as no workload of it is placed.
+func awaitingOnlySnapshot(t *testing.T, inbound, outbound int) map[string]cannedResponse {
+	t.Helper()
+	responses := publishedCustomerGroupSnapshot(t)
+	version := loadJSON[wireSnapshot](t, "azure_snapshot_customer_group.json").Version
+	var snap map[string]any
+	if err := json.Unmarshal([]byte(readTestdata(t, "azure_snapshot_customer_group.json")), &snap); err != nil {
+		t.Fatal(err)
+	}
+	plan := snap["azure"].(map[string]any)
+	plan["assets"], plan["customerNetworkSecurityGroups"] = map[string]any{}, map[string]any{}
+	plan["customerNetworkSecurityGroupsAwaitingRoom"] = map[string]any{azureTestCustomerGroupKey: map[string]any{
+		"id": strings.ToUpper(azureTestCustomerGroupID), "resourceGroupName": "rg-net", "name": "nsg-snet-owner",
+		"prioritiesWanted": map[string]any{"Inbound": inbound, "Outbound": outbound}}}
+	body, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses["/versions/"+version] = cannedResponse{http.StatusOK, string(body)}
+	return responses
+}
+
+// A group whose every workload Xshield refused for room is not among the groups it writes to, yet your declared rules still
+// move up for that room, or the workloads would stay refused.
+func TestYourDeclaredRulesMoveUpForRoomInAGroupListedOnlyAsAwaitingIt(t *testing.T) {
+	t.Parallel()
+	declared := []azInlineSecurityRuleModel{yourAllowRule("allow-ssh", 100), yourRuleFacing("deny-vnet", "Inbound", "Deny", 101),
+		yourRuleFacing("allow-dns", "Outbound", "Allow", 100)}
+	m, ok, errs, _ := readAzureSecurityRules(t, awaitingOnlySnapshot(t, 5, 1), customerGroupRead(azureTestCustomerGroupID, declared...))
+	if !ok {
+		t.Fatal(errs)
+	}
+	want := map[string]int64{"allow-ssh": 105, "deny-vnet": 106, "allow-dns": 101}
+	if got := inlinePriorities(m.SecurityRules); !maps.Equal(got, want) {
+		t.Errorf("priorities %v, want %v: room for five inbound and one outbound rule ahead of yours", got, want)
+	}
+	if len(m.XshieldSecurityRules) != 0 || m.Version.IsNull() {
+		t.Errorf("xshield rules %d, version %v: want none placed yet, at the published version", len(m.XshieldSecurityRules), m.Version)
+	}
+}
+
+// Azure rejects a group of more than 2,000 rules part-way through the apply, so your declared rules and Xshield's past it
+// fail the plan.
+func TestYourDeclaredRulesAndXshieldsPastAzuresRuleLimitFailThePlan(t *testing.T) {
+	t.Parallel()
+	base, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID))
+	if !ok {
+		t.Fatalf("reading Xshield's rules: %s", errs)
+	}
+	declared := func(n int) []azInlineSecurityRuleModel {
+		rules := []azInlineSecurityRuleModel{}
+		for i := range n {
+			rules = append(rules, yourAllowRule(fmt.Sprintf("allow-%d", i), int64(200+i)))
+		}
+		return rules
+	}
+	atLimit := 2000 - len(base.XshieldSecurityRules)
+	if _, ok, errs, _ := readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, declared(atLimit)...)); !ok {
+		t.Errorf("errors %q, want the rules given at exactly 2000 rules", errs)
+	}
+	_, ok, errs, _ = readAzureSecurityRules(t, publishedCustomerGroupSnapshot(t), customerGroupRead(azureTestCustomerGroupID, declared(atLimit+1)...))
+	for _, want := range []string{"nsg-snet-owner", "2001 rules", "Azure's limit of 2000", "RULE_BUDGET"} {
+		if ok || !strings.Contains(errs, want) {
+			t.Errorf("ok %v errors %q, want the plan to fail with %q", ok, errs, want)
+		}
 	}
 }
