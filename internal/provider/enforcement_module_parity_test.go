@@ -37,7 +37,10 @@ var enforcementModuleDifferences = map[string]string{
 		"database or function is reached through its subnet, which the azure module associates itself.",
 	"variable customer_network_security_groups_in_code": "On AWS Xshield's rules reach a group of yours only through " +
 		"xshield_aws_security_group_rules in that group's own configuration. On Azure the module writes them into a group of yours as " +
-		"rules of their own, except in a group whose configuration declares its rules inline, which this lists.",
+		"rules of their own; the variable is no longer read, and stays so a configuration that sets it still plans.",
+	"output customer_security_rule_adoptions": "The azure module writes Xshield's rules into a group of yours, where your code may " +
+		"have written them inline first, so the enforcement workspace imports those from here. The aws module writes rules only into " +
+		"Xshield's own groups.",
 }
 
 type moduleInterface struct {

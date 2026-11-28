@@ -174,7 +174,7 @@ run "the_rules_are_numbered_from_the_snapshot_this_run_applies_and_the_rules_you
   }
 }
 
-run "a_group_whose_configuration_declares_its_rules_inline_is_left_to_it" {
+run "a_group_listed_as_declared_in_code_still_gets_every_rule_from_the_module" {
   command = plan
 
   variables {
@@ -182,8 +182,23 @@ run "a_group_whose_configuration_declares_its_rules_inline_is_left_to_it" {
   }
 
   assert {
-    condition     = length(data.azurerm_network_security_group.customer) == 0 && length(data.xshield_azure_security_rules.customer) == 0 && length(azurerm_network_security_rule.customer) == 0
-    error_message = "A group listed as declared in code must get no rule resource, whatever the case of its ID, as an apply of its inline rules would remove them."
+    condition = sort(keys(azurerm_network_security_rule.customer)) == tolist([
+      "customer-nsg-5b8ff476f40c/CT-Rule-Allow-64c02cd7face",
+      "customer-nsg-5b8ff476f40c/CT-Rule-Allow-89dbc7f62dbc",
+      "customer-nsg-5b8ff476f40c/CT-Rule-Deny-93ef773b5a07",
+    ])
+    error_message = "The module must keep writing Xshield's rules into a group whatever its configuration declares, so no apply of that configuration leaves a workload without them."
+  }
+}
+
+run "the_rules_your_group_already_holds_are_given_to_adopt" {
+  command = plan
+
+  assert {
+    condition = output.customer_security_rule_adoptions == {
+      "customer-nsg-5b8ff476f40c/CT-Rule-Allow-89dbc7f62dbc" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-snet-owner/securityRules/CT-Rule-Allow-89dbc7f62dbc"
+    }
+    error_message = "Only the rule of Xshield's the group holds now, which the module would otherwise fail to create, must be given to import."
   }
 }
 

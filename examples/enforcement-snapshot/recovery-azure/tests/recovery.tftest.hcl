@@ -226,6 +226,24 @@ run "the_receipt_and_what_it_leaves_out_are_imported_at_the_modules_addresses" {
   }
 }
 
+run "a_rule_your_group_holds_is_imported_once_by_the_workspaces_adoption" {
+  command = plan
+
+  override_data {
+    target = module.xshield_enforcement.data.azurerm_network_security_group.customer["customer-nsg-5b8ff476f40c"]
+    values = {
+      security_rule = [
+        { name = "CT-Rule-Allow-64c02cd7face", priority = 100, direction = "Inbound", access = "Allow", protocol = "*", description = "", source_port_range = "*", source_port_ranges = [], destination_port_range = "*", destination_port_ranges = [], source_address_prefix = "AzureLoadBalancer", source_address_prefixes = [], destination_address_prefix = "10.1.0.4/32", destination_address_prefixes = [], source_application_security_group_ids = [], destination_application_security_group_ids = [] },
+      ]
+    }
+  }
+
+  assert {
+    condition     = keys(module.xshield_enforcement.customer_security_rule_adoptions) == ["customer-nsg-5b8ff476f40c/CT-Rule-Allow-64c02cd7face"] && length(local.recovered_security_rules) == 0
+    error_message = "A rule of Xshield's your group holds is imported by enforcement-azure's adoption, so recovery.tf must leave it out: two import blocks for one address fail the plan."
+  }
+}
+
 run "an_association_the_module_no_longer_declares_is_not_imported" {
   command = plan
 

@@ -5,6 +5,10 @@
 # single change, and a later plan imports the association it leaves.
 # Add this file to the enforcement workspace before the first apply after the subscription moves to pipeline delivery,
 # and delete it once a plan imports nothing.
+terraform {
+  required_version = ">= 1.7.0"
+}
+
 import {
   for_each = module.xshield_enforcement.handover_interface_association_imports
   to       = module.xshield_enforcement.azurerm_network_interface_security_group_association.this[each.key]

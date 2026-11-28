@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -22,7 +23,7 @@ func newAzureSecurityRulesDataSource() datasource.DataSource {
 }
 
 // azureSecurityRulesDataSource is how Xshield's rules reach a network security group of yours: Xshield writes a workload's
-// rules into one when every network interface or subnet of the workload carries a group of yours.
+// rules into the group of yours its network interface, or for a subnet scope its subnet, carries.
 type azureSecurityRulesDataSource struct {
 	api cloudSnapshotAPI
 }
@@ -92,14 +93,18 @@ func (d *azureSecurityRulesDataSource) Schema(ctx context.Context, req datasourc
 		"`destination_port_range` or `destination_port_ranges`."
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Gives Xshield's rules for one of your network security groups, numbered ahead of your rules. Xshield writes " +
-			"a workload's rules into your subnet's group when every network interface or subnet of the workload carries a group of " +
-			"yours; each rule names only the workload's own addresses, so your rules still decide the traffic of everything else the " +
-			"group covers. The `azure` enforcement module adds them to your group as rules of their own. Where your configuration " +
-			"declares the group's rules inline, which removes every rule it does not declare, pass those rules here as " +
-			"`declared_security_rules`, give the group `security_rules` in their place, and list the group in the module's " +
-			"`customer_network_security_groups_in_code`. Give the group's resource ID as a string: the group's own `id` would make " +
-			"the group depend on the rules it is given. When Xshield has no rules for the group, `security_rules` is the declared " +
-			"rules unchanged.",
+			"a workload's rules into the group of yours on the network interface its enforcement scope names, or on its subnet for a " +
+			"subnet scope or an interface that cannot take a group; each rule names only the workload's own addresses, so your rules " +
+			"still decide the traffic of everything else the group covers. The `azure` enforcement module adds them to your group as " +
+			"rules of their own, whatever your configuration declares. Where your configuration declares the group's rules inline, which " +
+			"removes every rule it does not declare, pass those rules here as `declared_security_rules`, the rules the group holds as " +
+			"`current_security_rules`, and give the group `security_rules` in their place, so its apply keeps Xshield's rules at the " +
+			"priorities the module gives them. Give the group's resource ID as a string: the group's own `id` would make the group depend " +
+			"on the rules it is given. Where your declared rules leave too few priorities free ahead of them, for Xshield's rules or for " +
+			"workloads Xshield refused with `NO_FREE_PRIORITY` for want of room there, `security_rules` moves them up, in their order, by " +
+			"as few priorities as those rules need, which your plan shows; the plan fails where Xshield's rules placed now would pass " +
+			"priority 4096, and room for refused workloads that cannot be made is not made. When Xshield has no rules for the group, " +
+			"`security_rules` is the declared rules unchanged, so your rules go back to the priorities your configuration gives them.",
 		Attributes: map[string]schema.Attribute{
 			"cloud_account_id":          schema.StringAttribute{Required: true, MarkdownDescription: "Azure subscription ID the group is in."},
 			"region":                    schema.StringAttribute{Required: true, MarkdownDescription: "Azure region the group is in, by its name, such as `eastus2`."},
@@ -112,7 +117,8 @@ func (d *azureSecurityRulesDataSource) Schema(ctx context.Context, req datasourc
 					"is then empty and `version` null. Any other failure to read the snapshot fails the plan."},
 			"declared_security_rules": schema.ListNestedAttribute{Optional: true,
 				MarkdownDescription: "The rules your configuration declares for the group, with the arguments of azurerm's `security_rule`. " +
-					"Xshield's rules are numbered below the lowest priority among them in each direction.",
+					"Xshield's rules are numbered below the lowest priority among them in each direction, after moving them up where " +
+					"they leave too little room.",
 				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 					"name":                                  schema.StringAttribute{Required: true, MarkdownDescription: "Rule name. Xshield's rules are named `CT-Rule-` or `CT-Test-Rule-`, so yours cannot be."},
 					"description":                           optionalString("Rule description."),
@@ -147,7 +153,7 @@ func (d *azureSecurityRulesDataSource) Schema(ctx context.Context, req datasourc
 					"every rule of yours in its direction. " + ruleFields + " A single address or port is in the singular field with the " +
 					"plural one empty; two or more are in the plural field with the singular one empty."},
 			"security_rules": schema.ListAttribute{Computed: true, ElementType: azInlineSecurityRuleType,
-				MarkdownDescription: "The declared rules followed by `xshield_security_rules`, every field set as azurerm reads a rule " +
+				MarkdownDescription: "The declared rules, moved up where Xshield's need room, followed by `xshield_security_rules`, every field set as azurerm reads a rule " +
 					"back, so the list can be the group's `security_rule`. " + ruleFields},
 		},
 	}
@@ -194,14 +200,39 @@ func (d *azureSecurityRulesDataSource) Read(ctx context.Context, req datasource.
 	if read.published {
 		data.Version = types.StringValue(read.version)
 		group, found := customerGroupWithID(read.groups, data.NetworkSecurityGroupID.ValueString())
-		if found {
-			numbered, err := numberAheadOfYours(group.Name, group.SecurityRules, priorityHolders(data.DeclaredSecurityRules), currentPriorityHolders(data.CurrentSecurityRules))
+		awaiting, awaits := read.roomWanted[strings.ToLower(data.NetworkSecurityGroupID.ValueString())]
+		if !found {
+			group.Name = awaiting.name
+		}
+		if found || awaits {
+			moved, numbered, err := moveYoursUpForRoom(group.Name, group.SecurityRules, awaiting.priorities,
+				priorityHolders(data.DeclaredSecurityRules), currentPriorityHolders(data.CurrentSecurityRules))
 			if err != nil {
 				resp.Diagnostics.AddError("Xshield's rules do not fit ahead of yours", err.Error())
 				return
 			}
+			for i, r := range declared {
+				if p, ok := moved[r.Name.ValueString()]; ok {
+					declared[i].Priority = types.Int64Value(p)
+				}
+			}
 			for _, r := range numbered {
 				xshield = append(xshield, azureInlineRuleModel(r))
+			}
+			if field, n := azureAddressesPast(append(slices.Clone(declared), xshield...)); field != "" {
+				resp.Diagnostics.AddError("Xshield's rules and yours pass what Azure holds in one group", fmt.Sprintf("your network security group "+
+					"%s would hold rules naming %d %s, past Azure's limit of %d %s in a group's rules, so Azure would reject the group "+
+					"part-way through the apply. Xshield refuses such a workload PREFIX_BUDGET once it sees your rules: name fewer "+
+					"addresses or ports in your declared rules, or remove your group so Xshield places one of its own.",
+					group.Name, n, field, azureAddressLimit, field))
+				return
+			}
+			if n := len(declared) + len(xshield); n > azureRuleLimit {
+				resp.Diagnostics.AddError("Xshield's rules and yours pass what Azure holds in one group", fmt.Sprintf("your network security group "+
+					"%s would hold %d rules, past Azure's limit of %d rules in a group, so Azure would reject the group part-way through "+
+					"the apply. Xshield refuses such a workload RULE_BUDGET once it sees your rules: declare fewer rules, or remove your "+
+					"group so Xshield places one of its own.", group.Name, n, azureRuleLimit))
+				return
 			}
 		}
 	}
@@ -220,12 +251,18 @@ type azureCustomerGroupsKey struct {
 }
 
 type azureCustomerGroupsRead struct {
-	once      sync.Once
-	ok        bool
-	diags     diag.Diagnostics
-	published bool
-	version   string
-	groups    map[string]wireAzureCustomerNetworkSecurityGroup
+	once       sync.Once
+	ok         bool
+	diags      diag.Diagnostics
+	published  bool
+	version    string
+	groups     map[string]wireAzureCustomerNetworkSecurityGroup
+	roomWanted map[string]azureRoomAwaited
+}
+
+type azureRoomAwaited struct {
+	name       string
+	priorities map[string]int64
 }
 
 func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, region string, pinned types.String) *azureCustomerGroupsRead {
@@ -240,9 +277,41 @@ func (a cloudSnapshotAPI) azureCustomerGroups(ctx context.Context, account, regi
 		read.ok = ok
 		if snap != nil {
 			read.published, read.version, read.groups = true, snap.Version, snap.Azure.CustomerNetworkSecurityGroups
+			read.roomWanted = map[string]azureRoomAwaited{}
+			for _, g := range snap.Azure.CustomerNetworkSecurityGroupsAwaitingRoom {
+				read.roomWanted[strings.ToLower(g.ID)] = azureRoomAwaited{name: g.Name, priorities: g.PrioritiesWanted}
+			}
 		}
 	})
 	return read
+}
+
+// Azure caps each address and port field apart over a group's rules, counting `*`, a service tag or a single address as one.
+const azureAddressLimit = 6000
+
+const azureRuleLimit = 2000
+
+func azureAddressesPast(rules []azInlineSecurityRuleModel) (string, int) {
+	count := func(single types.String, many []types.String) int {
+		if single.ValueString() != "" {
+			return len(many) + 1
+		}
+		return len(many)
+	}
+	fields := []string{"source addresses", "destination addresses", "source port ranges", "destination port ranges"}
+	load := make([]int, len(fields))
+	for _, r := range rules {
+		load[0] += count(r.SourceAddressPrefix, r.SourceAddressPrefixes)
+		load[1] += count(r.DestinationAddressPrefix, r.DestinationAddressPrefixes)
+		load[2] += count(r.SourcePortRange, r.SourcePortRanges)
+		load[3] += count(r.DestinationPortRange, r.DestinationPortRanges)
+	}
+	for i, n := range load {
+		if n > azureAddressLimit {
+			return fields[i], n
+		}
+	}
+	return "", 0
 }
 
 func customerGroupWithID(groups map[string]wireAzureCustomerNetworkSecurityGroup, id string) (wireAzureCustomerNetworkSecurityGroup, bool) {

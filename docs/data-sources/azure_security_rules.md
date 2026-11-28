@@ -3,20 +3,17 @@
 page_title: "xshield_azure_security_rules Data Source - terraform-provider-xshield"
 subcategory: ""
 description: |-
-  Gives Xshield's rules for one of your network security groups, numbered ahead of your rules. Xshield writes a workload's rules into your subnet's group when every network interface or subnet of the workload carries a group of yours; each rule names only the workload's own addresses, so your rules still decide the traffic of everything else the group covers. The azure enforcement module adds them to your group as rules of their own. Where your configuration declares the group's rules inline, which removes every rule it does not declare, pass those rules here as declared_security_rules, give the group security_rules in their place, and list the group in the module's customer_network_security_groups_in_code. Give the group's resource ID as a string: the group's own id would make the group depend on the rules it is given. When Xshield has no rules for the group, security_rules is the declared rules unchanged.
+  Gives Xshield's rules for one of your network security groups, numbered ahead of your rules. Xshield writes a workload's rules into the group of yours on the network interface its enforcement scope names, or on its subnet for a subnet scope or an interface that cannot take a group; each rule names only the workload's own addresses, so your rules still decide the traffic of everything else the group covers. The azure enforcement module adds them to your group as rules of their own, whatever your configuration declares. Where your configuration declares the group's rules inline, which removes every rule it does not declare, pass those rules here as declared_security_rules, the rules the group holds as current_security_rules, and give the group security_rules in their place, so its apply keeps Xshield's rules at the priorities the module gives them. Give the group's resource ID as a string: the group's own id would make the group depend on the rules it is given. Where your declared rules leave too few priorities free ahead of them, for Xshield's rules or for workloads Xshield refused with NO_FREE_PRIORITY for want of room there, security_rules moves them up, in their order, by as few priorities as those rules need, which your plan shows; the plan fails where Xshield's rules placed now would pass priority 4096, and room for refused workloads that cannot be made is not made. When Xshield has no rules for the group, security_rules is the declared rules unchanged, so your rules go back to the priorities your configuration gives them.
 ---
 
 # xshield_azure_security_rules (Data Source)
 
-Gives Xshield's rules for one of your network security groups, numbered ahead of your rules. Xshield writes a workload's rules into your subnet's group when every network interface or subnet of the workload carries a group of yours; each rule names only the workload's own addresses, so your rules still decide the traffic of everything else the group covers. The `azure` enforcement module adds them to your group as rules of their own. Where your configuration declares the group's rules inline, which removes every rule it does not declare, pass those rules here as `declared_security_rules`, give the group `security_rules` in their place, and list the group in the module's `customer_network_security_groups_in_code`. Give the group's resource ID as a string: the group's own `id` would make the group depend on the rules it is given. When Xshield has no rules for the group, `security_rules` is the declared rules unchanged.
+Gives Xshield's rules for one of your network security groups, numbered ahead of your rules. Xshield writes a workload's rules into the group of yours on the network interface its enforcement scope names, or on its subnet for a subnet scope or an interface that cannot take a group; each rule names only the workload's own addresses, so your rules still decide the traffic of everything else the group covers. The `azure` enforcement module adds them to your group as rules of their own, whatever your configuration declares. Where your configuration declares the group's rules inline, which removes every rule it does not declare, pass those rules here as `declared_security_rules`, the rules the group holds as `current_security_rules`, and give the group `security_rules` in their place, so its apply keeps Xshield's rules at the priorities the module gives them. Give the group's resource ID as a string: the group's own `id` would make the group depend on the rules it is given. Where your declared rules leave too few priorities free ahead of them, for Xshield's rules or for workloads Xshield refused with `NO_FREE_PRIORITY` for want of room there, `security_rules` moves them up, in their order, by as few priorities as those rules need, which your plan shows; the plan fails where Xshield's rules placed now would pass priority 4096, and room for refused workloads that cannot be made is not made. When Xshield has no rules for the group, `security_rules` is the declared rules unchanged, so your rules go back to the priorities your configuration gives them.
 
 ## Example Usage
 
 ```terraform
-# A network security group whose rules your configuration declares inline holds only
-# the rules it declares. Where Xshield writes a workload's rules into it, declare the
-# group's rules through this data source, and list the group in the azure enforcement
-# module's customer_network_security_groups_in_code so the module leaves it to you.
+# A group whose rules are declared inline holds only those, so declare them through this data source.
 locals {
   app_rules = [
     {
@@ -40,7 +37,14 @@ data "xshield_azure_security_rules" "app" {
   region                    = "eastus2"
   network_security_group_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/networkSecurityGroups/nsg-app"
   declared_security_rules   = local.app_rules
+  current_security_rules    = [for rule in data.azurerm_network_security_group.app.security_rule : { name = rule.name, priority = rule.priority, direction = rule.direction }]
   version                   = data.xshield_azure_enforcement_status.this.applied_version
+}
+
+# Keeps Xshield's rules at the priorities the enforcement module gave them.
+data "azurerm_network_security_group" "app" {
+  name                = "nsg-app"
+  resource_group_name = "rg-net"
 }
 
 data "xshield_azure_enforcement_status" "this" {
@@ -68,13 +72,13 @@ resource "azurerm_network_security_group" "app" {
 ### Optional
 
 - `current_security_rules` (Attributes List) Every rule the group holds now, as azurerm's `azurerm_network_security_group` data source reads it. Xshield's rules then keep the priorities they hold, and a rule that moves or is added takes a priority no rule holds, so rules applied one at a time never collide. A rule of yours here also counts as one of yours. (see [below for nested schema](#nestedatt--current_security_rules))
-- `declared_security_rules` (Attributes List) The rules your configuration declares for the group, with the arguments of azurerm's `security_rule`. Xshield's rules are numbered below the lowest priority among them in each direction. (see [below for nested schema](#nestedatt--declared_security_rules))
+- `declared_security_rules` (Attributes List) The rules your configuration declares for the group, with the arguments of azurerm's `security_rule`. Xshield's rules are numbered below the lowest priority among them in each direction, after moving them up where they leave too little room. (see [below for nested schema](#nestedatt--declared_security_rules))
 - `version` (String) The snapshot version the rules are from. Set it to read the version an enforcement workspace applies, as the `azure` enforcement module does. When omitted, the version Xshield expects is read.
 
 ### Read-Only
 
 - `published` (Boolean) False while Xshield has published nothing for this subscription and region; `xshield_security_rules` is then empty and `version` null. Any other failure to read the snapshot fails the plan.
-- `security_rules` (List of Object) The declared rules followed by `xshield_security_rules`, every field set as azurerm reads a rule back, so the list can be the group's `security_rule`. Each rule has the fields of azurerm's `security_rule`: `name`, `description`, `priority`, `direction`, `access`, `protocol`, `source_address_prefix` or `source_address_prefixes`, `source_application_security_group_ids`, `destination_address_prefix` or `destination_address_prefixes`, `destination_application_security_group_ids`, `source_port_range` or `source_port_ranges`, and `destination_port_range` or `destination_port_ranges`. (see [below for nested schema](#nestedatt--security_rules))
+- `security_rules` (List of Object) The declared rules, moved up where Xshield's need room, followed by `xshield_security_rules`, every field set as azurerm reads a rule back, so the list can be the group's `security_rule`. Each rule has the fields of azurerm's `security_rule`: `name`, `description`, `priority`, `direction`, `access`, `protocol`, `source_address_prefix` or `source_address_prefixes`, `source_application_security_group_ids`, `destination_address_prefix` or `destination_address_prefixes`, `destination_application_security_group_ids`, `source_port_range` or `source_port_ranges`, and `destination_port_range` or `destination_port_ranges`. (see [below for nested schema](#nestedatt--security_rules))
 - `xshield_security_rules` (List of Object) Xshield's rules for the group, with the fields of azurerm's `security_rule`, each at a priority below every rule of yours in its direction. Each rule has the fields of azurerm's `security_rule`: `name`, `description`, `priority`, `direction`, `access`, `protocol`, `source_address_prefix` or `source_address_prefixes`, `source_application_security_group_ids`, `destination_address_prefix` or `destination_address_prefixes`, `destination_application_security_group_ids`, `source_port_range` or `source_port_ranges`, and `destination_port_range` or `destination_port_ranges`. A single address or port is in the singular field with the plural one empty; two or more are in the plural field with the singular one empty. (see [below for nested schema](#nestedatt--xshield_security_rules))
 
 <a id="nestedatt--current_security_rules"></a>

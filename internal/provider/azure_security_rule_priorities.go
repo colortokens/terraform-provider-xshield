@@ -49,6 +49,100 @@ func numberAheadOfYours(groupName string, wanted []wireAzureSecurityRule, yours,
 	return numbered, nil
 }
 
+// Declared rules decide where the group's rules will be, so a current rule of the same name does not hold its priority.
+func moveYoursUp(groupName string, wanted []wireAzureSecurityRule, declared, current []azurePriorityHolder) (map[string]int64, []wireAzureSecurityRule, error) {
+	numbered, err := numberAheadOfYours(groupName, wanted, declared, current)
+	if err == nil || len(declared) == 0 {
+		return map[string]int64{}, numbered, err
+	}
+	isDeclared := map[string]bool{}
+	for _, d := range declared {
+		isDeclared[d.name] = true
+	}
+	current = slices.DeleteFunc(slices.Clone(current), func(h azurePriorityHolder) bool { return isDeclared[h.name] })
+	moved := map[string]int64{}
+	for _, direction := range azureDirections {
+		rules := slices.DeleteFunc(slices.Clone(wanted), func(r wireAzureSecurityRule) bool { return !strings.EqualFold(r.Direction, direction) })
+		if len(rules) == 0 {
+			continue
+		}
+		if _, err := numberAheadOfYours(groupName, rules, nil, current); err != nil {
+			return nil, nil, err
+		}
+		yours := slices.DeleteFunc(slices.Clone(declared), func(h azurePriorityHolder) bool { return !strings.EqualFold(h.direction, direction) })
+		slices.SortStableFunc(yours, func(a, b azurePriorityHolder) int { return cmp.Compare(a.priority, b.priority) })
+		for room := int64(len(rules)); ; room++ {
+			shifted, fits := shiftedUp(yours, room)
+			if !fits || room > azureHighestRulePriority-azureLowestRulePriority {
+				return nil, nil, fmt.Errorf("network security group %s has no room for Xshield's %d %s rules ahead of yours, and even moved up "+
+					"in their order your declared %s rules would pass priority %d, the highest Azure takes. Remove some of them",
+					groupName, len(rules), strings.ToLower(direction), strings.ToLower(direction), azureHighestRulePriority)
+			}
+			if _, err := numberAheadOfYours(groupName, rules, shifted, current); err == nil {
+				for i, h := range shifted {
+					if h.priority != yours[i].priority {
+						moved[h.name] = h.priority
+					}
+				}
+				break
+			}
+		}
+	}
+	holders := slices.Clone(declared)
+	for i, h := range holders {
+		if p, ok := moved[h.name]; ok {
+			holders[i].priority = p
+		}
+	}
+	numbered, err = numberAheadOfYours(groupName, wanted, holders, current)
+	return moved, numbered, err
+}
+
+// Room that cannot be made below Azure's highest priority is not made, so Xshield's rules placed now still fit.
+func moveYoursUpForRoom(groupName string, wanted []wireAzureSecurityRule, roomWanted map[string]int64, declared,
+	current []azurePriorityHolder) (map[string]int64, []wireAzureSecurityRule, error) {
+	awaited := slices.Clone(wanted)
+	for _, direction := range azureDirections {
+		placed := int64(0)
+		for _, r := range wanted {
+			if strings.EqualFold(r.Direction, direction) {
+				placed++
+			}
+		}
+		for i := placed; i < roomWanted[direction]; i++ {
+			awaited = append(awaited, wireAzureSecurityRule{Name: fmt.Sprintf("%s%s-%d", azureRoomPlaceholder, direction, i), Direction: direction,
+				Access: "room", Priority: azureHighestRulePriority})
+		}
+	}
+	if len(declared) == 0 || len(awaited) == len(wanted) {
+		return moveYoursUp(groupName, wanted, declared, current)
+	}
+	moved, numbered, err := moveYoursUp(groupName, awaited, declared, current)
+	if err != nil {
+		return moveYoursUp(groupName, wanted, declared, current)
+	}
+	return moved, slices.DeleteFunc(numbered, func(r wireAzureSecurityRule) bool { return strings.HasPrefix(r.Name, azureRoomPlaceholder) }), nil
+}
+
+// azureRoomPlaceholder names the priorities held for workloads refused for room; no rule of Xshield's is named so.
+const azureRoomPlaceholder = "CT-Rule-Room-"
+
+func shiftedUp(sorted []azurePriorityHolder, room int64) ([]azurePriorityHolder, bool) {
+	shifted := slices.Clone(sorted)
+	next := azureLowestRulePriority + room
+	for i, h := range shifted {
+		if h.priority >= next {
+			break
+		}
+		if next > azureHighestRulePriority {
+			return nil, false
+		}
+		shifted[i].priority = next
+		next++
+	}
+	return shifted, true
+}
+
 // azureRoom is what one direction of a group leaves Xshield: the priorities below ceiling that no rule holds, and the
 // priorities its rules hold now.
 type azureRoom struct {

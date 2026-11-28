@@ -121,6 +121,9 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"`DISCOVER_FAILED:NO_SUBNET` when discovery shows neither, " +
 					"`NOT_EXPRESSIBLE_ON_AZURE:<detail>` when its policy holds a rule no network security rule can hold, " +
 					"`RULE_BUDGET` when its rules, with those of the workloads sharing its group, pass what one group holds, " +
+					"`PREFIX_BUDGET` when its group's rules, with those of the workloads sharing it and any of yours there, would name more " +
+					"than Azure's 6,000 source addresses, destination addresses, source port ranges or destination port ranges, each " +
+					"field counted apart, which its message names: name fewer, or remove your group so Xshield places one of its own, " +
 					"`ENDPOINT_NETWORK_POLICIES_OFF` when it is reached through a private endpoint whose subnet's private endpoint " +
 					"network policies are neither `Enabled` nor `NetworkSecurityGroupEnabled`, so a group there would not filter its " +
 					"traffic, `NO_PRIVATE_INBOUND` when a Function App with inbound policy has no private endpoint, " +
@@ -147,21 +150,36 @@ func (d *azureEnforcementStatusDataSource) Schema(ctx context.Context, req datas
 					"receipt shows the new placement applied, so a workload moving between its network interface and its subnet " +
 					"keeps its old group for one more apply. A `levelSharedWithContained` notice names a workload whose subnet a contained workload " +
 					"shares, so the connector's group covers it too and it is not synchronized until the containment is reverted. " +
-					"A `customerGroupWritten` notice names a workload whose every network interface and subnet carries a group of " +
-					"yours, so Xshield writes its rules into your subnet's group, which `group` names. A `connectorHandsOver` notice " +
+					"A `customerGroupWritten` notice names a workload whose rules Xshield writes into the group of yours on the network " +
+					"interface its enforcement scope names, or on its subnet, which `group` names. A `levelFallback` notice names a workload " +
+					"whose enforcement scope is its network interface but whose interface cannot take a group, such as a private endpoint's or a " +
+					"scale set instance's, so its rules go on its subnet, and `reason` says why. A `customerGroupRulesRemoved` notice names a " +
+					"group of yours, by `group`, that a write of the group as a whole, such as an apply of a configuration declaring its rules " +
+					"inline, took Xshield's rules out of at `since`, naming who made it; the enforcement apply puts them back, and the notice " +
+					"stays until a later write of the group keeps them all, which declaring its rules through `xshield_azure_security_rules` " +
+					"does. A `customerGroupCarriedByYourCode` notice names a group of yours whose latest such write, at `since`, kept every rule " +
+					"of Xshield's there, and `customerGroupCarryBehind` one whose latest write kept an earlier version's rules: that " +
+					"configuration carries the new ones at its next apply. Either way the enforcement apply goes on writing the rules. " +
+					"A `connectorHandsOver` notice " +
 					"names a workload the cloud connector enforced with a group of its own, which `group` names: once this version is " +
-					"applied, the connector puts Xshield's group, or the group of yours its own displaced, in place of its group, and " +
-					"then removes its group. A `testAllowsCarried` notice names a workload whose Test mode allows Xshield keeps in the group " +
+					"applied, the connector puts Xshield's group in place of its group in one change. Where its group displaced one of " +
+					"yours, Xshield writes the workload's rules into your group first, and the connector puts your group back only once " +
+					"an observation shows it holding every one of them; until then the connector's group goes on enforcing the workload, " +
+					"which is no drift. Its group then stays in the subscription, detached, for you to delete, unless the connector's " +
+					"role lets it delete the group itself. A `testAllowsCarried` notice names a workload whose Test mode allows Xshield keeps in the group " +
 					"of yours that `group` names, as its subnet already let that traffic through one; a group of yours otherwise gets " +
 					"no Test mode allow, which would let through traffic your rules deny. They go once the workload leaves Test mode. " +
-					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `testAllowsCarried`, `connectorHandsOver`, " +
+					"`code`: `assetRefused`, `assetContained`, `levelSharedWithContained`, `customerGroupWritten`, `levelFallback`, `customerGroupRulesRemoved`, " +
+					"`customerGroupCarriedByYourCode`, `customerGroupCarryBehind`, `testAllowsCarried`, `connectorHandsOver`, " +
 					"`associationHeld`, `associationKept` or `observationStale`. " +
 					"`asset_id`: the Xshield asset the notice is about, when there is one. " +
 					"`asset_name`: the workload as Azure names it, when Xshield knows it. " +
-					"`group`: for `associationHeld` and `associationKept`, the group by its key in the snapshot; for `customerGroupWritten` and `testAllowsCarried`, the name of your " +
+					"`group`: for `associationHeld` and `associationKept`, the group by its key in the snapshot; for `customerGroupWritten`, `testAllowsCarried` " +
+					"and the three about writes of your group, the name of your " +
 					"group; for `connectorHandsOver`, the name of the cloud connector's group; null for `assetRefused`, `assetContained`, " +
-					"`levelSharedWithContained` and `observationStale`. " +
-					"`since`: for `observationStale`, the last apply or observation it counts from; null for every other code. " +
+					"`levelSharedWithContained`, `levelFallback` and `observationStale`. " +
+					"`since`: for `observationStale`, the last apply or observation it counts from; for the three about writes of your group, " +
+					"the write; null for every other code. " +
 					"`message`: what happened and what to do about it.",
 			},
 		},
