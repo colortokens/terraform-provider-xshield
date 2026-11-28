@@ -175,7 +175,7 @@ func TestTemplateApplyRejectsAPathWhoseDeferredSelectorResolvedToNull(t *testing
 		client, requests := templateAPIThatMustNotBeCalled(t)
 		resp := resource.CreateResponse{State: tfsdk.State{Schema: config.Schema, Raw: tftypes.NewValue(config.Raw.Type(), nil)}}
 		(&TemplateResource{client: client}).Create(ctx, resource.CreateRequest{
-			Config: config, Plan: tfsdk.Plan{Schema: plan.Schema, Raw: plan.Raw}}, &resp)
+			Config: config, Plan: tfsdk.Plan(plan)}, &resp)
 		if !strings.Contains(fmt.Sprint(resp.Diagnostics), want) || len(*requests) > 0 {
 			t.Errorf("create diagnostics = %v, API requests = %v; want %q and no request", resp.Diagnostics, *requests, want)
 		}
@@ -183,9 +183,9 @@ func TestTemplateApplyRejectsAPathWhoseDeferredSelectorResolvedToNull(t *testing
 	t.Run("update", func(t *testing.T) {
 		client, requests := templateAPIThatMustNotBeCalled(t)
 		state := templateConfigWithPaths(t, pathList(inbound(map[string]any{"src_ip": "10.0.0.1"})))
-		resp := resource.UpdateResponse{State: tfsdk.State{Schema: state.Schema, Raw: state.Raw}}
+		resp := resource.UpdateResponse{State: tfsdk.State(state)}
 		(&TemplateResource{client: client}).Update(ctx, resource.UpdateRequest{
-			Config: config, Plan: tfsdk.Plan{Schema: config.Schema, Raw: config.Raw}, State: tfsdk.State{Schema: state.Schema, Raw: state.Raw}}, &resp)
+			Config: config, Plan: tfsdk.Plan(config), State: tfsdk.State(state)}, &resp)
 		if !strings.Contains(fmt.Sprint(resp.Diagnostics), want) || len(*requests) > 0 {
 			t.Errorf("update diagnostics = %v, API requests = %v; want %q and no request", resp.Diagnostics, *requests, want)
 		}

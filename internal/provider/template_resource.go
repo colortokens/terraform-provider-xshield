@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -33,6 +34,7 @@ import (
 var _ resource.Resource = &TemplateResource{}
 var _ resource.ResourceWithImportState = &TemplateResource{}
 var _ resource.ResourceWithValidateConfig = &TemplateResource{}
+var _ resource.ResourceWithModifyPlan = &TemplateResource{}
 
 func NewTemplateResource() resource.Resource {
 	return &TemplateResource{}
@@ -74,8 +76,17 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 			}
 		}
 		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, unknownObjects, &resp.Diagnostics)
-		validateTemplatePathSelectorID(path.Root("template_paths").AtListIndex(i), p, &resp.Diagnostics)
 	}
+}
+
+// ModifyPlan rejects a path selector that would reach the API with no ID. It
+// runs at plan rather than in ValidateConfig because a selector the
+// configuration names only by name, or as {}, takes its ID from state.
+func (r *TemplateResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
 }
 
 // TemplateResourceModel describes the resource data model.
@@ -222,7 +233,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `ID of the destination named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -230,10 +241,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `Name of the destination named network. The API does not look the network up by name; it fills this in from the ID.`,
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The destination named network of this path. Set named_network_id.`,
 						},
 						"destination_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -251,7 +262,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Description: `ID of the destination segment.`,
+									Description: `ID of the destination segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -259,7 +270,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Description: `Name of the destination segment.`,
+									Description: `Name of the destination segment. The API does not look the segment up by name; it fills this in from the ID.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -267,7 +278,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The destination segment of this path. Set tag_based_policy_id.`,
 						},
 						"direction": schema.StringAttribute{
 							Computed: true,
@@ -382,7 +393,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `ID of the source named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -390,10 +401,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `Name of the source named network. The API does not look the network up by name; it fills this in from the ID.`,
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The source named network of this path. Set named_network_id.`,
 						},
 						"source_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -411,7 +422,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Description: `ID of the source segment.`,
+									Description: `ID of the source segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -419,7 +430,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Description: `Name of the source segment.`,
+									Description: `Name of the source segment. The API does not look the segment up by name; it fills this in from the ID.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -427,7 +438,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The source segment of this path. Set tag_based_policy_id.`,
 						},
 						"src_ip": schema.StringAttribute{
 							Description: `Source IP address or CIDR range.`,
@@ -599,14 +610,11 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	validateTemplatePaths(ctx, &config, &resp.Diagnostics)
+	validateTemplatePaths(&config, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	// The plan holds an unset Optional and Computed selector ID as unknown even
-	// when the configuration resolved it to null, so check the configuration.
-	validateTemplatePathSelectorIDs(config.TemplatePaths, &resp.Diagnostics)
+	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -660,7 +668,7 @@ func isStringSet(v types.String) bool {
 //
 // A selector that is unknown until apply may be the one, so it satisfies
 // "at least one" but never counts towards "more than one".
-func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, diags *diag.Diagnostics) {
+func validateTemplatePaths(data *TemplateResourceModel, diags *diag.Diagnostics) {
 	for i, p := range data.TemplatePaths {
 		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, nil, diags)
 	}
@@ -820,41 +828,78 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 	}
 }
 
-// validateTemplatePathSelectorIDs reports a named-network or tag-based-policy
-// selector that names no network or segment. The API looks a selector up by
-// its ID alone, so an object without one, such as {} or only a name, selects
-// nothing and the API rejects the path. An ID unknown until apply is skipped
-// here; create and update check the configuration once it is known.
-func validateTemplatePathSelectorIDs(paths []tfTypes.MetadataPath, diags *diag.Diagnostics) {
-	for i, p := range paths {
-		validateTemplatePathSelectorID(path.Root("template_paths").AtListIndex(i), p, diags)
+var templatePathSelectorIDAttributes = []struct{ selector, idAttribute string }{
+	{"source_named_network", "named_network_id"},
+	{"source_tag_based_policy", "tag_based_policy_id"},
+	{"destination_named_network", "named_network_id"},
+	{"destination_tag_based_policy", "tag_based_policy_id"},
+}
+
+// validateTemplatePathSelectorIDLists reports a configured named-network or
+// tag-based-policy selector whose planned ID is missing. The API looks a
+// selector up by its ID alone, so an object without one, such as {} or only a
+// name, selects nothing and the API rejects the path. The planned ID is checked
+// because a selector the configuration names by name, or as {}, keeps the ID in
+// state. An ID unknown in the configuration is skipped until apply.
+func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Diagnostics) {
+	if config.IsNull() || config.IsUnknown() {
+		return
+	}
+	planned := plan.Elements()
+	for i, element := range config.Elements() {
+		configured, ok := element.(types.Object)
+		if !ok || configured.IsNull() || configured.IsUnknown() {
+			continue
+		}
+		var plannedPath types.Object
+		if i < len(planned) {
+			plannedPath, _ = planned[i].(types.Object)
+		}
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(configured, s.selector)
+			if selector.IsNull() || selector.IsUnknown() {
+				continue
+			}
+			if stringAttribute(selector, s.idAttribute).IsUnknown() ||
+				isStringSet(stringAttribute(objectAttribute(plannedPath, s.selector), s.idAttribute)) {
+				continue
+			}
+			at := path.Root("template_paths").AtListIndex(i).AtName(s.selector)
+			diags.AddAttributeError(
+				at,
+				"Invalid template path configuration - empty selector",
+				fmt.Sprintf("%s must set %s. Without it the selector matches nothing, and the API rejects the path.", at, s.idAttribute),
+			)
+		}
 	}
 }
 
-func validateTemplatePathSelectorID(pathRoot path.Path, p tfTypes.MetadataPath, diags *diag.Diagnostics) {
-	check := func(selector, idAttribute string, id types.String) {
-		if id.IsUnknown() || isStringSet(id) {
-			return
-		}
-		at := pathRoot.AtName(selector)
-		diags.AddAttributeError(
-			at,
-			"Invalid template path configuration - empty selector",
-			fmt.Sprintf("%s must set %s. Without it the selector matches nothing, and the API rejects the path.", at, idAttribute),
-		)
+// validateTemplatePathSelectorIDs runs validateTemplatePathSelectorIDLists on
+// template_paths in the configuration and the plan.
+func validateTemplatePathSelectorIDs(ctx context.Context, config tfsdk.Config, plan tfsdk.Plan, diags *diag.Diagnostics) {
+	var configured, planned types.List
+	diags.Append(config.GetAttribute(ctx, path.Root("template_paths"), &configured)...)
+	diags.Append(plan.GetAttribute(ctx, path.Root("template_paths"), &planned)...)
+	if diags.HasError() {
+		return
 	}
-	if p.SourceNamedNetwork != nil {
-		check("source_named_network", "named_network_id", p.SourceNamedNetwork.NamedNetworkID)
+	validateTemplatePathSelectorIDLists(configured, planned, diags)
+}
+
+// objectAttribute is the named object attribute of o, null when o has none.
+func objectAttribute(o types.Object, name string) types.Object {
+	if v, ok := o.Attributes()[name].(types.Object); ok {
+		return v
 	}
-	if p.SourceTagBasedPolicy != nil {
-		check("source_tag_based_policy", "tag_based_policy_id", p.SourceTagBasedPolicy.TagBasedPolicyID)
+	return types.ObjectNull(nil)
+}
+
+// stringAttribute is the named string attribute of o, null when o has none.
+func stringAttribute(o types.Object, name string) types.String {
+	if v, ok := o.Attributes()[name].(types.String); ok {
+		return v
 	}
-	if p.DestinationNamedNetwork != nil {
-		check("destination_named_network", "named_network_id", p.DestinationNamedNetwork.NamedNetworkID)
-	}
-	if p.DestinationTagBasedPolicy != nil {
-		check("destination_tag_based_policy", "tag_based_policy_id", p.DestinationTagBasedPolicy.TagBasedPolicyID)
-	}
+	return types.StringNull()
 }
 
 func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -953,8 +998,11 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	validateTemplatePaths(ctx, &configData, &resp.Diagnostics)
-	validateTemplatePathSelectorIDs(configData.TemplatePaths, &resp.Diagnostics)
+	validateTemplatePaths(&configData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

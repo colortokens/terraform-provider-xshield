@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -93,7 +92,7 @@ func TestTemplatePathSelectorKnownOnlyAtApplyPassesValidation(t *testing.T) {
 		{Direction: types.StringValue("outbound"), Port: types.StringValue("443"), Protocol: types.StringValue("TCP"), Domain: types.StringUnknown()},
 	} {
 		var diags diag.Diagnostics
-		validateTemplatePaths(context.Background(), &TemplateResourceModel{TemplatePaths: []tfTypes.MetadataPath{path}}, &diags)
+		validateTemplatePaths(&TemplateResourceModel{TemplatePaths: []tfTypes.MetadataPath{path}}, &diags)
 		if diags.HasError() {
 			t.Errorf("a %s path whose selector is known only at apply, as one from a variable or another resource is, fails validation: %v",
 				path.Direction.ValueString(), diags)
@@ -103,7 +102,7 @@ func TestTemplatePathSelectorKnownOnlyAtApplyPassesValidation(t *testing.T) {
 
 func TestTemplatePathWithNoSelectorStillFailsValidation(t *testing.T) {
 	var diags diag.Diagnostics
-	validateTemplatePaths(context.Background(), &TemplateResourceModel{TemplatePaths: []tfTypes.MetadataPath{
+	validateTemplatePaths(&TemplateResourceModel{TemplatePaths: []tfTypes.MetadataPath{
 		{Direction: types.StringValue("inbound"), Port: types.StringValue("3306"), Protocol: types.StringValue("TCP"), SourceAssetID: types.StringNull()},
 	}}, &diags)
 	if !diags.HasError() {

@@ -3,14 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	tfTypes "github.com/colortokens/terraform-provider-xshield/internal/provider/types"
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk"
-	"github.com/colortokens/terraform-provider-xshield/internal/sdk/models/shared"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -62,79 +58,9 @@ func errorsAt(diags diag.Diagnostics) []string {
 	return out
 }
 
-// A selector object that names no network or segment selects nothing, and the
-// API rejects the path, so validate reports it at the object, naming the path.
-func TestTemplatePathSelectorObjectWithNoIDFailsValidateConfig(t *testing.T) {
-	srcIP := pathWithDirection("inbound")
-	srcIP.SrcIP = types.StringValue("10.0.0.1")
-	cases := map[string]struct {
-		path func(p *tfTypes.MetadataPath)
-		at   string
-		want string
-	}{
-		"inbound source_named_network = {}": {
-			func(p *tfTypes.MetadataPath) { p.SourceNamedNetwork = namedNetwork(noValue, noValue) },
-			"template_paths[1].source_named_network",
-			"template_paths[1].source_named_network must set named_network_id.",
-		},
-		"inbound source_named_network with only a name": {
-			func(p *tfTypes.MetadataPath) {
-				p.SourceNamedNetwork = namedNetwork(noValue, types.StringValue("office"))
-			},
-			"template_paths[1].source_named_network",
-			"template_paths[1].source_named_network must set named_network_id.",
-		},
-		"inbound source_named_network with an empty id": {
-			func(p *tfTypes.MetadataPath) { p.SourceNamedNetwork = namedNetwork(types.StringValue(""), noValue) },
-			"template_paths[1].source_named_network",
-			"template_paths[1].source_named_network must set named_network_id.",
-		},
-		"inbound source_tag_based_policy = {}": {
-			func(p *tfTypes.MetadataPath) { p.SourceTagBasedPolicy = tagBasedPolicy(noValue, noValue, noValue) },
-			"template_paths[1].source_tag_based_policy",
-			"template_paths[1].source_tag_based_policy must set tag_based_policy_id.",
-		},
-		"inbound source_tag_based_policy with only a name and criteria": {
-			func(p *tfTypes.MetadataPath) {
-				p.SourceTagBasedPolicy = tagBasedPolicy(noValue, types.StringValue("web"), types.StringValue("role = web"))
-			},
-			"template_paths[1].source_tag_based_policy",
-			"template_paths[1].source_tag_based_policy must set tag_based_policy_id.",
-		},
-		"outbound destination_named_network = {}": {
-			func(p *tfTypes.MetadataPath) {
-				p.Direction = types.StringValue("outbound")
-				p.DestinationNamedNetwork = namedNetwork(noValue, noValue)
-			},
-			"template_paths[1].destination_named_network",
-			"template_paths[1].destination_named_network must set named_network_id.",
-		},
-		"outbound destination_tag_based_policy = {}": {
-			func(p *tfTypes.MetadataPath) {
-				p.Direction = types.StringValue("outbound")
-				p.DestinationTagBasedPolicy = tagBasedPolicy(noValue, noValue, noValue)
-			},
-			"template_paths[1].destination_tag_based_policy",
-			"template_paths[1].destination_tag_based_policy must set tag_based_policy_id.",
-		},
-	}
-	for name, c := range cases {
-		t.Run(name, func(t *testing.T) {
-			p := pathWithDirection("inbound")
-			c.path(&p)
-			var resp resource.ValidateConfigResponse
-			(&TemplateResource{}).ValidateConfig(context.Background(), resource.ValidateConfigRequest{Config: templateConfigOf(t, srcIP, p)}, &resp)
-			errs := errorsAt(resp.Diagnostics)
-			if len(errs) != 1 || !strings.HasPrefix(errs[0], c.at+": "+c.want) {
-				t.Errorf("errors = %q, want one at %s starting %q", errs, c.at, c.want)
-			}
-		})
-	}
-}
-
 // An object that names its network or segment, or whose ID is only known at
 // apply, is a selector.
-func TestTemplatePathSelectorObjectWithAnIDPassesValidateConfig(t *testing.T) {
+func TestTemplatePathSelectorObjectWithAnIDPassesValidateAndPlan(t *testing.T) {
 	unknown := types.StringUnknown()
 	id := types.StringValue("6f1c2b8e-0d4a-4c1e-9a7b-3e5f2d1c0b9a")
 	cases := map[string]func(p *tfTypes.MetadataPath){
@@ -158,30 +84,15 @@ func TestTemplatePathSelectorObjectWithAnIDPassesValidateConfig(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := pathWithDirection("inbound")
 			set(&p)
-			var resp resource.ValidateConfigResponse
-			(&TemplateResource{}).ValidateConfig(context.Background(), resource.ValidateConfigRequest{Config: templateConfigOf(t, p)}, &resp)
-			if errs := errorsAt(resp.Diagnostics); len(errs) > 0 {
-				t.Errorf("rejected a selector that names its target: %q", errs)
+			config := templateWithPaths(p)
+			config.ID = types.StringNull()
+			proposed := config
+			validateErrs, planErrs, _ := templatePlan{nil, &config, &proposed}.run(t)
+			if len(validateErrs) > 0 || len(planErrs) > 0 {
+				t.Errorf("rejected a selector that names its target: validate %q, plan %q", validateErrs, planErrs)
 			}
 		})
 	}
-}
-
-// templateAPIRecordingRequests answers every request with an error and records it.
-func templateAPIRecordingRequests(t *testing.T) (*sdk.Xshield, *[]string) {
-	t.Helper()
-	newLookupClient(t, "{}")
-	var requests []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests = append(requests, r.Method+" "+r.URL.Path)
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	t.Cleanup(srv.Close)
-	return sdk.New(
-		sdk.WithServerURL(srv.URL),
-		sdk.WithConfigProvider(shared.NewDirectConfigProvider("tenancy", "user", "fp", providerTestKeyPEM)),
-		sdk.WithClient(srv.Client()),
-	), &requests
 }
 
 // An ID from a resource or variable is unknown at plan; if it resolves to null
@@ -219,7 +130,7 @@ func TestTemplateApplyRejectsASelectorObjectWhoseIDResolvedToNull(t *testing.T) 
 		plan := tfsdk.Plan{Schema: s, Raw: templateValue(t, s, planModel)}
 
 		t.Run(name+"/create", func(t *testing.T) {
-			client, requests := templateAPIRecordingRequests(t)
+			client, requests := templateAPIThatMustNotBeCalled(t)
 			resp := resource.CreateResponse{State: tfsdk.State{Schema: s, Raw: plan.Raw.Copy()}}
 			(&TemplateResource{client: client}).Create(ctx, resource.CreateRequest{Config: config, Plan: plan}, &resp)
 			if errs := errorsAt(resp.Diagnostics); !strings.Contains(fmt.Sprint(errs), sel.want) || len(*requests) > 0 {
@@ -227,7 +138,7 @@ func TestTemplateApplyRejectsASelectorObjectWhoseIDResolvedToNull(t *testing.T) 
 			}
 		})
 		t.Run(name+"/update", func(t *testing.T) {
-			client, requests := templateAPIRecordingRequests(t)
+			client, requests := templateAPIThatMustNotBeCalled(t)
 			held := inboundMySQLPath("h-old")
 			held.SrcIP = types.StringValue("10.0.0.1")
 			state := tfsdk.State{Schema: s, Raw: templateValue(t, s, templateWithPaths(held))}
@@ -238,5 +149,41 @@ func TestTemplateApplyRejectsASelectorObjectWhoseIDResolvedToNull(t *testing.T) 
 				t.Errorf("update errors = %q, API requests = %v; want %q and no request", errs, *requests, sel.want)
 			}
 		})
+	}
+}
+
+// On update, a selector the configuration leaves without an ID is sent with
+// the ID the plan carries from state, so apply does not reject it.
+func TestTemplateUpdateAcceptsASelectorIDCarriedFromState(t *testing.T) {
+	ctx := context.Background()
+	s := templateSchemaForTest(t).Schema
+	for selector, sel := range importedSelectors {
+		for written, configure := range sel.configured {
+			t.Run(selector+" as "+written, func(t *testing.T) {
+				held := inboundMySQLPath("h-imported")
+				sel.held(&held)
+				prior := templateWithPaths(held)
+				prior.TemplateDescription = types.StringValue("before")
+				planned := prior
+				planned.TemplateDescription = types.StringValue("after")
+				configured := pathWithDirection("inbound")
+				configure(&configured)
+				config := templateWithPaths(configured)
+				config.ID = types.StringNull()
+				config.TemplateDescription = planned.TemplateDescription
+
+				client, requests := templateAPIThatMustNotBeCalled(t)
+				state := tfsdk.State{Schema: s, Raw: templateValue(t, s, prior)}
+				resp := resource.UpdateResponse{State: state}
+				(&TemplateResource{client: client}).Update(ctx, resource.UpdateRequest{
+					Config: tfsdk.Config{Schema: s, Raw: templateValue(t, s, config)},
+					Plan:   tfsdk.Plan{Schema: s, Raw: templateValue(t, s, planned)},
+					State:  state,
+				}, &resp)
+				if errs := errorsAt(resp.Diagnostics); strings.Contains(fmt.Sprint(errs), "empty selector") || len(*requests) == 0 {
+					t.Errorf("update errors = %q, API requests = %v; want the update sent", errs, *requests)
+				}
+			})
+		}
 	}
 }
