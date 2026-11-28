@@ -79,14 +79,26 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 }
 
-// ModifyPlan rejects a path selector that would reach the API with no ID. It
-// runs at plan rather than in ValidateConfig because a selector the
-// configuration names only by name, or as {}, takes its ID from state.
+// ModifyPlan plans the ID of a path selector the configuration names by name
+// only, then rejects a selector that would reach the API with no ID. It runs at
+// plan rather than in ValidateConfig because the ID comes from state.
 func (r *TemplateResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
-	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
+	var config, prior types.List
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_paths"), &config)...)
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("template_paths"), &prior)...)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	planTemplatePathSelectorIDsByName(ctx, config, prior, &resp.Plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, resp.Plan, &resp.Diagnostics)
 }
 
 // TemplateResourceModel describes the resource data model.
@@ -828,19 +840,71 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 	}
 }
 
-var templatePathSelectorIDAttributes = []struct{ selector, idAttribute string }{
-	{"source_named_network", "named_network_id"},
-	{"source_tag_based_policy", "tag_based_policy_id"},
-	{"destination_named_network", "named_network_id"},
-	{"destination_tag_based_policy", "tag_based_policy_id"},
+var templatePathSelectorIDAttributes = []struct{ selector, idAttribute, nameAttribute string }{
+	{"source_named_network", "named_network_id", "named_network_name"},
+	{"source_tag_based_policy", "tag_based_policy_id", "tag_based_policy_name"},
+	{"destination_named_network", "named_network_id", "named_network_name"},
+	{"destination_tag_based_policy", "tag_based_policy_id", "tag_based_policy_name"},
+}
+
+// planTemplatePathSelectorIDsByName sets the planned ID of each configured
+// selector that leaves its ID null. Terraform proposes the prior ID of the path
+// at the same position, which may be another path's. Instead the ID is the one
+// state holds for a selector with the configured name, of the same kind, on any
+// path. With no name, or no single such ID, the ID is null, and the selector
+// fails validateTemplatePathSelectorIDs. An unknown name leaves it unknown.
+func planTemplatePathSelectorIDsByName(ctx context.Context, config, prior types.List, plan *tfsdk.Plan, diags *diag.Diagnostics) {
+	if config.IsNull() || config.IsUnknown() {
+		return
+	}
+	idsByName := map[string]map[string]map[string]bool{}
+	for _, element := range prior.Elements() {
+		held, _ := element.(types.Object)
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(held, s.selector)
+			id, name := stringAttribute(selector, s.idAttribute), stringAttribute(selector, s.nameAttribute)
+			if !isStringSet(id) || !isStringSet(name) {
+				continue
+			}
+			if idsByName[s.nameAttribute] == nil {
+				idsByName[s.nameAttribute] = map[string]map[string]bool{}
+			}
+			if idsByName[s.nameAttribute][name.ValueString()] == nil {
+				idsByName[s.nameAttribute][name.ValueString()] = map[string]bool{}
+			}
+			idsByName[s.nameAttribute][name.ValueString()][id.ValueString()] = true
+		}
+	}
+	for i, element := range config.Elements() {
+		configured, ok := element.(types.Object)
+		if !ok || configured.IsNull() || configured.IsUnknown() {
+			continue
+		}
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(configured, s.selector)
+			if selector.IsNull() || selector.IsUnknown() || !stringAttribute(selector, s.idAttribute).IsNull() {
+				continue
+			}
+			planned := types.StringNull()
+			if name := stringAttribute(selector, s.nameAttribute); name.IsUnknown() {
+				planned = types.StringUnknown()
+			} else if ids := idsByName[s.nameAttribute][name.ValueString()]; isStringSet(name) && len(ids) == 1 {
+				for id := range ids {
+					planned = types.StringValue(id)
+				}
+			}
+			diags.Append(plan.SetAttribute(ctx, path.Root("template_paths").AtListIndex(i).AtName(s.selector).AtName(s.idAttribute), planned)...)
+		}
+	}
 }
 
 // validateTemplatePathSelectorIDLists reports a configured named-network or
 // tag-based-policy selector whose planned ID is missing. The API looks a
 // selector up by its ID alone, so an object without one, such as {} or only a
 // name, selects nothing and the API rejects the path. The planned ID is checked
-// because a selector the configuration names by name, or as {}, keeps the ID in
-// state. An ID unknown in the configuration is skipped until apply.
+// because a selector the configuration names by name takes its ID from state.
+// An ID, or the name of a selector with no ID, unknown in the configuration is
+// skipped until apply.
 func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Diagnostics) {
 	if config.IsNull() || config.IsUnknown() {
 		return
@@ -861,6 +925,7 @@ func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Di
 				continue
 			}
 			if stringAttribute(selector, s.idAttribute).IsUnknown() ||
+				stringAttribute(selector, s.idAttribute).IsNull() && stringAttribute(selector, s.nameAttribute).IsUnknown() ||
 				isStringSet(stringAttribute(objectAttribute(plannedPath, s.selector), s.idAttribute)) {
 				continue
 			}

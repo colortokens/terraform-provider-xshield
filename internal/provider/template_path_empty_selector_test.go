@@ -152,38 +152,36 @@ func TestTemplateApplyRejectsASelectorObjectWhoseIDResolvedToNull(t *testing.T) 
 	}
 }
 
-// On update, a selector the configuration leaves without an ID is sent with
-// the ID the plan carries from state, so apply does not reject it.
+// On update, a selector the configuration names only by name is sent with the
+// ID the plan carries from state, so apply does not reject it.
 func TestTemplateUpdateAcceptsASelectorIDCarriedFromState(t *testing.T) {
 	ctx := context.Background()
 	s := templateSchemaForTest(t).Schema
 	for selector, sel := range importedSelectors {
-		for written, configure := range sel.configured {
-			t.Run(selector+" as "+written, func(t *testing.T) {
-				held := inboundMySQLPath("h-imported")
-				sel.held(&held)
-				prior := templateWithPaths(held)
-				prior.TemplateDescription = types.StringValue("before")
-				planned := prior
-				planned.TemplateDescription = types.StringValue("after")
-				configured := pathWithDirection("inbound")
-				configure(&configured)
-				config := templateWithPaths(configured)
-				config.ID = types.StringNull()
-				config.TemplateDescription = planned.TemplateDescription
+		t.Run(selector, func(t *testing.T) {
+			held := inboundMySQLPath("h-imported")
+			sel.held(&held)
+			prior := templateWithPaths(held)
+			prior.TemplateDescription = types.StringValue("before")
+			planned := prior
+			planned.TemplateDescription = types.StringValue("after")
+			configured := pathWithDirection("inbound")
+			sel.nameOnly(&configured)
+			config := templateWithPaths(configured)
+			config.ID = types.StringNull()
+			config.TemplateDescription = planned.TemplateDescription
 
-				client, requests := templateAPIThatMustNotBeCalled(t)
-				state := tfsdk.State{Schema: s, Raw: templateValue(t, s, prior)}
-				resp := resource.UpdateResponse{State: state}
-				(&TemplateResource{client: client}).Update(ctx, resource.UpdateRequest{
-					Config: tfsdk.Config{Schema: s, Raw: templateValue(t, s, config)},
-					Plan:   tfsdk.Plan{Schema: s, Raw: templateValue(t, s, planned)},
-					State:  state,
-				}, &resp)
-				if errs := errorsAt(resp.Diagnostics); strings.Contains(fmt.Sprint(errs), "empty selector") || len(*requests) == 0 {
-					t.Errorf("update errors = %q, API requests = %v; want the update sent", errs, *requests)
-				}
-			})
-		}
+			client, requests := templateAPIThatMustNotBeCalled(t)
+			state := tfsdk.State{Schema: s, Raw: templateValue(t, s, prior)}
+			resp := resource.UpdateResponse{State: state}
+			(&TemplateResource{client: client}).Update(ctx, resource.UpdateRequest{
+				Config: tfsdk.Config{Schema: s, Raw: templateValue(t, s, config)},
+				Plan:   tfsdk.Plan{Schema: s, Raw: templateValue(t, s, planned)},
+				State:  state,
+			}, &resp)
+			if errs := errorsAt(resp.Diagnostics); strings.Contains(fmt.Sprint(errs), "empty selector") || len(*requests) == 0 {
+				t.Errorf("update errors = %q, API requests = %v; want the update sent", errs, *requests)
+			}
+		})
 	}
 }
