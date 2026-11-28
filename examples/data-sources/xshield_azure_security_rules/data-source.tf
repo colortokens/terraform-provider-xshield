@@ -1,7 +1,4 @@
-# A network security group whose rules your configuration declares inline holds only
-# the rules it declares. Where Xshield writes a workload's rules into it, declare the
-# group's rules through this data source, so the group's apply keeps Xshield's. The azure
-# enforcement module writes them into the group all the same.
+# A group whose rules are declared inline holds only those, so declare them through this data source.
 locals {
   app_rules = [
     {
@@ -29,8 +26,7 @@ data "xshield_azure_security_rules" "app" {
   version                   = data.xshield_azure_enforcement_status.this.applied_version
 }
 
-# The rules the group holds now, Xshield's among them, so Xshield's keep the priorities
-# the enforcement module gives them.
+# Keeps Xshield's rules at the priorities the enforcement module gave them.
 data "azurerm_network_security_group" "app" {
   name                = "nsg-app"
   resource_group_name = "rg-net"

@@ -163,9 +163,7 @@ type wireAzurePlan struct {
 		NetworkSecurityGroups         []string `json:"networkSecurityGroups"`
 		CustomerNetworkSecurityGroups []string `json:"customerNetworkSecurityGroups"`
 	} `json:"assets"`
-	CustomerNetworkSecurityGroups map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
-	// CustomerNetworkSecurityGroupsAwaitingRoom are groups of yours with workloads Xshield refused for want of priorities ahead
-	// of your rules, and the priorities, by direction, Xshield's rules for the group would take with theirs.
+	CustomerNetworkSecurityGroups             map[string]wireAzureCustomerNetworkSecurityGroup `json:"customerNetworkSecurityGroups"`
 	CustomerNetworkSecurityGroupsAwaitingRoom map[string]struct {
 		ID                string           `json:"id"`
 		ResourceGroupName string           `json:"resourceGroupName"`

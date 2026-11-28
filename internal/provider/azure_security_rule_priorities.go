@@ -49,10 +49,7 @@ func numberAheadOfYours(groupName string, wanted []wireAzureSecurityRule, yours,
 	return numbered, nil
 }
 
-// moveYoursUp makes room ahead of rules your configuration declares, which the group's apply puts at whatever priority it is
-// given: in each direction Xshield's rules do not fit below them, it moves the declared rules up, in their order, by the fewest
-// priorities Xshield's rules then fit below, and gives each moved rule's new priority by its name. Declared rules decide where the
-// group's rules will be, so a current rule of the same name is not counted; a current rule of yours left undeclared still is.
+// Declared rules decide where the group's rules will be, so a current rule of the same name does not hold its priority.
 func moveYoursUp(groupName string, wanted []wireAzureSecurityRule, declared, current []azurePriorityHolder) (map[string]int64, []wireAzureSecurityRule, error) {
 	numbered, err := numberAheadOfYours(groupName, wanted, declared, current)
 	if err == nil || len(declared) == 0 {
@@ -101,9 +98,7 @@ func moveYoursUp(groupName string, wanted []wireAzureSecurityRule, declared, cur
 	return moved, numbered, err
 }
 
-// moveYoursUpForRoom moves declared rules up as moveYoursUp does, and further where workloads Xshield refused for room want
-// more priorities than its rules take now, so the observation after the apply finds that room. Room the declared rules cannot
-// make below Azure's highest priority is not made: the workloads stay refused, and Xshield's rules placed now still fit.
+// Room that cannot be made below Azure's highest priority is not made, so Xshield's rules placed now still fit.
 func moveYoursUpForRoom(groupName string, wanted []wireAzureSecurityRule, roomWanted map[string]int64, declared,
 	current []azurePriorityHolder) (map[string]int64, []wireAzureSecurityRule, error) {
 	awaited := slices.Clone(wanted)
@@ -132,8 +127,6 @@ func moveYoursUpForRoom(groupName string, wanted []wireAzureSecurityRule, roomWa
 // azureRoomPlaceholder names the priorities held for workloads refused for room; no rule of Xshield's is named so.
 const azureRoomPlaceholder = "CT-Rule-Room-"
 
-// shiftedUp leaves the room priorities from Azure's lowest free of rules sorted by priority, moving each rule in the way to the
-// next priority above the one before it; it does not fit when a rule would pass the highest priority Azure takes.
 func shiftedUp(sorted []azurePriorityHolder, room int64) ([]azurePriorityHolder, bool) {
 	shifted := slices.Clone(sorted)
 	next := azureLowestRulePriority + room
