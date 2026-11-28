@@ -18,7 +18,7 @@ Each step below says who does it, what to run, and how to tell it worked. Take t
 
 Xshield's group goes on a network interface or subnet that carries none of yours. Azure applies both a network interface's group and its subnet's. So where yours sits beside Xshield's, traffic passes only where both allow it. A workload's enforcement scope names a network interface or subnet. Where that level carries a group of yours, Xshield adds the workload's rules to that group instead. They go ahead of your rules, name only that workload's addresses, and leave your rules as they are. A virtual machine's rules never move to its subnet in place of its network interface. Only the enforcement workspace changes, with two exceptions (step 3). One is a workspace that declares subnets inline in a virtual network. The other declares the rules of such a group inline.
 
-The module lives in the [`modules/azure`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the module and the provider match.
+The module lives in the [`modules/azure`](https://github.com/colortokens/terraform-provider-xshield/tree/main/modules/azure) directory of this provider's repository. Every `source` below is pinned to the provider release this page was published with. If you run another release of the `colortokens/xshield` provider, set `ref` to its tag, so the module and the provider match. The module first ships in the release after v26.4.1: an earlier `ref` has no `modules/azure`, and `terraform init` fails.
 
 ## Step 1: Give the runner the API key
 

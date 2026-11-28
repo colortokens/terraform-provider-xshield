@@ -28,7 +28,7 @@ provider "xshield" {}
 
 module "xshield_enforcement" {
   # ../../../modules/azure exists only inside the provider's repository. In your copy, use the address at the tag
-  # of the provider release you run, or terraform init cannot find the module:
+  # of the provider release you run, or terraform init cannot find the module. It first ships after v26.4.1:
   #   source = "github.com/colortokens/terraform-provider-xshield//modules/azure?ref=v26.4.1"
   source = "../../../modules/azure"
 
@@ -36,7 +36,7 @@ module "xshield_enforcement" {
   tags   = { "cost-center" = "platform-security" }
 }
 
-# Azure refuses to create a rule that exists, and Terraform takes import blocks only in the root module.
+# Azure refuses to create a rule that exists. Terraform before 1.16 takes import blocks only in the root module.
 import {
   for_each = module.xshield_enforcement.customer_security_rule_adoptions
   to       = module.xshield_enforcement.azurerm_network_security_rule.customer[each.key]

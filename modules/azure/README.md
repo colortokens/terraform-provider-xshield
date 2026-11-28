@@ -10,6 +10,8 @@ module "xshield_enforcement" {
 }
 ```
 
+This module first ships in the provider release after v26.4.1. With an earlier `ref`, `terraform init` cannot find it.
+
 It creates, from `xshield_azure_enforcement_snapshot`:
 
 - one `azurerm_network_security_group` per network interface or subnet Xshield enforces at, named `ct-policy-` and a hash of that network interface or subnet, or from the cloud account's security group name template when it has one, and tagged `ct:delivery` and `ct:level`, so the cloud connector and this module recognise it as Xshield's whatever its name. A group keeps the name it was first applied under. A resource group holds one network security group per name, so where a group of yours already has the name a new group would take, Xshield gives its group that name with another hash once the cloud connector observes yours, and neither your group nor the template changes. Until then the module looks up the name of each group the last receipt does not hold, and the plan stops, naming your group: azurerm would otherwise refuse the group and suggest importing yours, which would give it Xshield's rules;
@@ -25,7 +27,7 @@ Where the level a workload's enforcement scope names carries a group of yours, X
 
 An apply of a group whose rules your configuration declares inline removes every rule it does not declare, Xshield's among them. Declare such a group's rules through the `xshield_azure_security_rules` data source in that configuration. It gives back your rules with Xshield's, so your apply keeps them. The module writes Xshield's rules into every group of yours all the same. It puts back any rule an apply of yours takes out, so no apply of either workspace leaves a workload without its rules. Xshield infers from its observations what writes of the group do. A `customerGroupRulesRemoved` notice names a write that took Xshield's rules out, and who made it. It stays until a later write keeps them all. `customerGroupCarriedByYourCode` says the latest write kept them. `customerGroupCarryBehind` says it kept an earlier version's, which that configuration's next apply brings up to date.
 
-Your configuration can write Xshield's rules before this workspace does, and Azure refuses to create a rule that exists. So the enforcement workspace must import each such rule, from the `customer_security_rule_adoptions` output. Terraform takes `import` blocks only in the root module, not in this module. Add this block to your enforcement workspace, as [`enforcement-azure`](../../examples/enforcement-snapshot/enforcement-azure) does:
+Your configuration can write Xshield's rules before this workspace does, and Azure refuses to create a rule that exists. So the enforcement workspace must import each such rule, from the `customer_security_rule_adoptions` output. Terraform before 1.16 accepts `import` blocks only in the root module. This module supports Terraform 1.7, so it holds none. Add this block to your enforcement workspace, as [`enforcement-azure`](../../examples/enforcement-snapshot/enforcement-azure) does:
 
 ```hcl
 import {
