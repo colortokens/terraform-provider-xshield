@@ -21,6 +21,15 @@ data "xshield_open_ports" "payroll_db" {
   criteria = "application = 'payroll' AND role = 'db'"
 }
 
+# The peers the paths below allow.
+data "xshield_segment" "payroll_app" {
+  tag_based_policy_name = "payroll-app"
+}
+
+data "xshield_named_network" "corp" {
+  named_network_name = "corp-networks"
+}
+
 resource "xshield_template" "payroll_db" {
   template_name        = "payroll-db"
   template_description = "Inbound access to the payroll databases"
@@ -47,14 +56,15 @@ resource "xshield_template" "payroll_db" {
   ]
 
   # A path rule names one peer. An inbound path sets exactly one source, and an
-  # outbound path exactly one destination.
+  # outbound path exactly one destination. A segment or named network peer is
+  # set by its ID; the data sources above look the IDs up by name.
   template_paths = [
     {
       direction = "inbound"
       port      = "5432"
       protocol  = "TCP"
       source_tag_based_policy = {
-        tag_based_policy_name = "payroll-app"
+        tag_based_policy_id = data.xshield_segment.payroll_app.id
       }
     },
     {
@@ -62,7 +72,7 @@ resource "xshield_template" "payroll_db" {
       port      = "5432"
       protocol  = "TCP"
       source_named_network = {
-        named_network_name = "corp-networks"
+        named_network_id = data.xshield_named_network.corp.id
       }
     },
   ]
@@ -100,8 +110,8 @@ resource "xshield_template" "payroll_db" {
 Optional:
 
 - `destination_asset_id` (String) ID of the destination asset for this path.
-- `destination_named_network` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--destination_named_network))
-- `destination_tag_based_policy` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--destination_tag_based_policy))
+- `destination_named_network` (Attributes) The destination named network of this path. Set named_network_id. (see [below for nested schema](#nestedatt--template_paths--destination_named_network))
+- `destination_tag_based_policy` (Attributes) The destination segment of this path. Set tag_based_policy_id. (see [below for nested schema](#nestedatt--template_paths--destination_tag_based_policy))
 - `direction` (String) Whether this is an access policy template.
 - `domain` (String) Domain name for HTTP/HTTPS paths.
 - `dst_ip` (String) Whether this is an access policy template.
@@ -111,8 +121,8 @@ Optional:
 - `port_name` (String) Friendly name for the port.
 - `protocol` (String) Whether this is an access policy template.
 - `source_asset_id` (String) ID of the source asset for this path.
-- `source_named_network` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--source_named_network))
-- `source_tag_based_policy` (Attributes) Whether this is an access policy template. (see [below for nested schema](#nestedatt--template_paths--source_tag_based_policy))
+- `source_named_network` (Attributes) The source named network of this path. Set named_network_id. (see [below for nested schema](#nestedatt--template_paths--source_named_network))
+- `source_tag_based_policy` (Attributes) The source segment of this path. Set tag_based_policy_id. (see [below for nested schema](#nestedatt--template_paths--source_tag_based_policy))
 - `src_ip` (String) Source IP address or CIDR range.
 - `src_process` (String) Source process name.
 - `uri` (String) URI path for HTTP/HTTPS paths.
@@ -127,8 +137,8 @@ Read-Only:
 
 Optional:
 
-- `named_network_id` (String) Whether this is an access policy template.
-- `named_network_name` (String) Whether this is an access policy template.
+- `named_network_id` (String) ID of the destination named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.
+- `named_network_name` (String) Name of the destination named network. The API does not look the network up by name; it fills this in from the ID.
 
 
 <a id="nestedatt--template_paths--destination_tag_based_policy"></a>
@@ -137,8 +147,8 @@ Optional:
 Optional:
 
 - `criteria` (String) Criteria expression for the destination segment.
-- `tag_based_policy_id` (String) ID of the destination segment.
-- `tag_based_policy_name` (String) Name of the destination segment.
+- `tag_based_policy_id` (String) ID of the destination segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.
+- `tag_based_policy_name` (String) Name of the destination segment. The API does not look the segment up by name; it fills this in from the ID.
 
 
 <a id="nestedatt--template_paths--source_named_network"></a>
@@ -146,8 +156,8 @@ Optional:
 
 Optional:
 
-- `named_network_id` (String) Whether this is an access policy template.
-- `named_network_name` (String) Whether this is an access policy template.
+- `named_network_id` (String) ID of the source named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.
+- `named_network_name` (String) Name of the source named network. The API does not look the network up by name; it fills this in from the ID.
 
 
 <a id="nestedatt--template_paths--source_tag_based_policy"></a>
@@ -156,8 +166,8 @@ Optional:
 Optional:
 
 - `criteria` (String) Criteria expression for the source segment.
-- `tag_based_policy_id` (String) ID of the source segment.
-- `tag_based_policy_name` (String) Name of the source segment.
+- `tag_based_policy_id` (String) ID of the source segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.
+- `tag_based_policy_name` (String) Name of the source segment. The API does not look the segment up by name; it fills this in from the ID.
 
 
 <a id="nestedatt--template_paths--rule_hit_metrics"></a>

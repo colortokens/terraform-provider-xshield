@@ -6,6 +6,15 @@ data "xshield_open_ports" "payroll_db" {
   criteria = "application = 'payroll' AND role = 'db'"
 }
 
+# The peers the paths below allow.
+data "xshield_segment" "payroll_app" {
+  tag_based_policy_name = "payroll-app"
+}
+
+data "xshield_named_network" "corp" {
+  named_network_name = "corp-networks"
+}
+
 resource "xshield_template" "payroll_db" {
   template_name        = "payroll-db"
   template_description = "Inbound access to the payroll databases"
@@ -32,14 +41,15 @@ resource "xshield_template" "payroll_db" {
   ]
 
   # A path rule names one peer. An inbound path sets exactly one source, and an
-  # outbound path exactly one destination.
+  # outbound path exactly one destination. A segment or named network peer is
+  # set by its ID; the data sources above look the IDs up by name.
   template_paths = [
     {
       direction = "inbound"
       port      = "5432"
       protocol  = "TCP"
       source_tag_based_policy = {
-        tag_based_policy_name = "payroll-app"
+        tag_based_policy_id = data.xshield_segment.payroll_app.id
       }
     },
     {
@@ -47,7 +57,7 @@ resource "xshield_template" "payroll_db" {
       port      = "5432"
       protocol  = "TCP"
       source_named_network = {
-        named_network_name = "corp-networks"
+        named_network_id = data.xshield_named_network.corp.id
       }
     },
   ]

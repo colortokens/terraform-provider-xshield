@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -33,6 +34,7 @@ import (
 var _ resource.Resource = &TemplateResource{}
 var _ resource.ResourceWithImportState = &TemplateResource{}
 var _ resource.ResourceWithValidateConfig = &TemplateResource{}
+var _ resource.ResourceWithModifyPlan = &TemplateResource{}
 
 func NewTemplateResource() resource.Resource {
 	return &TemplateResource{}
@@ -46,15 +48,54 @@ type TemplateResource struct {
 // ValidateConfig runs during terraform plan/apply config validation and
 // ensures template_paths obey the direction-specific rules (inbound src-*,
 // outbound dst-* and optional domain).
+// Paths are read as framework values: the model's pointer selectors cannot
+// hold an object that is unknown until apply.
 func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var data TemplateResourceModel
-
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	if resp.Diagnostics.HasError() {
+	var paths types.List
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_paths"), &paths)...)
+	if resp.Diagnostics.HasError() || paths.IsNull() || paths.IsUnknown() {
 		return
 	}
 
-	validateTemplatePaths(ctx, &data, &resp.Diagnostics)
+	for i, element := range paths.Elements() {
+		object, ok := element.(types.Object)
+		if !ok || object.IsNull() || object.IsUnknown() {
+			continue
+		}
+		var p tfTypes.MetadataPath
+		diags := object.As(ctx, &p, basetypes.ObjectAsOptions{UnhandledUnknownAsEmpty: true})
+		if resp.Diagnostics.Append(diags...); diags.HasError() {
+			continue
+		}
+		unknownObjects := map[string]bool{}
+		for name, value := range object.Attributes() {
+			if _, nested := value.(types.Object); nested && value.IsUnknown() {
+				unknownObjects[name] = true
+			}
+		}
+		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, unknownObjects, &resp.Diagnostics)
+	}
+}
+
+// ModifyPlan checks path selector IDs here, not in ValidateConfig, because a
+// name-only selector takes its ID from state.
+func (r *TemplateResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	var config, prior types.List
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_paths"), &config)...)
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("template_paths"), &prior)...)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	planTemplatePathSelectorIDsByName(ctx, config, prior, &resp.Plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, resp.Plan, &resp.Diagnostics)
 }
 
 // TemplateResourceModel describes the resource data model.
@@ -201,7 +242,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `ID of the destination named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -209,10 +250,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `Name of the destination named network. The API does not look the network up by name; it fills this in from the ID.`,
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The destination named network of this path. Set named_network_id.`,
 						},
 						"destination_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -230,7 +271,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Description: `ID of the destination segment.`,
+									Description: `ID of the destination segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -238,7 +279,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Description: `Name of the destination segment.`,
+									Description: `Name of the destination segment. The API does not look the segment up by name; it fills this in from the ID.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -246,7 +287,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The destination segment of this path. Set tag_based_policy_id.`,
 						},
 						"direction": schema.StringAttribute{
 							Computed: true,
@@ -361,7 +402,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `ID of the source named network. The API looks the network up by this ID alone; to find it by name, use the xshield_named_network data source.`,
 								},
 								"named_network_name": schema.StringAttribute{
 									Computed: true,
@@ -369,10 +410,10 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									PlanModifiers: []planmodifier.String{
 										speakeasy_stringplanmodifier.SuppressDiff(speakeasy_stringplanmodifier.ExplicitSuppress),
 									},
-									Description: `Whether this is an access policy template.`,
+									Description: `Name of the source named network. The API does not look the network up by name; it fills this in from the ID.`,
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The source named network of this path. Set named_network_id.`,
 						},
 						"source_tag_based_policy": schema.SingleNestedAttribute{
 							Computed: true,
@@ -390,7 +431,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_id": schema.StringAttribute{
-									Description: `ID of the source segment.`,
+									Description: `ID of the source segment. The API looks the segment up by this ID alone; to find it by name, use the xshield_segment data source.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -398,7 +439,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 								"tag_based_policy_name": schema.StringAttribute{
-									Description: `Name of the source segment.`,
+									Description: `Name of the source segment. The API does not look the segment up by name; it fills this in from the ID.`,
 									Computed:    true,
 									Optional:    true,
 									PlanModifiers: []planmodifier.String{
@@ -406,7 +447,7 @@ func (r *TemplateResource) Schema(ctx context.Context, req resource.SchemaReques
 									},
 								},
 							},
-							Description: `Whether this is an access policy template.`,
+							Description: `The source segment of this path. Set tag_based_policy_id.`,
 						},
 						"src_ip": schema.StringAttribute{
 							Description: `Source IP address or CIDR range.`,
@@ -571,7 +612,17 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 
 	// Validate template paths before creating the template to ensure a valid
 	// combination of source/destination fields for inbound and outbound paths.
-	validateTemplatePaths(ctx, data, &resp.Diagnostics)
+	// The config, not the plan: an unset Optional+Computed selector is unknown in the plan.
+	var config TemplateResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePaths(&config, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -622,156 +673,257 @@ func isStringSet(v types.String) bool {
 //   - For inbound paths (direction = "inbound"), exactly one of the
 //     following must be set: src_ip, source_asset_id, source_named_network,
 //     source_tag_based_policy. Domain must not be set for inbound paths.
-func validateTemplatePaths(ctx context.Context, data *TemplateResourceModel, diags *diag.Diagnostics) {
+func validateTemplatePaths(data *TemplateResourceModel, diags *diag.Diagnostics) {
 	for i, p := range data.TemplatePaths {
-		pathRoot := path.Root("template_paths").AtListIndex(i)
-		direction := p.Direction.ValueString()
+		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, nil, diags)
+	}
+}
 
-		// Skip validation if direction is unknown or empty
-		if direction == "" {
-			continue
+// unknownObjects names the nested selector objects that are unknown as a whole, which p shows as nil.
+func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObjects map[string]bool, diags *diag.Diagnostics) {
+	direction := p.Direction.ValueString()
+
+	if direction == "" {
+		return
+	}
+
+	addError := func(summary, detail string) {
+		diags.AddAttributeError(pathRoot, summary, detail)
+	}
+
+	switch direction {
+	case "outbound":
+		count := 0
+		setFields := []string{}
+		badSourceFields := []string{}
+
+		if isStringSet(p.DstIP) {
+			count++
+			setFields = append(setFields, "dst_ip")
+		}
+		if isStringSet(p.DestinationAssetID) {
+			count++
+			setFields = append(setFields, "destination_asset_id")
+		}
+		if p.DestinationNamedNetwork != nil {
+			count++
+			setFields = append(setFields, "destination_named_network")
+		}
+		if p.DestinationTagBasedPolicy != nil {
+			count++
+			setFields = append(setFields, "destination_tag_based_policy")
+		}
+		if isStringSet(p.Domain) {
+			count++
+			setFields = append(setFields, "domain")
 		}
 
-		// Helper to add an attribute error for this path
-		addError := func(summary, detail string) {
-			diags.AddAttributeError(pathRoot, summary, detail)
+		if isStringSet(p.SrcIP) {
+			badSourceFields = append(badSourceFields, "src_ip")
+		}
+		if isStringSet(p.SourceAssetID) {
+			badSourceFields = append(badSourceFields, "source_asset_id")
+		}
+		if p.SourceNamedNetwork != nil {
+			badSourceFields = append(badSourceFields, "source_named_network")
+		}
+		if p.SourceTagBasedPolicy != nil {
+			badSourceFields = append(badSourceFields, "source_tag_based_policy")
 		}
 
-		switch direction {
-		case "outbound":
-			// Outbound: exactly one of dst_ip, destination_asset_id,
-			// destination_named_network, destination_tag_based_policy, domain
-			count := 0
-			setFields := []string{}
-			badSourceFields := []string{}
-
-			if isStringSet(p.DstIP) {
-				count++
-				setFields = append(setFields, "dst_ip")
-			}
-			if isStringSet(p.DestinationAssetID) {
-				count++
-				setFields = append(setFields, "destination_asset_id")
-			}
-			if p.DestinationNamedNetwork != nil {
-				count++
-				setFields = append(setFields, "destination_named_network")
-			}
-			if p.DestinationTagBasedPolicy != nil {
-				count++
-				setFields = append(setFields, "destination_tag_based_policy")
-			}
-			if isStringSet(p.Domain) {
-				count++
-				setFields = append(setFields, "domain")
-			}
-
-			// Track source-side fields that are not allowed for outbound paths
-			if isStringSet(p.SrcIP) {
-				badSourceFields = append(badSourceFields, "src_ip")
-			}
-			if isStringSet(p.SourceAssetID) {
-				badSourceFields = append(badSourceFields, "source_asset_id")
-			}
-			if p.SourceNamedNetwork != nil {
-				badSourceFields = append(badSourceFields, "source_named_network")
-			}
-			if p.SourceTagBasedPolicy != nil {
-				badSourceFields = append(badSourceFields, "source_tag_based_policy")
-			}
-
-			// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
-			pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown()
-			if (count == 0 && !pendingSelector) || count > 1 {
-				detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
-				if count > 1 {
-					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
-				}
-				addError(
-					"Invalid outbound template path configuration - selector fields",
-					detail,
-				)
-			}
-
-			// Report direction misuse (source-side fields on outbound)
-			if len(badSourceFields) > 0 {
-				addError(
-					"Invalid outbound template path configuration - direction",
-					fmt.Sprintf("For outbound template_paths elements, source-side fields must not be set. The following source-side fields are set: %v.", badSourceFields),
-				)
-			}
-
-		case "inbound":
-			// Inbound: exactly one of src_ip, source_asset_id, source_named_network,
-			// source_tag_based_policy. Domain must not be set.
-			count := 0
-			setFields := []string{}
-			badDestFields := []string{}
-
-			if isStringSet(p.SrcIP) {
-				count++
-				setFields = append(setFields, "src_ip")
-			}
-			if isStringSet(p.SourceAssetID) {
-				count++
-				setFields = append(setFields, "source_asset_id")
-			}
-			if p.SourceNamedNetwork != nil {
-				count++
-				setFields = append(setFields, "source_named_network")
-			}
-			if p.SourceTagBasedPolicy != nil {
-				count++
-				setFields = append(setFields, "source_tag_based_policy")
-			}
-
-			if count == 0 {
-				// fall through; we'll build the combined message below
-			}
+		// An unknown selector satisfies "at least one" but never counts towards "more than one".
+		pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown() ||
+			unknownObjects["destination_named_network"] || unknownObjects["destination_tag_based_policy"]
+		if (count == 0 && !pendingSelector) || count > 1 {
+			detail := "For outbound template_paths elements, exactly one of dst_ip, destination_asset_id, destination_named_network, destination_tag_based_policy, or domain must be set."
 			if count > 1 {
-				// fall through; we'll build the combined message below
+				detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
 			}
+			addError(
+				"Invalid outbound template path configuration - selector fields",
+				detail,
+			)
+		}
 
-			// Domain is only allowed for outbound paths
-			if isStringSet(p.Domain) {
-				badDestFields = append(badDestFields, "domain")
-			}
+		if len(badSourceFields) > 0 {
+			addError(
+				"Invalid outbound template path configuration - direction",
+				fmt.Sprintf("For outbound template_paths elements, source-side fields must not be set. The following source-side fields are set: %v.", badSourceFields),
+			)
+		}
 
-			// Track destination-side fields that are not allowed for inbound paths
-			if isStringSet(p.DstIP) {
-				badDestFields = append(badDestFields, "dst_ip")
-			}
-			if isStringSet(p.DestinationAssetID) {
-				badDestFields = append(badDestFields, "destination_asset_id")
-			}
-			if p.DestinationNamedNetwork != nil {
-				badDestFields = append(badDestFields, "destination_named_network")
-			}
-			if p.DestinationTagBasedPolicy != nil {
-				badDestFields = append(badDestFields, "destination_tag_based_policy")
-			}
+	case "inbound":
+		count := 0
+		setFields := []string{}
+		badDestFields := []string{}
 
-			pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown()
-			if (count == 0 && !pendingSelector) || count > 1 {
-				detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
-				if count > 1 {
-					detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
-				}
-				addError(
-					"Invalid inbound template path configuration - selector fields",
-					detail,
-				)
-			}
+		if isStringSet(p.SrcIP) {
+			count++
+			setFields = append(setFields, "src_ip")
+		}
+		if isStringSet(p.SourceAssetID) {
+			count++
+			setFields = append(setFields, "source_asset_id")
+		}
+		if p.SourceNamedNetwork != nil {
+			count++
+			setFields = append(setFields, "source_named_network")
+		}
+		if p.SourceTagBasedPolicy != nil {
+			count++
+			setFields = append(setFields, "source_tag_based_policy")
+		}
 
-			// Report direction/domain misuse (destination-side fields or domain on inbound)
-			if len(badDestFields) > 0 {
-				addError(
-					"Invalid inbound template path configuration - direction",
-					fmt.Sprintf("For inbound template_paths elements, destination-side fields must not be set. The following forbidden fields are set: %v.", badDestFields),
-				)
+		if isStringSet(p.Domain) {
+			badDestFields = append(badDestFields, "domain")
+		}
+
+		if isStringSet(p.DstIP) {
+			badDestFields = append(badDestFields, "dst_ip")
+		}
+		if isStringSet(p.DestinationAssetID) {
+			badDestFields = append(badDestFields, "destination_asset_id")
+		}
+		if p.DestinationNamedNetwork != nil {
+			badDestFields = append(badDestFields, "destination_named_network")
+		}
+		if p.DestinationTagBasedPolicy != nil {
+			badDestFields = append(badDestFields, "destination_tag_based_policy")
+		}
+
+		pendingSelector := p.SrcIP.IsUnknown() || p.SourceAssetID.IsUnknown() ||
+			unknownObjects["source_named_network"] || unknownObjects["source_tag_based_policy"]
+		if (count == 0 && !pendingSelector) || count > 1 {
+			detail := "For inbound template_paths elements, exactly one of src_ip, source_asset_id, source_named_network, or source_tag_based_policy must be set."
+			if count > 1 {
+				detail = fmt.Sprintf("%s Currently set selector fields: %v.", detail, setFields)
 			}
+			addError(
+				"Invalid inbound template path configuration - selector fields",
+				detail,
+			)
+		}
+
+		if len(badDestFields) > 0 {
+			addError(
+				"Invalid inbound template path configuration - direction",
+				fmt.Sprintf("For inbound template_paths elements, destination-side fields must not be set. The following forbidden fields are set: %v.", badDestFields),
+			)
 		}
 	}
+}
+
+var templatePathSelectorIDAttributes = []struct{ selector, idAttribute, nameAttribute string }{
+	{"source_named_network", "named_network_id", "named_network_name"},
+	{"source_tag_based_policy", "tag_based_policy_id", "tag_based_policy_name"},
+	{"destination_named_network", "named_network_id", "named_network_name"},
+	{"destination_tag_based_policy", "tag_based_policy_id", "tag_based_policy_name"},
+}
+
+// Terraform proposes a null-ID selector's prior ID by list position, which may be
+// another path's, so the ID is replaced by the one state holds for that name.
+func planTemplatePathSelectorIDsByName(ctx context.Context, config, prior types.List, plan *tfsdk.Plan, diags *diag.Diagnostics) {
+	if config.IsNull() || config.IsUnknown() {
+		return
+	}
+	idsByName := map[string]map[string]map[string]bool{}
+	for _, element := range prior.Elements() {
+		held, _ := element.(types.Object)
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(held, s.selector)
+			id, name := stringAttribute(selector, s.idAttribute), stringAttribute(selector, s.nameAttribute)
+			if !isStringSet(id) || !isStringSet(name) {
+				continue
+			}
+			if idsByName[s.nameAttribute] == nil {
+				idsByName[s.nameAttribute] = map[string]map[string]bool{}
+			}
+			if idsByName[s.nameAttribute][name.ValueString()] == nil {
+				idsByName[s.nameAttribute][name.ValueString()] = map[string]bool{}
+			}
+			idsByName[s.nameAttribute][name.ValueString()][id.ValueString()] = true
+		}
+	}
+	for i, element := range config.Elements() {
+		configured, ok := element.(types.Object)
+		if !ok || configured.IsNull() || configured.IsUnknown() {
+			continue
+		}
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(configured, s.selector)
+			if selector.IsNull() || selector.IsUnknown() || !stringAttribute(selector, s.idAttribute).IsNull() {
+				continue
+			}
+			planned := types.StringNull()
+			if name := stringAttribute(selector, s.nameAttribute); name.IsUnknown() {
+				planned = types.StringUnknown()
+			} else if ids := idsByName[s.nameAttribute][name.ValueString()]; isStringSet(name) && len(ids) == 1 {
+				for id := range ids {
+					planned = types.StringValue(id)
+				}
+			}
+			diags.Append(plan.SetAttribute(ctx, path.Root("template_paths").AtListIndex(i).AtName(s.selector).AtName(s.idAttribute), planned)...)
+		}
+	}
+}
+
+// The API looks a selector up by its ID alone and rejects a path without one.
+func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Diagnostics) {
+	if config.IsNull() || config.IsUnknown() {
+		return
+	}
+	planned := plan.Elements()
+	for i, element := range config.Elements() {
+		configured, ok := element.(types.Object)
+		if !ok || configured.IsNull() || configured.IsUnknown() {
+			continue
+		}
+		var plannedPath types.Object
+		if i < len(planned) {
+			plannedPath, _ = planned[i].(types.Object)
+		}
+		for _, s := range templatePathSelectorIDAttributes {
+			selector := objectAttribute(configured, s.selector)
+			if selector.IsNull() || selector.IsUnknown() {
+				continue
+			}
+			if stringAttribute(selector, s.idAttribute).IsUnknown() ||
+				stringAttribute(selector, s.idAttribute).IsNull() && stringAttribute(selector, s.nameAttribute).IsUnknown() ||
+				isStringSet(stringAttribute(objectAttribute(plannedPath, s.selector), s.idAttribute)) {
+				continue
+			}
+			at := path.Root("template_paths").AtListIndex(i).AtName(s.selector)
+			diags.AddAttributeError(
+				at,
+				"Invalid template path configuration - empty selector",
+				fmt.Sprintf("%s must set %s. Without it the selector matches nothing, and the API rejects the path.", at, s.idAttribute),
+			)
+		}
+	}
+}
+
+func validateTemplatePathSelectorIDs(ctx context.Context, config tfsdk.Config, plan tfsdk.Plan, diags *diag.Diagnostics) {
+	var configured, planned types.List
+	diags.Append(config.GetAttribute(ctx, path.Root("template_paths"), &configured)...)
+	diags.Append(plan.GetAttribute(ctx, path.Root("template_paths"), &planned)...)
+	if diags.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDLists(configured, planned, diags)
+}
+
+func objectAttribute(o types.Object, name string) types.Object {
+	if v, ok := o.Attributes()[name].(types.Object); ok {
+		return v
+	}
+	return types.ObjectNull(nil)
+}
+
+func stringAttribute(o types.Object, name string) types.String {
+	if v, ok := o.Attributes()[name].(types.String); ok {
+		return v
+	}
+	return types.StringNull()
 }
 
 func (r *TemplateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -867,6 +1019,14 @@ func (r *TemplateResource) Update(ctx context.Context, req resource.UpdateReques
 	resp.Diagnostics.Append(plan.As(ctx, &planData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(state.As(ctx, &stateData, basetypes.ObjectAsOptions{})...)
 	resp.Diagnostics.Append(req.Config.Get(ctx, &configData)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePaths(&configData, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	validateTemplatePathSelectorIDs(ctx, req.Config, req.Plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
