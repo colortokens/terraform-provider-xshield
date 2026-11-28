@@ -48,10 +48,8 @@ type TemplateResource struct {
 // ValidateConfig runs during terraform plan/apply config validation and
 // ensures template_paths obey the direction-specific rules (inbound src-*,
 // outbound dst-* and optional domain).
-//
-// The paths are read as framework values rather than into
-// TemplateResourceModel: its nested selectors are Go pointers and cannot hold
-// a value that is unknown until apply, such as a whole object from a variable.
+// Paths are read as framework values: the model's pointer selectors cannot
+// hold an object that is unknown until apply.
 func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var paths types.List
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("template_paths"), &paths)...)
@@ -79,9 +77,8 @@ func (r *TemplateResource) ValidateConfig(ctx context.Context, req resource.Vali
 	}
 }
 
-// ModifyPlan plans the ID of a path selector the configuration names by name
-// only, then rejects a selector that would reach the API with no ID. It runs at
-// plan rather than in ValidateConfig because the ID comes from state.
+// ModifyPlan checks path selector IDs here, not in ValidateConfig, because a
+// name-only selector takes its ID from state.
 func (r *TemplateResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
@@ -615,8 +612,7 @@ func (r *TemplateResource) Create(ctx context.Context, req resource.CreateReques
 
 	// Validate template paths before creating the template to ensure a valid
 	// combination of source/destination fields for inbound and outbound paths.
-	// The config, not the plan: every config value is known at apply, while an
-	// unset Optional and Computed selector is still unknown in the plan.
+	// The config, not the plan: an unset Optional+Computed selector is unknown in the plan.
 	var config TemplateResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
@@ -677,35 +673,26 @@ func isStringSet(v types.String) bool {
 //   - For inbound paths (direction = "inbound"), exactly one of the
 //     following must be set: src_ip, source_asset_id, source_named_network,
 //     source_tag_based_policy. Domain must not be set for inbound paths.
-//
-// A selector that is unknown until apply may be the one, so it satisfies
-// "at least one" but never counts towards "more than one".
 func validateTemplatePaths(data *TemplateResourceModel, diags *diag.Diagnostics) {
 	for i, p := range data.TemplatePaths {
 		validateTemplatePath(path.Root("template_paths").AtListIndex(i), p, nil, diags)
 	}
 }
 
-// validateTemplatePath checks one template_paths element. unknownObjects names
-// the nested selector objects (named network, tag-based policy) that are
-// unknown as a whole, which p itself can only show as nil.
+// unknownObjects names the nested selector objects that are unknown as a whole, which p shows as nil.
 func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObjects map[string]bool, diags *diag.Diagnostics) {
 	direction := p.Direction.ValueString()
 
-	// Skip validation if direction is unknown or empty
 	if direction == "" {
 		return
 	}
 
-	// Helper to add an attribute error for this path
 	addError := func(summary, detail string) {
 		diags.AddAttributeError(pathRoot, summary, detail)
 	}
 
 	switch direction {
 	case "outbound":
-		// Outbound: exactly one of dst_ip, destination_asset_id,
-		// destination_named_network, destination_tag_based_policy, domain
 		count := 0
 		setFields := []string{}
 		badSourceFields := []string{}
@@ -731,7 +718,6 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 			setFields = append(setFields, "domain")
 		}
 
-		// Track source-side fields that are not allowed for outbound paths
 		if isStringSet(p.SrcIP) {
 			badSourceFields = append(badSourceFields, "src_ip")
 		}
@@ -745,7 +731,7 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 			badSourceFields = append(badSourceFields, "source_tag_based_policy")
 		}
 
-		// A selector known only at apply, from a variable or another resource, may be the one; the API checks it then.
+		// An unknown selector satisfies "at least one" but never counts towards "more than one".
 		pendingSelector := p.DstIP.IsUnknown() || p.DestinationAssetID.IsUnknown() || p.Domain.IsUnknown() ||
 			unknownObjects["destination_named_network"] || unknownObjects["destination_tag_based_policy"]
 		if (count == 0 && !pendingSelector) || count > 1 {
@@ -759,7 +745,6 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 			)
 		}
 
-		// Report direction misuse (source-side fields on outbound)
 		if len(badSourceFields) > 0 {
 			addError(
 				"Invalid outbound template path configuration - direction",
@@ -768,8 +753,6 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 		}
 
 	case "inbound":
-		// Inbound: exactly one of src_ip, source_asset_id, source_named_network,
-		// source_tag_based_policy. Domain must not be set.
 		count := 0
 		setFields := []string{}
 		badDestFields := []string{}
@@ -791,19 +774,10 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 			setFields = append(setFields, "source_tag_based_policy")
 		}
 
-		if count == 0 {
-			// fall through; we'll build the combined message below
-		}
-		if count > 1 {
-			// fall through; we'll build the combined message below
-		}
-
-		// Domain is only allowed for outbound paths
 		if isStringSet(p.Domain) {
 			badDestFields = append(badDestFields, "domain")
 		}
 
-		// Track destination-side fields that are not allowed for inbound paths
 		if isStringSet(p.DstIP) {
 			badDestFields = append(badDestFields, "dst_ip")
 		}
@@ -830,7 +804,6 @@ func validateTemplatePath(pathRoot path.Path, p tfTypes.MetadataPath, unknownObj
 			)
 		}
 
-		// Report direction/domain misuse (destination-side fields or domain on inbound)
 		if len(badDestFields) > 0 {
 			addError(
 				"Invalid inbound template path configuration - direction",
@@ -847,12 +820,8 @@ var templatePathSelectorIDAttributes = []struct{ selector, idAttribute, nameAttr
 	{"destination_tag_based_policy", "tag_based_policy_id", "tag_based_policy_name"},
 }
 
-// planTemplatePathSelectorIDsByName sets the planned ID of each configured
-// selector that leaves its ID null. Terraform proposes the prior ID of the path
-// at the same position, which may be another path's. Instead the ID is the one
-// state holds for a selector with the configured name, of the same kind, on any
-// path. With no name, or no single such ID, the ID is null, and the selector
-// fails validateTemplatePathSelectorIDs. An unknown name leaves it unknown.
+// Terraform proposes a null-ID selector's prior ID by list position, which may be
+// another path's, so the ID is replaced by the one state holds for that name.
 func planTemplatePathSelectorIDsByName(ctx context.Context, config, prior types.List, plan *tfsdk.Plan, diags *diag.Diagnostics) {
 	if config.IsNull() || config.IsUnknown() {
 		return
@@ -898,13 +867,7 @@ func planTemplatePathSelectorIDsByName(ctx context.Context, config, prior types.
 	}
 }
 
-// validateTemplatePathSelectorIDLists reports a configured named-network or
-// tag-based-policy selector whose planned ID is missing. The API looks a
-// selector up by its ID alone, so an object without one, such as {} or only a
-// name, selects nothing and the API rejects the path. The planned ID is checked
-// because a selector the configuration names by name takes its ID from state.
-// An ID, or the name of a selector with no ID, unknown in the configuration is
-// skipped until apply.
+// The API looks a selector up by its ID alone and rejects a path without one.
 func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Diagnostics) {
 	if config.IsNull() || config.IsUnknown() {
 		return
@@ -939,8 +902,6 @@ func validateTemplatePathSelectorIDLists(config, plan types.List, diags *diag.Di
 	}
 }
 
-// validateTemplatePathSelectorIDs runs validateTemplatePathSelectorIDLists on
-// template_paths in the configuration and the plan.
 func validateTemplatePathSelectorIDs(ctx context.Context, config tfsdk.Config, plan tfsdk.Plan, diags *diag.Diagnostics) {
 	var configured, planned types.List
 	diags.Append(config.GetAttribute(ctx, path.Root("template_paths"), &configured)...)
@@ -951,7 +912,6 @@ func validateTemplatePathSelectorIDs(ctx context.Context, config tfsdk.Config, p
 	validateTemplatePathSelectorIDLists(configured, planned, diags)
 }
 
-// objectAttribute is the named object attribute of o, null when o has none.
 func objectAttribute(o types.Object, name string) types.Object {
 	if v, ok := o.Attributes()[name].(types.Object); ok {
 		return v
@@ -959,7 +919,6 @@ func objectAttribute(o types.Object, name string) types.Object {
 	return types.ObjectNull(nil)
 }
 
-// stringAttribute is the named string attribute of o, null when o has none.
 func stringAttribute(o types.Object, name string) types.String {
 	if v, ok := o.Attributes()[name].(types.String); ok {
 		return v
